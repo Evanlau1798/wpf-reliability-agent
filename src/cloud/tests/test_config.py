@@ -4,12 +4,13 @@ import pytest
 from app.config import Settings
 
 
-def test_settings_model_contains_only_gate_eight_runtime_values() -> None:
+def test_settings_model_contains_only_runtime_values() -> None:
     settings = Settings(
         service_role="api",
         google_cloud_project="project-test",
         demo_device_id="device-test",
         demo_device_token="secret-token",
+        pubsub_topic="incident-work",
     )
 
     assert set(Settings.model_fields) == {
@@ -17,6 +18,7 @@ def test_settings_model_contains_only_gate_eight_runtime_values() -> None:
         "google_cloud_project",
         "demo_device_id",
         "demo_device_token",
+        "pubsub_topic",
     }
     assert settings.service_role == "api"
     assert isinstance(settings.demo_device_token, SecretStr)
@@ -30,16 +32,18 @@ def test_settings_load_from_environment_names() -> None:
             "GOOGLE_CLOUD_PROJECT": "project-test",
             "DEMO_DEVICE_ID": "device-test",
             "DEMO_DEVICE_TOKEN": "secret-token",
+            "PUBSUB_TOPIC": "incident-work",
         }
     )
 
     assert settings.service_role == "worker"
     assert settings.google_cloud_project == "project-test"
+    assert settings.pubsub_topic == "incident-work"
 
 
 def test_missing_settings_report_environment_variable_names() -> None:
     with pytest.raises(
         ValueError,
-        match="GOOGLE_CLOUD_PROJECT, DEMO_DEVICE_ID, DEMO_DEVICE_TOKEN",
+        match="GOOGLE_CLOUD_PROJECT, DEMO_DEVICE_ID, DEMO_DEVICE_TOKEN, PUBSUB_TOPIC",
     ):
         Settings.from_environment({"SERVICE_ROLE": "api"})

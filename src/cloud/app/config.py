@@ -10,6 +10,7 @@ ENVIRONMENT_FIELDS = (
     ("GOOGLE_CLOUD_PROJECT", "google_cloud_project"),
     ("DEMO_DEVICE_ID", "demo_device_id"),
     ("DEMO_DEVICE_TOKEN", "demo_device_token"),
+    ("PUBSUB_TOPIC", "pubsub_topic"),
 )
 
 
@@ -20,6 +21,7 @@ class Settings(BaseModel):
     google_cloud_project: str = Field(min_length=1, max_length=256)
     demo_device_id: str = Field(min_length=1, max_length=256)
     demo_device_token: SecretStr = Field(min_length=1)
+    pubsub_topic: str = Field(min_length=1, max_length=255)
 
     @classmethod
     def from_environment(cls, environment: Mapping[str, str] | None = None) -> "Settings":
