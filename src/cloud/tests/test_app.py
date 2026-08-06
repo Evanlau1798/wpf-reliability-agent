@@ -235,6 +235,42 @@ def test_telemetry_batch_reports_duplicate_event_id(monkeypatch) -> None:
     assert second.json()["duplicate_event_ids"] == ["event-1"]
 
 
+def test_telemetry_batch_correlates_performance_to_unique_binding_candidate(monkeypatch) -> None:
+    _set_required_environment(monkeypatch, "api")
+    client_object = object()
+    monkeypatch.setattr("app.main.get_firestore_client", lambda _project_id: client_object)
+    monkeypatch.setattr(
+        "app.main.ingest_binding_event",
+        lambda _client, _event, _device_id: (True, "incident-1"),
+    )
+    related: list[tuple[object, str, str]] = []
+
+    def ingest_performance(_client, event, device_id, incident_id):
+        related.append((event, device_id, incident_id))
+        return True
+
+    monkeypatch.setattr("app.main.ingest_performance_event", ingest_performance)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/telemetry:batch",
+            headers={"Authorization": "Bearer secret-token"},
+            json={
+                "events": [
+                    _valid_performance_event("performance-1"),
+                    _valid_telemetry_event("binding-1"),
+                ]
+            },
+        )
+
+    assert response.status_code == 200
+    assert set(response.json()["accepted_event_ids"]) == {"binding-1", "performance-1"}
+    assert response.json()["duplicate_event_ids"] == []
+    assert len(related) == 1
+    assert related[0][0].event_id == "performance-1"
+    assert related[0][1:] == ("device-test", "incident-1")
+
+
 async def _startup_role() -> str:
     async with app.router.lifespan_context(app):
         return app.state.settings.service_role
@@ -268,3 +304,21 @@ def _valid_telemetry_event(event_id: str) -> dict[str, object]:
         "redaction_profile": "default-v1",
         "evidence_hash": "1" * 64,
     }
+
+
+def _valid_performance_event(event_id: str) -> dict[str, object]:
+    event = _valid_telemetry_event(event_id)
+    event.update(
+        {
+            "event_type": "performance.sample",
+            "severity": "INFO",
+            "correlation": {"app_session_id": "session-test"},
+            "payload": {
+                "frame_statistics": {"p95_milliseconds": 40.0},
+                "sample_duration_ms": 1000.0,
+                "confidence": "MEDIUM",
+                "visual_count": 1500,
+            },
+        }
+    )
+    return event

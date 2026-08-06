@@ -189,3 +189,35 @@ def test_incident_event_persist_is_atomic(monkeypatch) -> None:
     )
     transaction.create.assert_any_call(incident_document, incident)
     transaction.create.assert_any_call(evidence_document, evidence)
+
+
+def test_related_event_does_not_create_missing_incident(monkeypatch) -> None:
+    client = Mock()
+    transaction = Mock()
+    dedup_collection = Mock()
+    incident_collection = Mock()
+    dedup_document = Mock()
+    incident_document = Mock()
+    client.transaction.return_value = transaction
+    client.collection.side_effect = lambda name: (
+        dedup_collection
+        if name == firestore_client.EVENT_DEDUP_COLLECTION
+        else incident_collection
+    )
+    dedup_collection.document.return_value = dedup_document
+    incident_collection.document.return_value = incident_document
+    dedup_document.get.return_value = Mock(exists=False)
+    incident_document.get.return_value = Mock(exists=False)
+    monkeypatch.setattr(firestore_client.firestore, "transactional", lambda callback: callback)
+
+    with pytest.raises(ValueError, match="Incident does not exist"):
+        firestore_client.persist_incident_event(
+            client,
+            event_id="performance-1",
+            incident_id="incident-1",
+            evidence_id="performance-1",
+            incident=None,
+            evidence={"event_id": "performance-1"},
+        )
+
+    transaction.create.assert_not_called()

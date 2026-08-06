@@ -8,7 +8,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request, status
 from app.auth import authenticate_device_token
 from app.config import Settings
 from app.firestore_client import claim_event_once, get_firestore_client
-from app.ingest import ingest_binding_event, validate_telemetry_events
+from app.ingest import ingest_binding_event, ingest_performance_event, validate_telemetry_events
 from app.logging_config import configure_logging
 from app.models import EventType
 
@@ -87,10 +87,35 @@ def telemetry_batch(
     duplicate_event_ids: list[str] = []
     if valid:
         client = get_firestore_client(request.app.state.settings.google_cloud_project)
+        binding_candidates: dict[tuple[str, str], set[str]] = {}
+        performance_events = []
         for event in valid:
             if event.event_type is EventType.BINDING_AGGREGATE:
                 try:
-                    is_new, _ = ingest_binding_event(client, event, device_id)
+                    is_new, incident_id = ingest_binding_event(client, event, device_id)
+                except ValueError:
+                    rejected.append({"event_id": event.event_id, "code": "INVALID_EVENT"})
+                    continue
+                key = (event.application_id, event.app_session_id)
+                binding_candidates.setdefault(key, set()).add(incident_id)
+            elif event.event_type is EventType.PERFORMANCE_SAMPLE:
+                performance_events.append(event)
+                continue
+            else:
+                is_new = claim_event_once(client, event.event_id)
+            target = accepted_event_ids if is_new else duplicate_event_ids
+            target.append(event.event_id)
+
+        for event in performance_events:
+            candidates = binding_candidates.get((event.application_id, event.app_session_id), set())
+            if len(candidates) == 1:
+                try:
+                    is_new = ingest_performance_event(
+                        client,
+                        event,
+                        device_id,
+                        next(iter(candidates)),
+                    )
                 except ValueError:
                     rejected.append({"event_id": event.event_id, "code": "INVALID_EVENT"})
                     continue

@@ -109,7 +109,7 @@ def persist_incident_event(
     event_id: str,
     incident_id: str,
     evidence_id: str,
-    incident: dict[str, object],
+    incident: dict[str, object] | None,
     evidence: dict[str, object],
 ) -> bool:
     dedup_document = client.collection(EVENT_DEDUP_COLLECTION).document(event_id)
@@ -122,6 +122,9 @@ def persist_incident_event(
             return False
 
         incident_exists = incident_document.get(transaction=transaction).exists
+        if not incident_exists and incident is None:
+            raise ValueError("Incident does not exist")
+
         transaction.create(
             dedup_document,
             {"created_at": firestore.SERVER_TIMESTAMP, "incident_id": incident_id},

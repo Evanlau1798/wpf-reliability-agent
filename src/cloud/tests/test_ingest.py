@@ -1,4 +1,6 @@
-from app.ingest import validate_telemetry_events
+import pytest
+
+from app.ingest import ingest_performance_event, validate_telemetry_events
 
 
 def test_server_allowlist_strips_ui_text_fields() -> None:
@@ -67,6 +69,24 @@ def test_server_redaction_scrubs_secret_text_in_allowed_fields() -> None:
 
     assert rejected == []
     assert valid[0].payload["message_template"] == "Authorization: Bearer [REDACTED]"
+
+
+def test_performance_ingest_requires_explicit_matching_app_session() -> None:
+    event = _event(
+        "performance.sample",
+        {"app_session_id": "different-session"},
+        {
+            "frame_statistics": {"p95_milliseconds": 40.0},
+            "sample_duration_ms": 1000.0,
+            "confidence": "MEDIUM",
+            "visual_count": 1500,
+        },
+    )
+    valid, rejected = validate_telemetry_events([event])
+
+    assert rejected == []
+    with pytest.raises(ValueError, match="app session"):
+        ingest_performance_event(object(), valid[0], "device-test", "incident-1")
 
 
 def _event(event_type: str, correlation: dict[str, object], payload: dict[str, object]) -> dict[str, object]:

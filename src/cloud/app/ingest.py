@@ -187,6 +187,28 @@ def ingest_binding_event(
     return is_new, incident_id
 
 
+def ingest_performance_event(
+    client: object,
+    event: DiagnosticEnvelope,
+    device_id: str,
+    incident_id: str,
+) -> bool:
+    if event.event_type is not EventType.PERFORMANCE_SAMPLE:
+        raise ValueError("Performance ingest requires a performance sample event")
+    if event.correlation.get("app_session_id") != event.app_session_id:
+        raise ValueError("Performance app session correlation must match the event")
+
+    trusted_event = event.model_copy(update={"device_id": device_id})
+    return persist_incident_event(
+        client,
+        event_id=event.event_id,
+        incident_id=incident_id,
+        evidence_id=event.event_id,
+        incident=None,
+        evidence=trusted_event.model_dump(mode="json"),
+    )
+
+
 def _allowlist(source: dict[str, object], fields: frozenset[str]) -> dict[str, object]:
     return {key: source[key] for key in fields if key in source}
 
