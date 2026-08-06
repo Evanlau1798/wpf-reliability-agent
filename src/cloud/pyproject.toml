@@ -8,6 +8,7 @@ version = "0.1.0"
 description = "Cloud workflow for the WPF Reliability Agent."
 requires-python = ">=3.12,<3.13"
 dependencies = [
+  "fastapi>=0.115,<1",
   "jsonschema>=4.23,<5",
   "pydantic>=2.11,<3",
 ]
