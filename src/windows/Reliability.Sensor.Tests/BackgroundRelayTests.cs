@@ -96,6 +96,57 @@ public sealed class BackgroundRelayTests
         }
     }
 
+    [Fact]
+    public async Task CancellationDrainsQueuedEventsAndCompletesRelay()
+    {
+        var directory = Path.Combine(
+            Environment.CurrentDirectory,
+            "tmp",
+            "relay-tests",
+            Guid.NewGuid().ToString("N"));
+        var path = Path.Combine(directory, "outbox.db");
+        var handler = new BlockingHandler();
+        using var applicationStopping = new CancellationTokenSource();
+
+        try
+        {
+            await using var inspection = await SqliteOutbox.OpenAsync(path);
+            await using var sensor = ReliabilitySensor.Start(
+                ValidOptions(path) with
+                {
+                    TelemetryHandler = handler,
+                    RelayPollInterval = TimeSpan.FromMilliseconds(10),
+                },
+                applicationStopping.Token);
+            Assert.True(sensor.TryEnqueue(
+                EventType.BindingAggregate,
+                Severity.ERROR,
+                JsonSerializer.SerializeToElement(new { binding_path = "First" }),
+                JsonSerializer.SerializeToElement(new { count = 1 }),
+                out _));
+            await handler.Started.WaitAsync(TimeSpan.FromSeconds(1));
+            Assert.True(sensor.TryEnqueue(
+                EventType.BindingAggregate,
+                Severity.ERROR,
+                JsonSerializer.SerializeToElement(new { binding_path = "Second" }),
+                JsonSerializer.SerializeToElement(new { count = 2 }),
+                out var queuedDuringUpload));
+
+            applicationStopping.Cancel();
+            await sensor.Completion.WaitAsync(TimeSpan.FromSeconds(1));
+
+            Assert.True(sensor.Completion.IsCompletedSuccessfully);
+            Assert.NotNull(await inspection.GetEventAsync(queuedDuringUpload!.EventId));
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
+    }
+
     private static async Task<OutboxEvent?> WaitForEventAsync(
         SqliteOutbox outbox,
         string eventId,
@@ -169,6 +220,22 @@ public sealed class BackgroundRelayTests
             {
                 Content = new StringContent(response, Encoding.UTF8, "application/json"),
             };
+        }
+    }
+
+    private sealed class BlockingHandler : HttpMessageHandler
+    {
+        private readonly TaskCompletionSource _started = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task Started => _started.Task;
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            _started.TrySetResult();
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            throw new InvalidOperationException("Cancellation must end the blocked upload.");
         }
     }
 }

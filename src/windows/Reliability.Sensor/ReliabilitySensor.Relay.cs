@@ -22,29 +22,32 @@ public sealed partial class ReliabilitySensor
             using var client = apiBaseUri is null || deviceToken is null
                 ? null
                 : new TelemetryApiClient(apiBaseUri, deviceToken, telemetryHandler);
-            while (!cancellationToken.IsCancellationRequested)
+            try
             {
-                var persisted = await PersistAvailableAsync(events, outbox).ConfigureAwait(false);
-                if (persisted)
+                while (!cancellationToken.IsCancellationRequested)
                 {
-                    await outbox.EnforceLimitsAsync().ConfigureAwait(false);
-                }
+                    var persisted = await PersistAvailableAsync(events, outbox).ConfigureAwait(false);
+                    if (persisted)
+                    {
+                        await outbox.EnforceLimitsAsync().ConfigureAwait(false);
+                    }
 
-                if (client is not null)
-                {
-                    await UploadDueAsync(outbox, client, cancellationToken).ConfigureAwait(false);
-                }
+                    if (client is not null)
+                    {
+                        await UploadDueAsync(outbox, client, cancellationToken).ConfigureAwait(false);
+                    }
 
-                await Task.Delay(pollInterval, cancellationToken).ConfigureAwait(false);
+                    await Task.Delay(pollInterval, cancellationToken).ConfigureAwait(false);
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
             }
 
             if (await PersistAvailableAsync(events, outbox).ConfigureAwait(false))
             {
                 await outbox.EnforceLimitsAsync().ConfigureAwait(false);
             }
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
         }
         catch (Exception)
         {
