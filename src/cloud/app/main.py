@@ -1,3 +1,4 @@
+import json
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Annotated
@@ -45,10 +46,37 @@ async def enforce_telemetry_body_limit(request: Request) -> None:
         )
 
 
+async def parse_telemetry_events(
+    request: Request,
+    _body_limit: Annotated[None, Depends(enforce_telemetry_body_limit)],
+) -> list[object]:
+    try:
+        body = json.loads(await request.body())
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Invalid telemetry batch",
+        ) from exc
+
+    if not isinstance(body, dict) or not isinstance(body.get("events"), list):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Invalid telemetry batch",
+        )
+
+    events = body["events"]
+    if len(events) > 50:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Too many telemetry events",
+        )
+    return events
+
+
 @app.post("/v1/telemetry:batch")
 def telemetry_batch(
     _: Annotated[str, Depends(authenticate_device_token)],
-    _body_limit: Annotated[None, Depends(enforce_telemetry_body_limit)],
+    _events: Annotated[list[object], Depends(parse_telemetry_events)],
 ) -> dict[str, list[object]]:
     return {
         "accepted_event_ids": [],

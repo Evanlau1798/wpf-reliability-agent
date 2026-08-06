@@ -174,6 +174,19 @@ def test_telemetry_batch_rejects_body_over_512_kib(monkeypatch) -> None:
     assert response.status_code == 413
 
 
+def test_telemetry_batch_rejects_more_than_50_events(monkeypatch) -> None:
+    _set_required_environment(monkeypatch, "api")
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/telemetry:batch",
+            headers={"Authorization": "Bearer secret-token"},
+            json={"events": [{"event_id": f"event-{index}"} for index in range(51)]},
+        )
+
+    assert response.status_code == 422
+
+
 async def _startup_role() -> str:
     async with app.router.lifespan_context(app):
         return app.state.settings.service_role
