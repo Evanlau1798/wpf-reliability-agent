@@ -1,10 +1,12 @@
 import asyncio
 import io
 from typing import Annotated
+from unittest.mock import Mock
 
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
+from app import firestore_client as firestore_store
 from app.auth import authenticate_device_token, parse_bearer_token
 from app.config import Settings
 from app.logging_config import configure_logging
@@ -275,6 +277,58 @@ def test_telemetry_batch_reports_mixed_accepted_duplicate_and_invalid_events(mon
         "duplicate_event_ids": ["duplicate-event"],
         "rejected": [{"event_id": "invalid-event", "code": "INVALID_EVENT"}],
     }
+
+
+def test_telemetry_batch_persists_binding_incident_and_evidence(monkeypatch) -> None:
+    _set_required_environment(monkeypatch, "api")
+    firestore_client = Mock()
+    transaction = Mock()
+    dedup_collection = Mock()
+    incident_collection = Mock()
+    dedup_document = Mock()
+    incident_document = Mock()
+    evidence_document = Mock()
+    firestore_client.transaction.return_value = transaction
+    firestore_client.collection.side_effect = lambda name: (
+        dedup_collection if name == "event_dedup" else incident_collection
+    )
+    dedup_collection.document.return_value = dedup_document
+    incident_collection.document.return_value = incident_document
+    incident_document.collection.return_value.document.return_value = evidence_document
+    dedup_document.get.return_value = Mock(exists=False)
+    incident_document.get.return_value = Mock(exists=False)
+    monkeypatch.setattr("app.main.get_firestore_client", lambda _project_id: firestore_client)
+    monkeypatch.setattr("app.firestore_client.firestore.transactional", lambda callback: callback)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/telemetry:batch",
+            headers={"Authorization": "Bearer secret-token"},
+            json={"events": [_valid_telemetry_event("binding-event")]},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "accepted_event_ids": ["binding-event"],
+        "duplicate_event_ids": [],
+        "rejected": [],
+    }
+    assert [call.args[0] for call in transaction.create.call_args_list] == [
+        dedup_document,
+        incident_document,
+        evidence_document,
+    ]
+    incident_id = incident_collection.document.call_args.args[0]
+    assert transaction.create.call_args_list[0].args[1] == {
+        "created_at": firestore_store.firestore.SERVER_TIMESTAMP,
+        "incident_id": incident_id,
+    }
+    incident = transaction.create.call_args_list[1].args[1]
+    assert incident["state"] == "NEW"
+    assert incident["evidence_revision"] == 1
+    evidence = transaction.create.call_args_list[2].args[1]
+    assert evidence["event_id"] == "binding-event"
+    assert evidence["device_id"] == "device-test"
 
 
 def test_telemetry_batch_correlates_performance_to_unique_binding_candidate(monkeypatch) -> None:
