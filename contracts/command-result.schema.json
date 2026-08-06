@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wpf-reliability-agent/contracts/command-result.schema.json",
+  "title": "CommandResult",
+  "description": "A bounded diagnostic command result. Compact UTF-8 payload budget: 131072 bytes.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_version",
+    "command_id",
+    "incident_id",
+    "app_session_id",
+    "status",
+    "started_at_utc",
+    "completed_at_utc",
+    "result_hash",
+    "truncated"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "command_id": { "$ref": "#/$defs/id" },
+    "incident_id": { "$ref": "#/$defs/id" },
+    "app_session_id": { "$ref": "#/$defs/id" },
+    "status": { "enum": ["SUCCEEDED", "FAILED", "REJECTED", "EXPIRED"] },
+    "started_at_utc": { "$ref": "#/$defs/utcTimestamp" },
+    "completed_at_utc": { "$ref": "#/$defs/utcTimestamp" },
+    "result": { "type": ["object", "null"] },
+    "result_hash": { "$ref": "#/$defs/hash" },
+    "truncated": { "type": "boolean" },
+    "error": {
+      "type": ["object", "null"],
+      "properties": {
+        "code": { "type": "string", "minLength": 1 },
+        "message": { "type": "string", "maxLength": 1024 }
+      },
+      "required": ["code"]
+    }
+  },
+  "$defs": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "utcTimestamp": { "type": "string", "format": "date-time", "pattern": "Z$" }
+  }
+}

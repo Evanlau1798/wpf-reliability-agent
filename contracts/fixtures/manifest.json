@@ -1,0 +1,21 @@
+{
+  "cases": [
+    { "file": "diagnostic-envelope-valid.json", "contract": "diagnostic-envelope", "valid": true },
+    { "file": "diagnostic-envelope-forward-compatible.json", "contract": "diagnostic-envelope", "valid": true },
+    { "file": "diagnostic-envelope-missing-required.json", "contract": "diagnostic-envelope", "valid": false },
+    { "file": "diagnostic-envelope-unknown-event-type.json", "contract": "diagnostic-envelope", "valid": false },
+    { "file": "diagnostic-envelope-invalid-timestamp.json", "contract": "diagnostic-envelope", "valid": false },
+    { "file": "diagnostic-command-valid-read.json", "contract": "diagnostic-command", "valid": true },
+    { "file": "diagnostic-command-valid-mutation.json", "contract": "diagnostic-command", "valid": true },
+    { "file": "diagnostic-command-blocked-tool.json", "contract": "diagnostic-command", "valid": false },
+    { "file": "command-result-success.json", "contract": "command-result", "valid": true },
+    { "file": "command-result-conflicting.json", "contract": "command-result", "valid": true },
+    { "file": "command-result-invalid-time.json", "contract": "command-result", "valid": false },
+    { "file": "agent-decision-request-evidence.json", "contract": "agent-decision", "valid": true },
+    { "file": "agent-decision-two-actions.json", "contract": "agent-decision", "valid": false },
+    { "file": "approval-pending.json", "contract": "approval", "valid": true },
+    { "file": "approval-stale-proposal.json", "contract": "approval", "valid": false },
+    { "file": "incident-report-mitigated.json", "contract": "incident-report", "valid": true },
+    { "file": "incident-report-resolved-without-source-fix.json", "contract": "incident-report", "valid": false }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.0",
+  "decision": "PROPOSE_ACTION",
+  "hypotheses": [],
+  "next_command": {
+    "tool": "performance.sample",
+    "arguments": {}
+  },
+  "proposed_action": {
+    "tool": "recovery.set_feature_flag",
+    "arguments": {
+      "feature": "ExperimentalPeopleGrid",
+      "enabled": false,
+      "expected_current_value": true
+    },
+    "evidence_ids": ["evidence-binding-1"],
+    "expected_effect": "Reduce binding failures and rendering load.",
+    "rollback_plan": "Reset the demo to enable the feature."
+  },
+  "stop_reason": null,
+  "missing_evidence": []
+}

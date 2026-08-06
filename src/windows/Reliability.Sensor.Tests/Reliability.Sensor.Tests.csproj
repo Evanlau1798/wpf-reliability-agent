@@ -19,7 +19,14 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Reliability.Contracts\Reliability.Contracts.csproj" />
     <ProjectReference Include="..\Reliability.Sensor\Reliability.Sensor.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\..\contracts\fixtures\**\*.json"
+          Link="fixtures\%(RecursiveDir)%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

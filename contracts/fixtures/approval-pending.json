@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.0",
+  "approval_id": "approval-1",
+  "incident_id": "incident-1",
+  "proposal_version": 1,
+  "evidence_snapshot_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+  "action_id": "action-1",
+  "tool": "recovery.set_feature_flag",
+  "canonical_arguments": {
+    "feature": "ExperimentalPeopleGrid",
+    "enabled": false,
+    "expected_current_value": true
+  },
+  "canonical_arguments_hash": "d229c1dcfe91553a7552c8ed06983a1a0b818d6e7b38931e0aab843b42517a5c",
+  "target_app_session_id": "session-1",
+  "policy_version": "1",
+  "risk_level": "HIGH",
+  "expected_effect": "Reduce binding failures and rendering load.",
+  "rollback_plan": "Reset the demo to enable the feature.",
+  "expires_at_utc": "2026-08-07T00:10:00Z",
+  "status": "PENDING",
+  "approved_by": null,
+  "approved_at_utc": null
+}

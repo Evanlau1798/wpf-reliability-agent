@@ -1,0 +1,11 @@
+{
+  "input": {
+    "label": "café 🚀",
+    "nested": {
+      "z": 2,
+      "a": "naïve"
+    }
+  },
+  "canonical": "{\"label\":\"café 🚀\",\"nested\":{\"a\":\"naïve\",\"z\":2}}",
+  "sha256": "bce674e26f9dffbe63892bd7566d596f669b5021606971e0e768f78e5be5fa08"
+}

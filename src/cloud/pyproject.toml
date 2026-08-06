@@ -7,6 +7,10 @@ name = "wpf-reliability-agent"
 version = "0.1.0"
 description = "Cloud workflow for the WPF Reliability Agent."
 requires-python = ">=3.12,<3.13"
+dependencies = [
+  "jsonschema>=4.23,<5",
+  "pydantic>=2.11,<3",
+]
 
 [project.optional-dependencies]
 test = ["pytest==8.3.5"]

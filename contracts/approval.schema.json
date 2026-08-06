@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wpf-reliability-agent/contracts/approval.schema.json",
+  "title": "ApprovalRecord",
+  "description": "An approval bound to an exact proposal and evidence snapshot. Compact UTF-8 payload budget: 32768 bytes.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_version",
+    "approval_id",
+    "incident_id",
+    "proposal_version",
+    "evidence_snapshot_hash",
+    "action_id",
+    "tool",
+    "canonical_arguments",
+    "canonical_arguments_hash",
+    "target_app_session_id",
+    "policy_version",
+    "risk_level",
+    "expected_effect",
+    "rollback_plan",
+    "expires_at_utc",
+    "status"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "approval_id": { "$ref": "#/$defs/id" },
+    "incident_id": { "$ref": "#/$defs/id" },
+    "proposal_version": { "type": "integer", "minimum": 1 },
+    "evidence_snapshot_hash": { "$ref": "#/$defs/hash" },
+    "action_id": { "$ref": "#/$defs/id" },
+    "tool": { "const": "recovery.set_feature_flag" },
+    "canonical_arguments": { "type": "object" },
+    "canonical_arguments_hash": { "$ref": "#/$defs/hash" },
+    "target_app_session_id": { "$ref": "#/$defs/id" },
+    "policy_version": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "risk_level": { "const": "HIGH" },
+    "expected_effect": { "type": "string", "minLength": 1, "maxLength": 2048 },
+    "rollback_plan": { "type": "string", "minLength": 1, "maxLength": 2048 },
+    "expires_at_utc": { "$ref": "#/$defs/utcTimestamp" },
+    "status": { "enum": ["PENDING", "APPROVED", "REJECTED", "EXPIRED"] },
+    "approved_by": { "type": ["string", "null"], "minLength": 1, "maxLength": 256 },
+    "approved_at_utc": { "oneOf": [{ "$ref": "#/$defs/utcTimestamp" }, { "type": "null" }] }
+  },
+  "$defs": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "utcTimestamp": { "type": "string", "format": "date-time", "pattern": "Z$" }
+  }
+}

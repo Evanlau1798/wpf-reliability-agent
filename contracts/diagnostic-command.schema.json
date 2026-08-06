@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wpf-reliability-agent/contracts/diagnostic-command.schema.json",
+  "title": "DiagnosticCommand",
+  "description": "A bounded desktop diagnostic command. Compact UTF-8 payload budget: 32768 bytes.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_version",
+    "command_id",
+    "incident_id",
+    "target_app_session_id",
+    "tool",
+    "arguments",
+    "arguments_hash",
+    "risk_level",
+    "idempotency_key",
+    "issued_at_utc",
+    "expires_at_utc",
+    "timeout_ms"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "command_id": { "$ref": "#/$defs/id" },
+    "incident_id": { "$ref": "#/$defs/id" },
+    "target_app_session_id": { "$ref": "#/$defs/id" },
+    "tool": {
+      "enum": [
+        "health.get_snapshot",
+        "binding.get_errors",
+        "binding.get_live_candidates",
+        "exception.get_recent",
+        "ui.get_subtree",
+        "ui.get_element_details",
+        "performance.sample",
+        "state.compare_snapshots",
+        "recovery.set_feature_flag"
+      ]
+    },
+    "arguments": { "type": "object" },
+    "arguments_hash": { "$ref": "#/$defs/hash" },
+    "risk_level": { "enum": ["LOW", "MEDIUM", "HIGH", "BLOCKED"] },
+    "approval_id": { "type": ["string", "null"], "minLength": 1, "maxLength": 256 },
+    "idempotency_key": { "$ref": "#/$defs/id" },
+    "issued_at_utc": { "$ref": "#/$defs/utcTimestamp" },
+    "expires_at_utc": { "$ref": "#/$defs/utcTimestamp" },
+    "timeout_ms": { "type": "integer", "minimum": 100, "maximum": 120000 }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "risk_level": { "const": "HIGH" } } },
+      "then": { "required": ["approval_id"] }
+    },
+    {
+      "if": { "properties": { "tool": { "const": "ui.get_subtree" } } },
+      "then": {
+        "properties": {
+          "arguments": {
+            "type": "object",
+            "properties": {
+              "max_depth": { "type": "integer", "minimum": 1, "maximum": 4 },
+              "max_nodes": { "type": "integer", "minimum": 1, "maximum": 300 },
+              "max_children_per_node": { "type": "integer", "minimum": 1, "maximum": 50 }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "tool": { "const": "recovery.set_feature_flag" } } },
+      "then": {
+        "properties": {
+          "risk_level": { "const": "HIGH" },
+          "arguments": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["feature", "enabled", "expected_current_value"],
+            "properties": {
+              "feature": { "const": "ExperimentalPeopleGrid" },
+              "enabled": { "const": false },
+              "expected_current_value": { "const": true }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "utcTimestamp": { "type": "string", "format": "date-time", "pattern": "Z$" }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.0",
+  "decision": "REQUEST_EVIDENCE",
+  "hypotheses": [
+    {
+      "claim": "The broken people grid amplifies binding failures.",
+      "confidence": "MEDIUM",
+      "evidence_ids": ["evidence-binding-1"],
+      "counter_evidence_ids": []
+    }
+  ],
+  "next_command": {
+    "tool": "ui.get_subtree",
+    "arguments": { "element_id": "element-grid-1", "max_depth": 4, "max_nodes": 300 }
+  },
+  "proposed_action": null,
+  "stop_reason": null,
+  "missing_evidence": ["Bounded UI subtree metadata"]
+}

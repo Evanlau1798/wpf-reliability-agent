@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.0",
+  "event_id": "event-forward-1",
+  "event_type": "performance.sample",
+  "severity": "WARNING",
+  "timestamp_utc": "2026-08-07T00:00:01Z",
+  "device_id": "device-1",
+  "application_id": "demo-broken-wpf-app",
+  "application_version": "0.1.0",
+  "app_session_id": "session-1",
+  "sequence_no": 2,
+  "correlation": {},
+  "payload": { "frame_p95_ms": 45.5 },
+  "redaction_profile": "default-v1",
+  "evidence_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+  "future_optional_field": "accepted"
+}

@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.0",
+  "incident_id": "incident-1",
+  "status": "RESOLVED",
+  "severity": "ERROR",
+  "confidence": "HIGH",
+  "timeline": [],
+  "evidence": [],
+  "claims": [],
+  "temporary_mitigation": {
+    "action_id": "action-1",
+    "tool": "recovery.set_feature_flag",
+    "approval_id": "approval-1"
+  },
+  "permanent_recommendation": {
+    "summary": "Correct the XAML binding.",
+    "source_fix_verified": false
+  },
+  "verification": [],
+  "metadata": {
+    "model_id": "gemini-test",
+    "prompt_version": "1",
+    "schema_version": "1.0",
+    "policy_version": "1",
+    "reuse_revision": "900ac97cf9b69b4a3c1f4899b08c9b1e78212af3"
+  }
+}

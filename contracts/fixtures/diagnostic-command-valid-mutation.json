@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.0",
+  "command_id": "command-mutation-1",
+  "incident_id": "incident-1",
+  "target_app_session_id": "session-1",
+  "tool": "recovery.set_feature_flag",
+  "arguments": {
+    "feature": "ExperimentalPeopleGrid",
+    "enabled": false,
+    "expected_current_value": true
+  },
+  "arguments_hash": "d229c1dcfe91553a7552c8ed06983a1a0b818d6e7b38931e0aab843b42517a5c",
+  "risk_level": "HIGH",
+  "approval_id": "approval-1",
+  "idempotency_key": "incident-1:1:recovery.set_feature_flag:d229",
+  "issued_at_utc": "2026-08-07T00:00:00Z",
+  "expires_at_utc": "2026-08-07T00:01:00Z",
+  "timeout_ms": 10000
+}

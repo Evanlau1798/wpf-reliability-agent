@@ -1,0 +1,9 @@
+{
+  "input": {
+    "enabled": false,
+    "expected_current_value": true,
+    "feature": "ExperimentalPeopleGrid"
+  },
+  "canonical": "{\"enabled\":false,\"expected_current_value\":true,\"feature\":\"ExperimentalPeopleGrid\"}",
+  "sha256": "d229c1dcfe91553a7552c8ed06983a1a0b818d6e7b38931e0aab843b42517a5c"
+}

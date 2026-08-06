@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wpf-reliability-agent/contracts/agent-decision.schema.json",
+  "title": "AgentDecision",
+  "description": "One bounded investigator decision. Compact UTF-8 payload budget: 65536 bytes.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "decision", "hypotheses", "missing_evidence"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "decision": { "enum": ["REQUEST_EVIDENCE", "PROPOSE_ACTION", "FINALIZE", "NO_ACTION"] },
+    "hypotheses": {
+      "type": "array",
+      "maxItems": 10,
+      "items": { "$ref": "#/$defs/hypothesis" }
+    },
+    "next_command": { "type": ["object", "null"] },
+    "proposed_action": { "$ref": "#/$defs/actionOrNull" },
+    "stop_reason": { "type": ["string", "null"], "maxLength": 1024 },
+    "missing_evidence": {
+      "type": "array",
+      "maxItems": 10,
+      "items": { "type": "string", "minLength": 1, "maxLength": 256 }
+    }
+  },
+  "$defs": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "hypothesis": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["claim", "confidence", "evidence_ids", "counter_evidence_ids"],
+      "properties": {
+        "claim": { "type": "string", "minLength": 1, "maxLength": 2048 },
+        "confidence": { "enum": ["LOW", "MEDIUM", "HIGH"] },
+        "evidence_ids": { "type": "array", "items": { "$ref": "#/$defs/id" } },
+        "counter_evidence_ids": { "type": "array", "items": { "$ref": "#/$defs/id" } }
+      }
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["tool", "arguments", "evidence_ids", "expected_effect", "rollback_plan"],
+      "properties": {
+        "tool": { "const": "recovery.set_feature_flag" },
+        "arguments": { "type": "object" },
+        "evidence_ids": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/id" } },
+        "expected_effect": { "type": "string", "minLength": 1, "maxLength": 2048 },
+        "rollback_plan": { "type": "string", "minLength": 1, "maxLength": 2048 }
+      }
+    },
+    "actionOrNull": { "oneOf": [{ "$ref": "#/$defs/action" }, { "type": "null" }] }
+  }
+}

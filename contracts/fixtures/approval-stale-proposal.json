@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0",
+  "approval_id": "approval-stale-1",
+  "incident_id": "incident-1",
+  "proposal_version": 0,
+  "evidence_snapshot_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+  "action_id": "action-1",
+  "tool": "recovery.set_feature_flag",
+  "canonical_arguments": {},
+  "canonical_arguments_hash": "7777777777777777777777777777777777777777777777777777777777777777",
+  "target_app_session_id": "session-1",
+  "policy_version": "1",
+  "risk_level": "HIGH",
+  "expected_effect": "Reduce binding failures.",
+  "rollback_plan": "Reset the demo.",
+  "expires_at_utc": "2026-08-07T00:10:00Z",
+  "status": "PENDING"
+}

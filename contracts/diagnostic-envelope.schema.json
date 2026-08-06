@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wpf-reliability-agent/contracts/diagnostic-envelope.schema.json",
+  "title": "DiagnosticEnvelope",
+  "description": "A redacted diagnostic event. Compact UTF-8 payload budget: 65536 bytes.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_version",
+    "event_id",
+    "event_type",
+    "severity",
+    "timestamp_utc",
+    "device_id",
+    "application_id",
+    "application_version",
+    "app_session_id",
+    "sequence_no",
+    "correlation",
+    "payload",
+    "redaction_profile",
+    "evidence_hash"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "event_id": { "$ref": "#/$defs/id" },
+    "event_type": {
+      "enum": [
+        "binding.aggregate",
+        "exception.summary",
+        "ui.snapshot",
+        "performance.sample",
+        "tool.result",
+        "recovery.result"
+      ]
+    },
+    "severity": { "enum": ["INFO", "WARNING", "ERROR", "CRITICAL"] },
+    "timestamp_utc": { "$ref": "#/$defs/utcTimestamp" },
+    "device_id": { "$ref": "#/$defs/id" },
+    "application_id": { "$ref": "#/$defs/id" },
+    "application_version": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "app_session_id": { "$ref": "#/$defs/id" },
+    "sequence_no": { "type": "integer", "minimum": 0 },
+    "correlation": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "element_id": { "type": ["string", "null"], "minLength": 1 },
+        "binding_path": { "type": ["string", "null"], "maxLength": 512 },
+        "window_type": { "type": ["string", "null"], "maxLength": 256 }
+      }
+    },
+    "payload": { "type": "object" },
+    "redaction_profile": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "evidence_hash": { "$ref": "#/$defs/hash" }
+  },
+  "$defs": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "utcTimestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    }
+  }
+}

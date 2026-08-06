@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0",
+  "command_id": "command-read-1",
+  "incident_id": "incident-1",
+  "target_app_session_id": "session-1",
+  "tool": "ui.get_subtree",
+  "arguments": {
+    "element_id": "element-1",
+    "max_depth": 4,
+    "max_nodes": 300,
+    "max_children_per_node": 50
+  },
+  "arguments_hash": "3333333333333333333333333333333333333333333333333333333333333333",
+  "risk_level": "LOW",
+  "approval_id": null,
+  "idempotency_key": "incident-1:1:ui.get_subtree:3333",
+  "issued_at_utc": "2026-08-07T00:00:00Z",
+  "expires_at_utc": "2026-08-07T00:01:00Z",
+  "timeout_ms": 10000
+}

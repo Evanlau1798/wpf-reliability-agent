@@ -1,0 +1,16 @@
+{
+  "schema_version": "1.0",
+  "event_id": "event-unknown-1",
+  "event_type": "unknown.event",
+  "severity": "ERROR",
+  "timestamp_utc": "2026-08-07T00:00:00Z",
+  "device_id": "device-1",
+  "application_id": "demo-broken-wpf-app",
+  "application_version": "0.1.0",
+  "app_session_id": "session-1",
+  "sequence_no": 1,
+  "correlation": {},
+  "payload": {},
+  "redaction_profile": "default-v1",
+  "evidence_hash": "1111111111111111111111111111111111111111111111111111111111111111"
+}

@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0",
+  "command_id": "command-read-1",
+  "incident_id": "incident-1",
+  "app_session_id": "session-1",
+  "status": "SUCCEEDED",
+  "started_at_utc": "2026-08-07T00:00:02Z",
+  "completed_at_utc": "2026-08-07T00:00:03Z",
+  "result": { "nodes": 43 },
+  "result_hash": "8888888888888888888888888888888888888888888888888888888888888888",
+  "truncated": false,
+  "error": null
+}

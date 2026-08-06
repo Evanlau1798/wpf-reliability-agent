@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wpf-reliability-agent/contracts/incident-report.schema.json",
+  "title": "IncidentReport",
+  "description": "An evidence-backed incident report. Compact UTF-8 payload budget: 524288 bytes.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_version",
+    "incident_id",
+    "status",
+    "severity",
+    "confidence",
+    "timeline",
+    "evidence",
+    "claims",
+    "verification",
+    "metadata"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "incident_id": { "$ref": "#/$defs/id" },
+    "status": { "enum": ["MITIGATED", "RESOLVED", "CLOSED", "REJECTED", "FAILED_SAFE"] },
+    "severity": { "enum": ["INFO", "WARNING", "ERROR", "CRITICAL"] },
+    "confidence": { "enum": ["LOW", "MEDIUM", "HIGH"] },
+    "timeline": { "type": "array", "items": { "$ref": "#/$defs/timeline" } },
+    "evidence": { "type": "array", "items": { "$ref": "#/$defs/evidence" } },
+    "claims": { "type": "array", "items": { "$ref": "#/$defs/claim" } },
+    "temporary_mitigation": { "oneOf": [{ "$ref": "#/$defs/mitigation" }, { "type": "null" }] },
+    "permanent_recommendation": { "oneOf": [{ "$ref": "#/$defs/recommendation" }, { "type": "null" }] },
+    "verification": { "type": "array", "items": { "$ref": "#/$defs/verification" } },
+    "metadata": { "$ref": "#/$defs/metadata" }
+  },
+  "$defs": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "utcTimestamp": { "type": "string", "format": "date-time", "pattern": "Z$" },
+    "timeline": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["timestamp_utc", "kind", "actor", "reference"],
+      "properties": {
+        "timestamp_utc": { "$ref": "#/$defs/utcTimestamp" },
+        "kind": { "type": "string", "minLength": 1 },
+        "actor": { "type": "string", "minLength": 1 },
+        "reference": { "$ref": "#/$defs/id" }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["evidence_id", "kind", "summary"],
+      "properties": {
+        "evidence_id": { "$ref": "#/$defs/id" },
+        "kind": { "type": "string", "minLength": 1 },
+        "summary": { "type": "string", "minLength": 1, "maxLength": 4096 }
+      }
+    },
+    "claim": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["text", "fact_or_hypothesis", "confidence", "evidence_ids"],
+      "properties": {
+        "text": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "fact_or_hypothesis": { "enum": ["FACT", "HYPOTHESIS"] },
+        "confidence": { "enum": ["LOW", "MEDIUM", "HIGH"] },
+        "evidence_ids": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/id" } }
+      }
+    },
+    "mitigation": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["action_id", "tool", "approval_id"],
+      "properties": {
+        "action_id": { "$ref": "#/$defs/id" },
+        "tool": { "const": "recovery.set_feature_flag" },
+        "approval_id": { "$ref": "#/$defs/id" }
+      }
+    },
+    "recommendation": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["summary"],
+      "properties": {
+        "summary": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "source_fix_verified": { "type": "boolean", "default": false }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["metric_name", "before", "after", "unit", "evidence_ids"],
+      "properties": {
+        "metric_name": { "type": "string", "minLength": 1 },
+        "before": { "type": "number" },
+        "after": { "type": "number" },
+        "unit": { "type": "string", "minLength": 1 },
+        "evidence_ids": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/id" } }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["model_id", "prompt_version", "schema_version", "policy_version", "reuse_revision"],
+      "properties": {
+        "model_id": { "type": "string", "minLength": 1 },
+        "prompt_version": { "type": "string", "minLength": 1 },
+        "schema_version": { "const": "1.0" },
+        "policy_version": { "type": "string", "minLength": 1 },
+        "reuse_revision": { "type": "string", "pattern": "^[0-9a-f]{40}$" }
+      }
+    }
+  }
+}
