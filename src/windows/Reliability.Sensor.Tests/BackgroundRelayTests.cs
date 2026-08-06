@@ -98,6 +98,52 @@ public sealed class BackgroundRelayTests
     }
 
     [Fact]
+    public async Task UploadLoopAppliesPerEventServerResultsToOutboxRows()
+    {
+        var directory = Path.Combine(
+            Environment.CurrentDirectory,
+            "tmp",
+            "relay-tests",
+            Guid.NewGuid().ToString("N"));
+        var path = Path.Combine(directory, "outbox.db");
+        var handler = new MixedResultHandler();
+
+        try
+        {
+            await using var inspection = await SqliteOutbox.OpenAsync(path);
+            await inspection.TryAddEventAsync(Envelope("accepted-event"));
+            await inspection.TryAddEventAsync(Envelope("duplicate-event"));
+            await inspection.TryAddEventAsync(Envelope("rejected-event"));
+            await using var sensor = ReliabilitySensor.Start(ValidOptions(path) with
+            {
+                TelemetryHandler = handler,
+                RelayPollInterval = TimeSpan.FromMilliseconds(10),
+            });
+
+            var accepted = await WaitForEventAsync(
+                inspection,
+                "accepted-event",
+                item => item.SentAtUtc is not null);
+            var duplicate = await WaitForEventAsync(
+                inspection,
+                "duplicate-event",
+                item => item.SentAtUtc is not null);
+            var rejected = await WaitForEventRemovalAsync(inspection, "rejected-event");
+
+            Assert.NotNull(accepted?.SentAtUtc);
+            Assert.NotNull(duplicate?.SentAtUtc);
+            Assert.True(rejected);
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public async Task CancellationDrainsQueuedEventsAndCompletesRelay()
     {
         var directory = Path.Combine(
@@ -223,6 +269,21 @@ public sealed class BackgroundRelayTests
         return null;
     }
 
+    private static async Task<bool> WaitForEventRemovalAsync(SqliteOutbox outbox, string eventId)
+    {
+        for (var attempt = 0; attempt < 100; attempt++)
+        {
+            if (await outbox.GetEventAsync(eventId) is null)
+            {
+                return true;
+            }
+
+            await Task.Delay(10);
+        }
+
+        return false;
+    }
+
     private static ReliabilitySensorOptions ValidOptions(string outboxPath) => new()
     {
         ApiBaseUri = new Uri("https://reliability.example.test"),
@@ -272,6 +333,37 @@ public sealed class BackgroundRelayTests
                 accepted_event_ids = EventIds,
                 duplicate_event_ids = Array.Empty<string>(),
                 rejected = Array.Empty<object>(),
+            });
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(response, Encoding.UTF8, "application/json"),
+            };
+        }
+    }
+
+    private sealed class MixedResultHandler : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            var body = await request.Content!.ReadAsStringAsync(cancellationToken);
+            using var document = JsonDocument.Parse(body);
+            var eventIds = document.RootElement.GetProperty("events")
+                .EnumerateArray()
+                .Select(item => item.GetProperty("event_id").GetString()!)
+                .ToHashSet(StringComparer.Ordinal);
+            var response = JsonSerializer.Serialize(new
+            {
+                accepted_event_ids = eventIds.Contains("accepted-event")
+                    ? new[] { "accepted-event" }
+                    : Array.Empty<string>(),
+                duplicate_event_ids = eventIds.Contains("duplicate-event")
+                    ? new[] { "duplicate-event" }
+                    : Array.Empty<string>(),
+                rejected = eventIds.Contains("rejected-event")
+                    ? new[] { new { event_id = "rejected-event", code = "INVALID_EVENT" } }
+                    : Array.Empty<object>(),
             });
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
