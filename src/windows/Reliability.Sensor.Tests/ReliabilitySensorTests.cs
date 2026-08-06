@@ -49,7 +49,7 @@ public sealed class ReliabilitySensorTests
     }
 
     [Fact]
-    public async Task MissingTokenFailsClosedBeforeEventsCanBeQueued()
+    public async Task MissingTokenDisablesUploadWithoutDisablingLocalCollection()
     {
         var options = ValidOptions() with { DeviceToken = " " };
         await using var sensor = ReliabilitySensor.Start(options);
@@ -61,9 +61,10 @@ public sealed class ReliabilitySensorTests
             JsonSerializer.SerializeToElement(new { count = 1 }),
             out _);
 
-        Assert.False(sensor.IsEnabled);
-        Assert.False(queued);
-        Assert.False(sensor.Events.TryRead(out _));
+        Assert.True(sensor.IsEnabled);
+        Assert.False(sensor.CanUpload);
+        Assert.True(queued);
+        Assert.True(sensor.Events.TryRead(out _));
     }
 
     [Fact]

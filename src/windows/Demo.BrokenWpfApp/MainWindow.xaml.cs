@@ -1,4 +1,8 @@
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
+using System.Windows.Threading;
+using Reliability.Sensor;
 
 namespace Demo.BrokenWpfApp;
 
@@ -8,14 +12,25 @@ public partial class MainWindow : Window
         DemoDataGenerator.Generate(DemoCalibration.DefaultPersonCount, seed: 1729);
     private readonly ExperimentalPeopleGridState _featureState = new();
     private readonly RecoveryActionRegistry _recoveryActions = new();
+    private readonly ReliabilitySensor? _sensor;
+    private bool _bindingProbeCompleted;
 
-    public MainWindow()
+    public MainWindow() : this(null)
     {
+    }
+
+    public MainWindow(ReliabilitySensor? sensor)
+    {
+        _sensor = sensor;
         InitializeComponent();
         _recoveryActions.Register(
             RecoveryAction.DisableExperimentalPeopleGrid,
             _featureState.Disable);
         RefreshView();
+        if (_sensor is not null)
+        {
+            Dispatcher.BeginInvoke(ProbeBrokenBindings, DispatcherPriority.Loaded);
+        }
     }
 
     public RecoveryResult ApplyRecoveryAction(
@@ -49,5 +64,45 @@ public partial class MainWindow : Window
         FallbackView.Visibility = isEnabled ? Visibility.Collapsed : Visibility.Visible;
         FeatureStateText.Text = isEnabled ? "Feature: ENABLED (broken)" : "Feature: DISABLED (fallback)";
         ItemCountText.Text = $"Items: {_people.Count:N0}";
+    }
+
+    private void ProbeBrokenBindings(DependencyObject root, int maxNodes)
+    {
+        // ponytail: this bounded demo fallback covers machines where WPF managed tracing is disabled.
+        var pending = new Stack<DependencyObject>();
+        pending.Push(root);
+        for (var visited = 0; pending.Count > 0 && visited < maxNodes; visited++)
+        {
+            var current = pending.Pop();
+            if (current is TextBlock textBlock
+                && textBlock.GetBindingExpression(TextBlock.TextProperty) is { } expression
+                && expression.ParentBinding.Path?.Path is { Length: > 0 } bindingPath
+                && !bindingPath.Contains('.')
+                && textBlock.DataContext is { } dataItem
+                && dataItem.GetType().GetProperty(bindingPath) is null)
+            {
+                _sensor!.ReportBindingFailure(
+                    bindingPath,
+                    TextBlock.TextProperty.Name,
+                    nameof(TextBlock),
+                    string.IsNullOrEmpty(textBlock.Name) ? null : textBlock.Name);
+            }
+
+            for (var childIndex = VisualTreeHelper.GetChildrenCount(current) - 1; childIndex >= 0; childIndex--)
+            {
+                pending.Push(VisualTreeHelper.GetChild(current, childIndex));
+            }
+        }
+    }
+
+    private void ProbeBrokenBindings()
+    {
+        if (_bindingProbeCompleted || _sensor is null || _sensor.BindingAggregateCount > 0)
+        {
+            return;
+        }
+
+        _bindingProbeCompleted = true;
+        ProbeBrokenBindings(ExperimentalPeopleGrid, maxNodes: 300);
     }
 }

@@ -7,7 +7,8 @@ public sealed class DemoXamlTests
     [Fact]
     public void ExperimentalTemplateContainsTheIntentionalBindingTypo()
     {
-        Assert.Contains("{Binding DisplayNmae}", Xaml, StringComparison.Ordinal);
+        Assert.Contains("Path=\"DisplayNmae\"", Xaml, StringComparison.Ordinal);
+        Assert.Contains("PresentationTraceSources.TraceLevel=\"High\"", Xaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"ExperimentalPeopleGrid\"", Xaml, StringComparison.Ordinal);
     }
 

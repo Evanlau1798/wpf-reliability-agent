@@ -10,5 +10,31 @@
     "reuse_type",
     "adaptation_summary"
   ],
-  "items": []
+  "items": [
+    {
+      "source_repository": "https://github.com/Evanlau1798/wpf-devtools-mcp",
+      "source_revision": "900ac97cf9b69b4a3c1f4899b08c9b1e78212af3",
+      "source_url": "https://github.com/Evanlau1798/wpf-devtools-mcp/blob/900ac97cf9b69b4a3c1f4899b08c9b1e78212af3/src/WpfDevTools.Inspector/Analyzers/BindingErrorTraceListener.cs",
+      "source_path": "src/WpfDevTools.Inspector/Analyzers/BindingErrorTraceListener.cs",
+      "destination_path": "src/windows/Reliability.Sensor/BindingDiagnostics.cs",
+      "reuse_type": "design-reference",
+      "adaptation_summary": [
+        "Replaced the upstream singleton and retained-error queue with one instance-owned listener that writes into the sensor pipeline.",
+        "Preserved idempotent registration and trace-level restoration behavior without importing Inspector or MCP dependencies.",
+        "Added UTF-8 message limits, validation filtering, pure parsing, deterministic fingerprints, and bounded window aggregation."
+      ]
+    },
+    {
+      "source_repository": "https://github.com/Evanlau1798/wpf-devtools-mcp",
+      "source_revision": "900ac97cf9b69b4a3c1f4899b08c9b1e78212af3",
+      "source_url": "https://github.com/Evanlau1798/wpf-devtools-mcp/blob/900ac97cf9b69b4a3c1f4899b08c9b1e78212af3/tests/WpfDevTools.Tests.Unit/Inspector/Analyzers/BindingErrorCorrelationTests.cs",
+      "source_path": "tests/WpfDevTools.Tests.Unit/Inspector/Analyzers/BindingErrorCorrelationTests.cs",
+      "destination_path": "src/windows/Reliability.Sensor.Tests/BindingDiagnosticsTests.cs",
+      "reuse_type": "adapted-test",
+      "adaptation_summary": [
+        "Reused the property-not-found trace shape as a regression fixture for the new parser.",
+        "Rewrote assertions for the versioned binding diagnostic and bounded aggregate envelope contracts."
+      ]
+    }
+  ]
 }
