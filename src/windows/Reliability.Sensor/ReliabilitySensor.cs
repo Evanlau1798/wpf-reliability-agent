@@ -43,7 +43,7 @@ public enum SensorDiagnostic
     BindingAggregateQueued,
 }
 
-public sealed class ReliabilitySensor : IAsyncDisposable
+public sealed partial class ReliabilitySensor : IAsyncDisposable
 {
     private const string RedactionProfile = "metadata-only-v1";
     private readonly CancellationTokenSource _lifetime;
@@ -278,6 +278,7 @@ public sealed class ReliabilitySensor : IAsyncDisposable
         }
 
         StopBindingDiagnostics();
+        StopCollectors();
         _events.Writer.TryComplete();
         _lifetime.Cancel();
         try

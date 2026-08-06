@@ -19,6 +19,7 @@ public partial class App : Application
             CreateSensorOptions(),
             _applicationStopping.Token,
             static diagnostic => Debug.WriteLine($"Reliability sensor: {diagnostic}"));
+        _sensor.InstallExceptionDiagnostics(this);
         _sensor.InstallBindingDiagnostics();
         base.OnStartup(e);
         MainWindow = new MainWindow(_sensor);
@@ -28,6 +29,7 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         _sensor?.StopBindingDiagnostics();
+        _sensor?.StopExceptionDiagnostics();
         _applicationStopping.Cancel();
         try
         {
