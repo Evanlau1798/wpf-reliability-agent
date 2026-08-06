@@ -240,6 +240,43 @@ def test_telemetry_batch_reports_duplicate_event_id(monkeypatch) -> None:
     assert second.json()["duplicate_event_ids"] == ["event-1"]
 
 
+def test_telemetry_batch_reports_mixed_accepted_duplicate_and_invalid_events(monkeypatch) -> None:
+    _set_required_environment(monkeypatch, "api")
+    monkeypatch.setattr("app.main.get_firestore_client", lambda _project_id: object())
+    outcomes = iter(
+        [
+            (True, "incident-1", {"incident_id": "incident-1"}),
+            (False, "incident-2", None),
+        ]
+    )
+    monkeypatch.setattr(
+        "app.main.ingest_binding_event",
+        lambda _client, _event, _device_id: next(outcomes),
+    )
+    invalid = _valid_telemetry_event("invalid-event")
+    invalid["timestamp_utc"] = "not-a-timestamp"
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/telemetry:batch",
+            headers={"Authorization": "Bearer secret-token"},
+            json={
+                "events": [
+                    _valid_telemetry_event("accepted-event"),
+                    _valid_telemetry_event("duplicate-event"),
+                    invalid,
+                ]
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "accepted_event_ids": ["accepted-event"],
+        "duplicate_event_ids": ["duplicate-event"],
+        "rejected": [{"event_id": "invalid-event", "code": "INVALID_EVENT"}],
+    }
+
+
 def test_telemetry_batch_correlates_performance_to_unique_binding_candidate(monkeypatch) -> None:
     _set_required_environment(monkeypatch, "api")
     client_object = object()
