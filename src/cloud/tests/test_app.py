@@ -132,6 +132,31 @@ def test_invalid_device_token_returns_401_without_logging_token() -> None:
     assert "invalid-token" not in output.getvalue()
 
 
+def test_telemetry_batch_route_requires_authenticated_post(monkeypatch) -> None:
+    _set_required_environment(monkeypatch, "api")
+
+    with TestClient(app) as client:
+        missing_auth = client.post("/v1/telemetry:batch", json={"events": []})
+        wrong_method = client.get(
+            "/v1/telemetry:batch",
+            headers={"Authorization": "Bearer secret-token"},
+        )
+        accepted = client.post(
+            "/v1/telemetry:batch",
+            headers={"Authorization": "Bearer secret-token"},
+            json={"events": []},
+        )
+
+    assert missing_auth.status_code == 401
+    assert wrong_method.status_code == 405
+    assert accepted.status_code == 200
+    assert accepted.json() == {
+        "accepted_event_ids": [],
+        "duplicate_event_ids": [],
+        "rejected": [],
+    }
+
+
 async def _startup_role() -> str:
     async with app.router.lifespan_context(app):
         return app.state.settings.service_role
