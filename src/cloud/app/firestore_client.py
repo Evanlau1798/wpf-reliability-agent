@@ -111,35 +111,45 @@ def persist_incident_event(
     evidence_id: str,
     incident: dict[str, object] | None,
     evidence: dict[str, object],
-) -> bool:
+) -> int | None:
     dedup_document = client.collection(EVENT_DEDUP_COLLECTION).document(event_id)
     incident_document = client.collection(INCIDENTS_COLLECTION).document(incident_id)
     evidence_document = incident_document.collection(EVIDENCE_COLLECTION).document(evidence_id)
 
     @firestore.transactional
-    def persist(transaction: firestore.Transaction) -> bool:
+    def persist(transaction: firestore.Transaction) -> int | None:
         if dedup_document.get(transaction=transaction).exists:
-            return False
+            return None
 
-        incident_exists = incident_document.get(transaction=transaction).exists
-        if not incident_exists and incident is None:
+        incident_snapshot = incident_document.get(transaction=transaction)
+        if not incident_snapshot.exists and incident is None:
             raise ValueError("Incident does not exist")
+
+        if incident_snapshot.exists:
+            current_revision = (incident_snapshot.to_dict() or {}).get("evidence_revision")
+            if type(current_revision) is not int or current_revision < 0:
+                raise ValueError("Incident evidence revision is invalid")
+            evidence_revision = current_revision + 1
+        else:
+            evidence_revision = incident.get("evidence_revision") if incident is not None else None
+            if type(evidence_revision) is not int or evidence_revision < 1:
+                raise ValueError("New incident evidence revision is invalid")
 
         transaction.create(
             dedup_document,
             {"created_at": firestore.SERVER_TIMESTAMP, "incident_id": incident_id},
         )
-        if incident_exists:
+        if incident_snapshot.exists:
             transaction.update(
                 incident_document,
                 {
-                    "evidence_revision": firestore.Increment(1),
+                    "evidence_revision": evidence_revision,
                     "updated_at": firestore.SERVER_TIMESTAMP,
                 },
             )
         else:
             transaction.create(incident_document, incident)
         transaction.create(evidence_document, evidence)
-        return True
+        return evidence_revision
 
     return persist(client.transaction())

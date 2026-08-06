@@ -178,7 +178,7 @@ def test_incident_event_persist_is_atomic(monkeypatch) -> None:
         evidence_id="event-1",
         incident=incident,
         evidence=evidence,
-    ) is True
+    ) == 1
 
     transaction.create.assert_any_call(
         dedup_document,
@@ -221,3 +221,46 @@ def test_related_event_does_not_create_missing_incident(monkeypatch) -> None:
         )
 
     transaction.create.assert_not_called()
+
+
+def test_incident_event_persist_returns_next_evidence_revision(monkeypatch) -> None:
+    client = Mock()
+    transaction = Mock()
+    dedup_collection = Mock()
+    incident_collection = Mock()
+    dedup_document = Mock()
+    incident_document = Mock()
+    evidence_document = Mock()
+    client.transaction.return_value = transaction
+    client.collection.side_effect = lambda name: (
+        dedup_collection
+        if name == firestore_client.EVENT_DEDUP_COLLECTION
+        else incident_collection
+    )
+    dedup_collection.document.return_value = dedup_document
+    incident_collection.document.return_value = incident_document
+    incident_document.collection.return_value.document.return_value = evidence_document
+    dedup_document.get.return_value = Mock(exists=False)
+    incident_document.get.return_value = Mock(
+        exists=True,
+        to_dict=lambda: {"evidence_revision": 3},
+    )
+    monkeypatch.setattr(firestore_client.firestore, "transactional", lambda callback: callback)
+
+    revision = firestore_client.persist_incident_event(
+        client,
+        event_id="performance-1",
+        incident_id="incident-1",
+        evidence_id="performance-1",
+        incident=None,
+        evidence={"event_id": "performance-1"},
+    )
+
+    assert revision == 4
+    transaction.update.assert_called_once_with(
+        incident_document,
+        {
+            "evidence_revision": 4,
+            "updated_at": firestore_client.firestore.SERVER_TIMESTAMP,
+        },
+    )

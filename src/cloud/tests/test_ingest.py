@@ -1,5 +1,6 @@
 import pytest
 
+from app import ingest
 from app.ingest import ingest_performance_event, validate_telemetry_events
 
 
@@ -87,6 +88,52 @@ def test_performance_ingest_requires_explicit_matching_app_session() -> None:
     assert rejected == []
     with pytest.raises(ValueError, match="app session"):
         ingest_performance_event(object(), valid[0], "device-test", "incident-1")
+
+
+def test_binding_ingest_builds_publish_payload_after_persist(monkeypatch) -> None:
+    event = _event(
+        "binding.aggregate",
+        {"binding_path": "DisplayNmae"},
+        {
+            "fingerprint": "binding-1",
+            "binding_path": "DisplayNmae",
+            "occurrence_count": 1,
+        },
+    )
+    valid, rejected = validate_telemetry_events([event])
+    order: list[str] = []
+
+    def persist(*_args, **_kwargs) -> int:
+        order.append("commit")
+        return 3
+
+    def build_payload(incident_id, evidence_revision, persisted_event):
+        order.append("payload")
+        return {
+            "incident_id": incident_id,
+            "evidence_revision": evidence_revision,
+            "trigger": persisted_event.event_type.value,
+            "event_id": persisted_event.event_id,
+        }
+
+    monkeypatch.setattr(ingest, "persist_incident_event", persist)
+    monkeypatch.setattr(ingest, "build_publish_payload", build_payload, raising=False)
+
+    accepted, incident_id, payload = ingest.ingest_binding_event(
+        object(),
+        valid[0],
+        "device-test",
+    )
+
+    assert rejected == []
+    assert accepted is True
+    assert order == ["commit", "payload"]
+    assert payload == {
+        "incident_id": incident_id,
+        "evidence_revision": 3,
+        "trigger": "binding.aggregate",
+        "event_id": "event-1",
+    }
 
 
 def _event(event_type: str, correlation: dict[str, object], payload: dict[str, object]) -> dict[str, object]:

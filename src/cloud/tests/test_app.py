@@ -210,7 +210,12 @@ def test_telemetry_batch_rejects_invalid_event_without_rejecting_batch(monkeypat
 def test_telemetry_batch_reports_duplicate_event_id(monkeypatch) -> None:
     _set_required_environment(monkeypatch, "api")
     monkeypatch.setattr("app.main.get_firestore_client", lambda _project_id: object())
-    outcomes = iter([(True, "incident-1"), (False, "incident-1")])
+    outcomes = iter(
+        [
+            (True, "incident-1", {"incident_id": "incident-1"}),
+            (False, "incident-1", None),
+        ]
+    )
     monkeypatch.setattr(
         "app.main.ingest_binding_event",
         lambda _client, _event, _device_id: next(outcomes),
@@ -241,13 +246,17 @@ def test_telemetry_batch_correlates_performance_to_unique_binding_candidate(monk
     monkeypatch.setattr("app.main.get_firestore_client", lambda _project_id: client_object)
     monkeypatch.setattr(
         "app.main.ingest_binding_event",
-        lambda _client, _event, _device_id: (True, "incident-1"),
+        lambda _client, _event, _device_id: (
+            True,
+            "incident-1",
+            {"incident_id": "incident-1"},
+        ),
     )
     related: list[tuple[object, str, str]] = []
 
     def ingest_performance(_client, event, device_id, incident_id):
         related.append((event, device_id, incident_id))
-        return True
+        return True, {"incident_id": incident_id}
 
     monkeypatch.setattr("app.main.ingest_performance_event", ingest_performance)
 

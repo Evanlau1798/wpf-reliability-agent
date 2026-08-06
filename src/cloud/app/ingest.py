@@ -148,7 +148,7 @@ def ingest_binding_event(
     client: object,
     event: DiagnosticEnvelope,
     device_id: str,
-) -> tuple[bool, str]:
+) -> tuple[bool, str, dict[str, object] | None]:
     if event.event_type is not EventType.BINDING_AGGREGATE:
         raise ValueError("Binding ingest requires a binding aggregate event")
     fingerprint = event.payload.get("fingerprint")
@@ -170,7 +170,7 @@ def ingest_binding_event(
         if isinstance(binding_path, str) and binding_path
         else "Binding error burst"
     )
-    is_new = persist_incident_event(
+    evidence_revision = persist_incident_event(
         client,
         event_id=event.event_id,
         incident_id=incident_id,
@@ -184,7 +184,9 @@ def ingest_binding_event(
         ),
         evidence=trusted_event.model_dump(mode="json"),
     )
-    return is_new, incident_id
+    if evidence_revision is None:
+        return False, incident_id, None
+    return True, incident_id, build_publish_payload(incident_id, evidence_revision, trusted_event)
 
 
 def ingest_performance_event(
@@ -192,14 +194,14 @@ def ingest_performance_event(
     event: DiagnosticEnvelope,
     device_id: str,
     incident_id: str,
-) -> bool:
+) -> tuple[bool, dict[str, object] | None]:
     if event.event_type is not EventType.PERFORMANCE_SAMPLE:
         raise ValueError("Performance ingest requires a performance sample event")
     if event.correlation.get("app_session_id") != event.app_session_id:
         raise ValueError("Performance app session correlation must match the event")
 
     trusted_event = event.model_copy(update={"device_id": device_id})
-    return persist_incident_event(
+    evidence_revision = persist_incident_event(
         client,
         event_id=event.event_id,
         incident_id=incident_id,
@@ -207,6 +209,22 @@ def ingest_performance_event(
         incident=None,
         evidence=trusted_event.model_dump(mode="json"),
     )
+    if evidence_revision is None:
+        return False, None
+    return True, build_publish_payload(incident_id, evidence_revision, trusted_event)
+
+
+def build_publish_payload(
+    incident_id: str,
+    evidence_revision: int,
+    event: DiagnosticEnvelope,
+) -> dict[str, object]:
+    return {
+        "incident_id": incident_id,
+        "evidence_revision": evidence_revision,
+        "trigger": event.event_type.value,
+        "event_id": event.event_id,
+    }
 
 
 def _allowlist(source: dict[str, object], fields: frozenset[str]) -> dict[str, object]:

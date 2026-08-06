@@ -92,7 +92,11 @@ def telemetry_batch(
         for event in valid:
             if event.event_type is EventType.BINDING_AGGREGATE:
                 try:
-                    is_new, incident_id = ingest_binding_event(client, event, device_id)
+                    is_new, incident_id, _publish_payload = ingest_binding_event(
+                        client,
+                        event,
+                        device_id,
+                    )
                 except ValueError:
                     rejected.append({"event_id": event.event_id, "code": "INVALID_EVENT"})
                     continue
@@ -110,7 +114,7 @@ def telemetry_batch(
             candidates = binding_candidates.get((event.application_id, event.app_session_id), set())
             if len(candidates) == 1:
                 try:
-                    is_new = ingest_performance_event(
+                    is_new, _publish_payload = ingest_performance_event(
                         client,
                         event,
                         device_id,
