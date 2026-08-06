@@ -21,6 +21,7 @@ public partial class App : Application
             static diagnostic => Debug.WriteLine($"Reliability sensor: {diagnostic}"));
         _sensor.InstallExceptionDiagnostics(this);
         _sensor.InstallBindingDiagnostics();
+        _sensor.InstallPerformanceDiagnostics(Dispatcher);
         base.OnStartup(e);
         MainWindow = new MainWindow(_sensor);
         MainWindow.Show();
@@ -30,6 +31,7 @@ public partial class App : Application
     {
         _sensor?.StopBindingDiagnostics();
         _sensor?.StopExceptionDiagnostics();
+        _sensor?.StopPerformanceDiagnostics();
         _applicationStopping.Cancel();
         try
         {

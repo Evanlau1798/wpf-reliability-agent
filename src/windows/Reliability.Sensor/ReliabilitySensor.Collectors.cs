@@ -29,5 +29,9 @@ public sealed partial class ReliabilitySensor
         }
     }
 
-    private void StopCollectors() => StopExceptionDiagnostics();
+    private void StopCollectors()
+    {
+        StopExceptionDiagnostics();
+        StopPerformanceDiagnostics();
+    }
 }
