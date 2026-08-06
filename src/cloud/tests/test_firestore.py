@@ -66,3 +66,41 @@ def test_event_dedup_transaction_accepts_event_once(monkeypatch) -> None:
         document,
         {"created_at": firestore_client.firestore.SERVER_TIMESTAMP},
     )
+
+
+def test_incident_create_writes_complete_initial_state() -> None:
+    client = Mock()
+    document = Mock()
+    client.collection.return_value.document.return_value = document
+
+    firestore_client.create_incident(
+        client,
+        "incident-1",
+        application_id="app-1",
+        app_session_id="session-1",
+        severity="ERROR",
+        summary="Binding error burst",
+    )
+
+    client.collection.assert_called_once_with(firestore_client.INCIDENTS_COLLECTION)
+    client.collection.return_value.document.assert_called_once_with("incident-1")
+    document.create.assert_called_once_with(
+        {
+            "state": "NEW",
+            "state_version": 1,
+            "evidence_revision": 0,
+            "proposal_version": 0,
+            "application_id": "app-1",
+            "app_session_id": "session-1",
+            "severity": "ERROR",
+            "summary": "Binding error burst",
+            "current_hypotheses": [],
+            "pending_command_id": None,
+            "pending_action_id": None,
+            "approval_id": None,
+            "lease_owner": None,
+            "lease_until": None,
+            "created_at": firestore_client.firestore.SERVER_TIMESTAMP,
+            "updated_at": firestore_client.firestore.SERVER_TIMESTAMP,
+        }
+    )
