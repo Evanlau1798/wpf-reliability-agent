@@ -1,0 +1,14 @@
+{
+  "schema_version": "1.0",
+  "source_repository": "https://github.com/Evanlau1798/wpf-devtools-mcp",
+  "pinned_upstream_source_revision": "900ac97cf9b69b4a3c1f4899b08c9b1e78212af3",
+  "required_item_fields": [
+    "source_repository",
+    "source_revision",
+    "source_path",
+    "destination_path",
+    "reuse_type",
+    "adaptation_summary"
+  ],
+  "items": []
+}

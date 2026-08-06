@@ -1,0 +1,7 @@
+WPF Reliability Agent
+Copyright 2026 Evan Lau
+
+This product includes adapted code, tests, or design references from
+wpf-devtools-mcp, licensed under the Apache License, Version 2.0.
+
+Detailed provenance is recorded in REUSE_DISCLOSURE.md and reuse-manifest.json.
