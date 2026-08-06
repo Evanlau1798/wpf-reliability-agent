@@ -4,7 +4,8 @@ from typing import Annotated
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
-from app.auth import parse_bearer_token
+from app.auth import authenticate_device_token, parse_bearer_token
+from app.config import Settings
 from app.main import app
 
 
@@ -44,6 +45,33 @@ def test_bearer_parser_rejects_missing_and_malformed_headers() -> None:
 
             assert response.status_code == 401
             assert response.headers["www-authenticate"] == "Bearer"
+
+
+def test_device_token_uses_constant_time_compare(monkeypatch) -> None:
+    auth_app = FastAPI()
+    auth_app.state.settings = Settings(
+        service_role="api",
+        google_cloud_project="project-test",
+        demo_device_id="device-test",
+        demo_device_token="secret-token",
+    )
+    calls: list[tuple[str, str]] = []
+
+    def compare_digest(candidate: str, expected: str) -> bool:
+        calls.append((candidate, expected))
+        return True
+
+    monkeypatch.setattr("app.auth.hmac.compare_digest", compare_digest)
+
+    @auth_app.get("/protected")
+    def protected(_: Annotated[None, Depends(authenticate_device_token)]) -> dict[str, str]:
+        return {"status": "ok"}
+
+    with TestClient(auth_app) as client:
+        response = client.get("/protected", headers={"Authorization": "Bearer candidate-token"})
+
+    assert response.status_code == 200
+    assert calls == [("candidate-token", "secret-token")]
 
 
 async def _startup_role() -> str:
