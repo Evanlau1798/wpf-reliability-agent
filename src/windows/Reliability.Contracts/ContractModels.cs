@@ -95,7 +95,7 @@ public sealed record DiagnosticEnvelope(
     string EventId,
     EventType EventType,
     Severity Severity,
-    DateTimeOffset TimestampUtc,
+    [property: JsonConverter(typeof(UtcDateTimeOffsetJsonConverter))] DateTimeOffset TimestampUtc,
     string DeviceId,
     string ApplicationId,
     string ApplicationVersion,
@@ -117,8 +117,8 @@ public sealed record DiagnosticCommand(
     RiskLevel RiskLevel,
     string? ApprovalId,
     string IdempotencyKey,
-    DateTimeOffset IssuedAtUtc,
-    DateTimeOffset ExpiresAtUtc,
+    [property: JsonConverter(typeof(UtcDateTimeOffsetJsonConverter))] DateTimeOffset IssuedAtUtc,
+    [property: JsonConverter(typeof(UtcDateTimeOffsetJsonConverter))] DateTimeOffset ExpiresAtUtc,
     int TimeoutMs);
 
 public sealed record CommandError(string Code, string? Message);
@@ -129,8 +129,8 @@ public sealed record CommandResult(
     string IncidentId,
     string AppSessionId,
     ResultStatus Status,
-    DateTimeOffset StartedAtUtc,
-    DateTimeOffset CompletedAtUtc,
+    [property: JsonConverter(typeof(UtcDateTimeOffsetJsonConverter))] DateTimeOffset StartedAtUtc,
+    [property: JsonConverter(typeof(UtcDateTimeOffsetJsonConverter))] DateTimeOffset CompletedAtUtc,
     JsonElement? Result,
     string ResultHash,
     bool Truncated,
@@ -175,13 +175,13 @@ public sealed record ApprovalRecord(
     RiskLevel RiskLevel,
     string ExpectedEffect,
     string RollbackPlan,
-    DateTimeOffset ExpiresAtUtc,
+    [property: JsonConverter(typeof(UtcDateTimeOffsetJsonConverter))] DateTimeOffset ExpiresAtUtc,
     ApprovalStatus Status,
     string? ApprovedBy,
-    DateTimeOffset? ApprovedAtUtc);
+    [property: JsonConverter(typeof(NullableUtcDateTimeOffsetJsonConverter))] DateTimeOffset? ApprovedAtUtc);
 
 public sealed record TimelineItem(
-    DateTimeOffset TimestampUtc,
+    [property: JsonConverter(typeof(UtcDateTimeOffsetJsonConverter))] DateTimeOffset TimestampUtc,
     string Kind,
     string Actor,
     string Reference);
