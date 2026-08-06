@@ -204,6 +204,16 @@ internal sealed class SqliteOutbox : IAsyncDisposable
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task DiscardEventAsync(
+        string eventId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var command = _connection.CreateCommand();
+        command.CommandText = "DELETE FROM outbound_events WHERE event_id = $event_id AND state = 'pending';";
+        command.Parameters.AddWithValue("$event_id", eventId);
+        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<int> EnforceLimitsAsync(CancellationToken cancellationToken = default)
     {
         var dropped = await DeleteUnsentExcessAsync(cancellationToken).ConfigureAwait(false);

@@ -29,6 +29,8 @@ internal sealed class TelemetryApiClient : IDisposable
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         PropertyNameCaseInsensitive = true,
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+        Converters = { new JsonStringEnumConverter<Reliability.Contracts.Severity>() },
     };
     private readonly HttpClient _httpClient;
 

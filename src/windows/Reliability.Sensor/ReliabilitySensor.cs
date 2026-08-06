@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Net.Http;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Threading.Channels;
@@ -35,6 +36,10 @@ public sealed record ReliabilitySensorOptions
     internal string? OutboxPath { get; init; }
 
     internal bool DisableBackgroundPersistence { get; init; }
+
+    internal HttpMessageHandler? TelemetryHandler { get; init; }
+
+    internal TimeSpan RelayPollInterval { get; init; } = TimeSpan.FromSeconds(1);
 }
 
 public enum SensorDiagnostic
@@ -154,9 +159,13 @@ public sealed partial class ReliabilitySensor : IAsyncDisposable
                 events,
                 options.DisableBackgroundPersistence
                     ? WaitForCancellationAsync(lifetime.Token)
-                    : PersistEventsAsync(
+                    : RunRelayAsync(
                         events.Reader,
                         options.OutboxPath ?? SqliteOutbox.GetDefaultPath(options.ApplicationId),
+                        canUpload ? options.ApiBaseUri : null,
+                        canUpload ? options.DeviceToken : null,
+                        options.TelemetryHandler,
+                        options.RelayPollInterval,
                         lifetime.Token,
                         diagnosticLogger),
                 diagnosticLogger);
@@ -405,6 +414,11 @@ public sealed partial class ReliabilitySensor : IAsyncDisposable
         if (options.MaxBindingFingerprints is < 1 or > 500)
         {
             throw new ArgumentOutOfRangeException(nameof(options.MaxBindingFingerprints));
+        }
+
+        if (options.RelayPollInterval <= TimeSpan.Zero || options.RelayPollInterval > TimeSpan.FromMinutes(1))
+        {
+            throw new ArgumentOutOfRangeException(nameof(options.RelayPollInterval));
         }
     }
 

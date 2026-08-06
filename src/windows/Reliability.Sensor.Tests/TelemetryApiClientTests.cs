@@ -34,7 +34,13 @@ public sealed class TelemetryApiClientTests
         Assert.Equal("device-secret-token", handler.Request?.Headers.Authorization?.Parameter);
         Assert.Equal("WpfReliabilityAgent/0.1.0", handler.Request?.Headers.UserAgent.ToString());
         Assert.Equal("https://reliability.example.test/base/v1/telemetry:batch", handler.Request?.RequestUri?.ToString());
-        Assert.Equal(3, JsonDocument.Parse(handler.Body!).RootElement.GetProperty("events").GetArrayLength());
+        using var document = JsonDocument.Parse(handler.Body!);
+        var events = document.RootElement.GetProperty("events");
+        var first = events[0];
+        Assert.Equal(3, events.GetArrayLength());
+        Assert.Equal("event-1", first.GetProperty("event_id").GetString());
+        Assert.Equal("binding.aggregate", first.GetProperty("event_type").GetString());
+        Assert.Equal("ERROR", first.GetProperty("severity").GetString());
     }
 
     [Fact]
