@@ -1,4 +1,5 @@
 import asyncio
+import io
 from typing import Annotated
 
 from fastapi import Depends, FastAPI
@@ -6,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from app.auth import authenticate_device_token, parse_bearer_token
 from app.config import Settings
+from app.logging_config import configure_logging
 from app.main import app
 
 
@@ -102,6 +104,32 @@ def test_device_token_binds_configured_device_id() -> None:
         "device_id": "device-test",
         "requested_device_id": "impersonated-device",
     }
+
+
+def test_invalid_device_token_returns_401_without_logging_token() -> None:
+    output = io.StringIO()
+    auth_app = FastAPI()
+    auth_app.state.settings = Settings(
+        service_role="api",
+        google_cloud_project="project-test",
+        demo_device_id="device-test",
+        demo_device_token="secret-token",
+    )
+    auth_app.state.logger = configure_logging("api", output)
+
+    @auth_app.get("/protected")
+    def protected(_: Annotated[str, Depends(authenticate_device_token)]) -> dict[str, str]:
+        return {"status": "ok"}
+
+    with TestClient(auth_app) as client:
+        response = client.get(
+            "/protected",
+            headers={"Authorization": "Bearer invalid-token"},
+        )
+
+    assert response.status_code == 401
+    assert response.headers["www-authenticate"] == "Bearer"
+    assert "invalid-token" not in output.getvalue()
 
 
 async def _startup_role() -> str:
