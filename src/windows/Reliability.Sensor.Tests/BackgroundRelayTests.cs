@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -147,6 +148,62 @@ public sealed class BackgroundRelayTests
         }
     }
 
+    [Fact]
+    public async Task OfflineUploadBacksOffWithoutBlockingCollection()
+    {
+        var directory = Path.Combine(
+            Environment.CurrentDirectory,
+            "tmp",
+            "relay-tests",
+            Guid.NewGuid().ToString("N"));
+        var path = Path.Combine(directory, "outbox.db");
+        var handler = new OfflineHandler();
+
+        try
+        {
+            await using var inspection = await SqliteOutbox.OpenAsync(path);
+            await using var sensor = ReliabilitySensor.Start(ValidOptions(path) with
+            {
+                TelemetryHandler = handler,
+                RelayPollInterval = TimeSpan.FromMilliseconds(10),
+            });
+            Assert.True(sensor.TryEnqueue(
+                EventType.BindingAggregate,
+                Severity.ERROR,
+                JsonSerializer.SerializeToElement(new { binding_path = "First" }),
+                JsonSerializer.SerializeToElement(new { count = 1 }),
+                out var first));
+            await handler.Started.WaitAsync(TimeSpan.FromSeconds(1));
+
+            var enqueueTime = Stopwatch.StartNew();
+            Assert.True(sensor.TryEnqueue(
+                EventType.BindingAggregate,
+                Severity.ERROR,
+                JsonSerializer.SerializeToElement(new { binding_path = "Second" }),
+                JsonSerializer.SerializeToElement(new { count = 2 }),
+                out _));
+            enqueueTime.Stop();
+            var failureReleasedAt = DateTimeOffset.UtcNow;
+            handler.FailRequests();
+
+            var retried = await WaitForEventAsync(
+                inspection,
+                first!.EventId,
+                item => item.AttemptCount == 1);
+
+            Assert.True(enqueueTime.Elapsed < TimeSpan.FromMilliseconds(250));
+            Assert.Equal(1, retried?.AttemptCount);
+            Assert.True(retried?.NextAttemptAtUtc >= failureReleasedAt.AddMilliseconds(900));
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
+    }
+
     private static async Task<OutboxEvent?> WaitForEventAsync(
         SqliteOutbox outbox,
         string eventId,
@@ -236,6 +293,25 @@ public sealed class BackgroundRelayTests
             _started.TrySetResult();
             await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
             throw new InvalidOperationException("Cancellation must end the blocked upload.");
+        }
+    }
+
+    private sealed class OfflineHandler : HttpMessageHandler
+    {
+        private readonly TaskCompletionSource _started = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _fail = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task Started => _started.Task;
+
+        public void FailRequests() => _fail.TrySetResult();
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            _started.TrySetResult();
+            await _fail.Task.WaitAsync(cancellationToken);
+            throw new HttpRequestException("The fake network is offline.");
         }
     }
 }
