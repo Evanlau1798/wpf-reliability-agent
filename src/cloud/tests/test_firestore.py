@@ -128,3 +128,21 @@ def test_incident_evidence_append_rejects_duplicate_id() -> None:
     incident.collection.return_value.document.assert_called_with("evidence-1")
     assert evidence_document.create.call_count == 2
     evidence_document.create.assert_called_with(evidence)
+
+
+def test_incident_occurrence_update_increments_existing_evidence_count() -> None:
+    client = Mock()
+    incident = Mock()
+    evidence_document = Mock()
+    client.collection.return_value.document.return_value = incident
+    incident.collection.return_value.document.return_value = evidence_document
+
+    firestore_client.increment_incident_occurrence(client, "incident-1", "evidence-1", 3)
+
+    client.collection.assert_called_once_with(firestore_client.INCIDENTS_COLLECTION)
+    client.collection.return_value.document.assert_called_once_with("incident-1")
+    incident.collection.assert_called_once_with(firestore_client.EVIDENCE_COLLECTION)
+    incident.collection.return_value.document.assert_called_once_with("evidence-1")
+    evidence_document.update.assert_called_once_with(
+        {"payload.occurrence_count": firestore_client.firestore.Increment(3)}
+    )

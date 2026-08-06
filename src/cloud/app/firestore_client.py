@@ -73,3 +73,15 @@ def append_incident_evidence(
 ) -> None:
     incident = client.collection(INCIDENTS_COLLECTION).document(incident_id)
     incident.collection(EVIDENCE_COLLECTION).document(evidence_id).create(evidence)
+
+
+def increment_incident_occurrence(
+    client: firestore.Client,
+    incident_id: str,
+    evidence_id: str,
+    occurrence_count: int,
+) -> None:
+    incident = client.collection(INCIDENTS_COLLECTION).document(incident_id)
+    incident.collection(EVIDENCE_COLLECTION).document(evidence_id).update(
+        {"payload.occurrence_count": firestore.Increment(occurrence_count)}
+    )
