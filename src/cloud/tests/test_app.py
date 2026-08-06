@@ -157,6 +157,23 @@ def test_telemetry_batch_route_requires_authenticated_post(monkeypatch) -> None:
     }
 
 
+def test_telemetry_batch_rejects_body_over_512_kib(monkeypatch) -> None:
+    _set_required_environment(monkeypatch, "api")
+    oversized = b'{"events":[],"padding":"' + (b"x" * (512 * 1024)) + b'"}'
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/telemetry:batch",
+            headers={
+                "Authorization": "Bearer secret-token",
+                "Content-Type": "application/json",
+            },
+            content=oversized,
+        )
+
+    assert response.status_code == 413
+
+
 async def _startup_role() -> str:
     async with app.router.lifespan_context(app):
         return app.state.settings.service_role
