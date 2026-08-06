@@ -136,6 +136,23 @@ def test_binding_ingest_builds_publish_payload_after_persist(monkeypatch) -> Non
     }
 
 
+def test_work_message_contains_only_durable_work_identifiers() -> None:
+    event = _event(
+        "binding.aggregate",
+        {"binding_path": "DisplayNmae"},
+        {"fingerprint": "binding-1", "occurrence_count": 1},
+    )
+    valid, rejected = validate_telemetry_events([event])
+
+    assert rejected == []
+    assert ingest.build_publish_payload("incident-1", 4, valid[0]) == {
+        "incident_id": "incident-1",
+        "evidence_revision": 4,
+        "trigger": "binding.aggregate",
+        "event_id": "event-1",
+    }
+
+
 def _event(event_type: str, correlation: dict[str, object], payload: dict[str, object]) -> dict[str, object]:
     return {
         "schema_version": "1.0",
