@@ -6,6 +6,7 @@ using System.Threading.Channels;
 using Reliability.Contracts;
 
 [assembly: InternalsVisibleTo("Reliability.Sensor.Tests")]
+[assembly: InternalsVisibleTo("Demo.BrokenWpfApp.Tests")]
 
 namespace Reliability.Sensor;
 
