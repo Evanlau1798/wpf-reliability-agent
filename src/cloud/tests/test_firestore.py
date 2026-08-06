@@ -1,5 +1,8 @@
 from unittest.mock import Mock
 
+import pytest
+from google.api_core.exceptions import AlreadyExists
+
 from app import firestore_client
 
 
@@ -104,3 +107,24 @@ def test_incident_create_writes_complete_initial_state() -> None:
             "updated_at": firestore_client.firestore.SERVER_TIMESTAMP,
         }
     )
+
+
+def test_incident_evidence_append_rejects_duplicate_id() -> None:
+    client = Mock()
+    incident = Mock()
+    evidence_document = Mock()
+    client.collection.return_value.document.return_value = incident
+    incident.collection.return_value.document.return_value = evidence_document
+    evidence_document.create.side_effect = [None, AlreadyExists("duplicate evidence")]
+    evidence = {"event_id": "event-1", "kind": "binding.aggregate"}
+
+    firestore_client.append_incident_evidence(client, "incident-1", "evidence-1", evidence)
+    with pytest.raises(AlreadyExists):
+        firestore_client.append_incident_evidence(client, "incident-1", "evidence-1", evidence)
+
+    client.collection.assert_called_with(firestore_client.INCIDENTS_COLLECTION)
+    client.collection.return_value.document.assert_called_with("incident-1")
+    incident.collection.assert_called_with(firestore_client.EVIDENCE_COLLECTION)
+    incident.collection.return_value.document.assert_called_with("evidence-1")
+    assert evidence_document.create.call_count == 2
+    evidence_document.create.assert_called_with(evidence)

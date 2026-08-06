@@ -63,3 +63,13 @@ def create_incident(
             "updated_at": firestore.SERVER_TIMESTAMP,
         }
     )
+
+
+def append_incident_evidence(
+    client: firestore.Client,
+    incident_id: str,
+    evidence_id: str,
+    evidence: dict[str, object],
+) -> None:
+    incident = client.collection(INCIDENTS_COLLECTION).document(incident_id)
+    incident.collection(EVIDENCE_COLLECTION).document(evidence_id).create(evidence)
