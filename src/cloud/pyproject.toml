@@ -9,6 +9,7 @@ description = "Cloud workflow for the WPF Reliability Agent."
 requires-python = ">=3.12,<3.13"
 dependencies = [
   "fastapi>=0.115,<1",
+  "google-cloud-firestore>=2.21,<3",
   "jsonschema>=4.23,<5",
   "pydantic>=2.11,<3",
 ]
