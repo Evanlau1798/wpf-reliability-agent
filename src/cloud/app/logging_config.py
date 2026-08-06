@@ -10,10 +10,14 @@ SECRET_ASSIGNMENT_PATTERN = re.compile(
 )
 
 
+def redact_text(value: str) -> str:
+    message = BEARER_PATTERN.sub(r"\1[REDACTED]", value)
+    return SECRET_ASSIGNMENT_PATTERN.sub(r"\1[REDACTED]", message)
+
+
 class RedactionFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
-        message = BEARER_PATTERN.sub(r"\1[REDACTED]", record.getMessage())
-        record.msg = SECRET_ASSIGNMENT_PATTERN.sub(r"\1[REDACTED]", message)
+        record.msg = redact_text(record.getMessage())
         record.args = ()
         return True
 
