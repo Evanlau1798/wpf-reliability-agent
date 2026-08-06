@@ -74,6 +74,36 @@ def test_device_token_uses_constant_time_compare(monkeypatch) -> None:
     assert calls == [("candidate-token", "secret-token")]
 
 
+def test_device_token_binds_configured_device_id() -> None:
+    auth_app = FastAPI()
+    auth_app.state.settings = Settings(
+        service_role="api",
+        google_cloud_project="project-test",
+        demo_device_id="device-test",
+        demo_device_token="secret-token",
+    )
+
+    @auth_app.post("/protected")
+    def protected(
+        payload: dict[str, str],
+        device_id: Annotated[str, Depends(authenticate_device_token)],
+    ) -> dict[str, str]:
+        return {"device_id": device_id, "requested_device_id": payload["device_id"]}
+
+    with TestClient(auth_app) as client:
+        response = client.post(
+            "/protected",
+            headers={"Authorization": "Bearer secret-token"},
+            json={"device_id": "impersonated-device"},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "device_id": "device-test",
+        "requested_device_id": "impersonated-device",
+    }
+
+
 async def _startup_role() -> str:
     async with app.router.lifespan_context(app):
         return app.state.settings.service_role

@@ -24,11 +24,14 @@ def parse_bearer_token(
 def authenticate_device_token(
     request: Request,
     token: Annotated[str, Depends(parse_bearer_token)],
-) -> None:
-    expected_token = request.app.state.settings.demo_device_token.get_secret_value()
+) -> str:
+    settings = request.app.state.settings
+    expected_token = settings.demo_device_token.get_secret_value()
     if not hmac.compare_digest(token, expected_token):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid bearer token",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    return settings.demo_device_id
