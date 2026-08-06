@@ -1,8 +1,10 @@
 import asyncio
+from typing import Annotated
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
+from app.auth import parse_bearer_token
 from app.main import app
 
 
@@ -27,6 +29,21 @@ def test_health_endpoint_returns_200_without_firestore(monkeypatch) -> None:
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+def test_bearer_parser_rejects_missing_and_malformed_headers() -> None:
+    auth_app = FastAPI()
+
+    @auth_app.get("/protected")
+    def protected(token: Annotated[str, Depends(parse_bearer_token)]) -> dict[str, str]:
+        return {"token": token}
+
+    with TestClient(auth_app) as client:
+        for headers in ({}, {"Authorization": "Basic value"}, {"Authorization": "Bearer"}):
+            response = client.get("/protected", headers=headers)
+
+            assert response.status_code == 401
+            assert response.headers["www-authenticate"] == "Bearer"
 
 
 async def _startup_role() -> str:
