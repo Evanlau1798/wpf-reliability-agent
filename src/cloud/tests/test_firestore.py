@@ -1,3 +1,5 @@
+from unittest.mock import Mock
+
 from app import firestore_client
 
 
@@ -43,4 +45,24 @@ def test_firestore_collection_names_match_model() -> None:
         "commands",
         "event_dedup",
         "processed_runs",
+    )
+
+
+def test_event_dedup_transaction_accepts_event_once(monkeypatch) -> None:
+    client = Mock()
+    transaction = Mock()
+    document = Mock()
+    client.transaction.return_value = transaction
+    client.collection.return_value.document.return_value = document
+    document.get.side_effect = [Mock(exists=False), Mock(exists=True)]
+    monkeypatch.setattr(firestore_client.firestore, "transactional", lambda callback: callback)
+
+    assert firestore_client.claim_event_once(client, "event-1") is True
+    assert firestore_client.claim_event_once(client, "event-1") is False
+
+    client.collection.assert_called_with(firestore_client.EVENT_DEDUP_COLLECTION)
+    client.collection.return_value.document.assert_called_with("event-1")
+    transaction.set.assert_called_once_with(
+        document,
+        {"created_at": firestore_client.firestore.SERVER_TIMESTAMP},
     )
