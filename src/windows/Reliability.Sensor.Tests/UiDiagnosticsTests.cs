@@ -217,6 +217,7 @@ public sealed class UiDiagnosticsTests
         DeviceToken = "test-token",
         ApplicationId = "demo-broken-wpf-app",
         ApplicationVersion = "0.1.0",
+        DisableBackgroundPersistence = true,
     };
 
     private static T RunSta<T>(Func<T> action)

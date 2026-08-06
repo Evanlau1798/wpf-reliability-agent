@@ -195,5 +195,6 @@ public sealed class ReliabilitySensorTests
         DeviceToken = "test-token",
         ApplicationId = "demo-broken-wpf-app",
         ApplicationVersion = "0.1.0",
+        DisableBackgroundPersistence = true,
     };
 }

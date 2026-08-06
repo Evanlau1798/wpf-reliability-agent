@@ -31,6 +31,10 @@ public sealed record ReliabilitySensorOptions
     public int BindingBurstThreshold { get; init; } = 10;
 
     public int MaxBindingFingerprints { get; init; } = 500;
+
+    internal string? OutboxPath { get; init; }
+
+    internal bool DisableBackgroundPersistence { get; init; }
 }
 
 public enum SensorDiagnostic
@@ -40,6 +44,7 @@ public enum SensorDiagnostic
     InitializationFailed,
     EventDropped,
     ShutdownTimedOut,
+    OutboxPersistenceFailed,
     BindingAggregateQueued,
 }
 
@@ -147,7 +152,13 @@ public sealed partial class ReliabilitySensor : IAsyncDisposable
                 canUpload,
                 lifetime,
                 events,
-                WaitForCancellationAsync(lifetime.Token),
+                options.DisableBackgroundPersistence
+                    ? WaitForCancellationAsync(lifetime.Token)
+                    : PersistEventsAsync(
+                        events.Reader,
+                        options.OutboxPath ?? SqliteOutbox.GetDefaultPath(options.ApplicationId),
+                        lifetime.Token,
+                        diagnosticLogger),
                 diagnosticLogger);
             if (!canUpload)
             {
