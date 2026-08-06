@@ -1,5 +1,7 @@
 from pydantic import ValidationError
 
+from app.contracts import sha256_canonical
+from app.firestore_client import build_incident_document, persist_incident_event
 from app.logging_config import redact_text
 from app.models import DiagnosticEnvelope, EventType
 
@@ -140,6 +142,49 @@ def sanitize_telemetry_event(event: DiagnosticEnvelope) -> DiagnosticEnvelope:
             "payload": _redact(payload),
         }
     )
+
+
+def ingest_binding_event(
+    client: object,
+    event: DiagnosticEnvelope,
+    device_id: str,
+) -> tuple[bool, str]:
+    if event.event_type is not EventType.BINDING_AGGREGATE:
+        raise ValueError("Binding ingest requires a binding aggregate event")
+    fingerprint = event.payload.get("fingerprint")
+    if not isinstance(fingerprint, str) or not fingerprint:
+        raise ValueError("Binding aggregate fingerprint is required")
+
+    trusted_event = event.model_copy(update={"device_id": device_id})
+    incident_id = sha256_canonical(
+        {
+            "device_id": device_id,
+            "application_id": event.application_id,
+            "app_session_id": event.app_session_id,
+            "fingerprint": fingerprint,
+        }
+    )
+    binding_path = event.payload.get("binding_path")
+    summary = (
+        f"Binding error burst: {binding_path}"
+        if isinstance(binding_path, str) and binding_path
+        else "Binding error burst"
+    )
+    is_new = persist_incident_event(
+        client,
+        event_id=event.event_id,
+        incident_id=incident_id,
+        evidence_id=event.event_id,
+        incident=build_incident_document(
+            application_id=event.application_id,
+            app_session_id=event.app_session_id,
+            severity=event.severity.value,
+            summary=summary,
+            evidence_revision=1,
+        ),
+        evidence=trusted_event.model_dump(mode="json"),
+    )
+    return is_new, incident_id
 
 
 def _allowlist(source: dict[str, object], fields: frozenset[str]) -> dict[str, object]:

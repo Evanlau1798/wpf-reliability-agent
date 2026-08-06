@@ -210,10 +210,10 @@ def test_telemetry_batch_rejects_invalid_event_without_rejecting_batch(monkeypat
 def test_telemetry_batch_reports_duplicate_event_id(monkeypatch) -> None:
     _set_required_environment(monkeypatch, "api")
     monkeypatch.setattr("app.main.get_firestore_client", lambda _project_id: object())
-    outcomes = iter([True, False])
+    outcomes = iter([(True, "incident-1"), (False, "incident-1")])
     monkeypatch.setattr(
-        "app.main.claim_event_once",
-        lambda _client, _event_id: next(outcomes),
+        "app.main.ingest_binding_event",
+        lambda _client, _event, _device_id: next(outcomes),
     )
     event = _valid_telemetry_event("event-1")
 

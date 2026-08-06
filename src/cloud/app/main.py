@@ -8,8 +8,9 @@ from fastapi import Depends, FastAPI, HTTPException, Request, status
 from app.auth import authenticate_device_token
 from app.config import Settings
 from app.firestore_client import claim_event_once, get_firestore_client
-from app.ingest import validate_telemetry_events
+from app.ingest import ingest_binding_event, validate_telemetry_events
 from app.logging_config import configure_logging
+from app.models import EventType
 
 
 MAX_TELEMETRY_BATCH_BYTES = 512 * 1024
@@ -78,7 +79,7 @@ async def parse_telemetry_events(
 @app.post("/v1/telemetry:batch")
 def telemetry_batch(
     request: Request,
-    _: Annotated[str, Depends(authenticate_device_token)],
+    device_id: Annotated[str, Depends(authenticate_device_token)],
     events: Annotated[list[object], Depends(parse_telemetry_events)],
 ) -> dict[str, list[object]]:
     valid, rejected = validate_telemetry_events(events)
@@ -87,7 +88,15 @@ def telemetry_batch(
     if valid:
         client = get_firestore_client(request.app.state.settings.google_cloud_project)
         for event in valid:
-            target = accepted_event_ids if claim_event_once(client, event.event_id) else duplicate_event_ids
+            if event.event_type is EventType.BINDING_AGGREGATE:
+                try:
+                    is_new, _ = ingest_binding_event(client, event, device_id)
+                except ValueError:
+                    rejected.append({"event_id": event.event_id, "code": "INVALID_EVENT"})
+                    continue
+            else:
+                is_new = claim_event_once(client, event.event_id)
+            target = accepted_event_ids if is_new else duplicate_event_ids
             target.append(event.event_id)
     return {
         "accepted_event_ids": accepted_event_ids,

@@ -146,3 +146,46 @@ def test_incident_occurrence_update_increments_existing_evidence_count() -> None
     evidence_document.update.assert_called_once_with(
         {"payload.occurrence_count": firestore_client.firestore.Increment(3)}
     )
+
+
+def test_incident_event_persist_is_atomic(monkeypatch) -> None:
+    client = Mock()
+    transaction = Mock()
+    dedup_collection = Mock()
+    incident_collection = Mock()
+    dedup_document = Mock()
+    incident_document = Mock()
+    evidence_document = Mock()
+    client.transaction.return_value = transaction
+    client.collection.side_effect = lambda name: (
+        dedup_collection
+        if name == firestore_client.EVENT_DEDUP_COLLECTION
+        else incident_collection
+    )
+    dedup_collection.document.return_value = dedup_document
+    incident_collection.document.return_value = incident_document
+    incident_document.collection.return_value.document.return_value = evidence_document
+    dedup_document.get.return_value = Mock(exists=False)
+    incident_document.get.return_value = Mock(exists=False)
+    monkeypatch.setattr(firestore_client.firestore, "transactional", lambda callback: callback)
+    incident = {"state": "NEW", "evidence_revision": 1}
+    evidence = {"event_id": "event-1"}
+
+    assert firestore_client.persist_incident_event(
+        client,
+        event_id="event-1",
+        incident_id="incident-1",
+        evidence_id="event-1",
+        incident=incident,
+        evidence=evidence,
+    ) is True
+
+    transaction.create.assert_any_call(
+        dedup_document,
+        {
+            "created_at": firestore_client.firestore.SERVER_TIMESTAMP,
+            "incident_id": "incident-1",
+        },
+    )
+    transaction.create.assert_any_call(incident_document, incident)
+    transaction.create.assert_any_call(evidence_document, evidence)
