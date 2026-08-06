@@ -7,6 +7,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request, status
 
 from app.auth import authenticate_device_token
 from app.config import Settings
+from app.firestore_client import claim_event_once, get_firestore_client
 from app.ingest import validate_telemetry_events
 from app.logging_config import configure_logging
 
@@ -76,12 +77,20 @@ async def parse_telemetry_events(
 
 @app.post("/v1/telemetry:batch")
 def telemetry_batch(
+    request: Request,
     _: Annotated[str, Depends(authenticate_device_token)],
     events: Annotated[list[object], Depends(parse_telemetry_events)],
 ) -> dict[str, list[object]]:
-    _, rejected = validate_telemetry_events(events)
+    valid, rejected = validate_telemetry_events(events)
+    accepted_event_ids: list[str] = []
+    duplicate_event_ids: list[str] = []
+    if valid:
+        client = get_firestore_client(request.app.state.settings.google_cloud_project)
+        for event in valid:
+            target = accepted_event_ids if claim_event_once(client, event.event_id) else duplicate_event_ids
+            target.append(event.event_id)
     return {
-        "accepted_event_ids": [],
-        "duplicate_event_ids": [],
+        "accepted_event_ids": accepted_event_ids,
+        "duplicate_event_ids": duplicate_event_ids,
         "rejected": rejected,
     }

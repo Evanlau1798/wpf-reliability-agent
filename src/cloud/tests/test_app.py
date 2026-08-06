@@ -207,6 +207,34 @@ def test_telemetry_batch_rejects_invalid_event_without_rejecting_batch(monkeypat
     }
 
 
+def test_telemetry_batch_reports_duplicate_event_id(monkeypatch) -> None:
+    _set_required_environment(monkeypatch, "api")
+    monkeypatch.setattr("app.main.get_firestore_client", lambda _project_id: object())
+    outcomes = iter([True, False])
+    monkeypatch.setattr(
+        "app.main.claim_event_once",
+        lambda _client, _event_id: next(outcomes),
+    )
+    event = _valid_telemetry_event("event-1")
+
+    with TestClient(app) as client:
+        first = client.post(
+            "/v1/telemetry:batch",
+            headers={"Authorization": "Bearer secret-token"},
+            json={"events": [event]},
+        )
+        second = client.post(
+            "/v1/telemetry:batch",
+            headers={"Authorization": "Bearer secret-token"},
+            json={"events": [event]},
+        )
+
+    assert first.json()["accepted_event_ids"] == ["event-1"]
+    assert first.json()["duplicate_event_ids"] == []
+    assert second.json()["accepted_event_ids"] == []
+    assert second.json()["duplicate_event_ids"] == ["event-1"]
+
+
 async def _startup_role() -> str:
     async with app.router.lifespan_context(app):
         return app.state.settings.service_role
