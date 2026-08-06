@@ -1,12 +1,123 @@
-﻿<Window x:Class="Demo.BrokenWpfApp.MainWindow"
+<Window x:Class="Demo.BrokenWpfApp.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:Demo.BrokenWpfApp"
         mc:Ignorable="d"
-        Title="WPF Reliability Agent" Height="450" Width="800">
-    <Grid>
+        Title="WPF Reliability Agent Demo"
+        Height="720"
+        Width="1080"
+        MinHeight="560"
+        MinWidth="840"
+        Background="#FFF5F7FA">
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
 
+        <DockPanel Grid.Row="0" LastChildFill="False">
+            <StackPanel DockPanel.Dock="Left">
+                <TextBlock FontSize="26" FontWeight="SemiBold" Text="Experimental People Grid" />
+                <TextBlock Margin="0,4,0,0"
+                           Foreground="#FF5B6573"
+                           Text="A deterministic WPF binding and rendering failure for agent investigation." />
+            </StackPanel>
+            <Button DockPanel.Dock="Right"
+                    Margin="24,0,0,0"
+                    Padding="18,8"
+                    Click="ResetDemo_Click"
+                    Content="Reset Demo" />
+        </DockPanel>
+
+        <Border Grid.Row="1"
+                Margin="0,18,0,12"
+                Padding="14,10"
+                Background="White"
+                BorderBrush="#FFD7DCE3"
+                BorderThickness="1"
+                CornerRadius="6">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock x:Name="FeatureStateText" FontWeight="SemiBold" />
+                <TextBlock x:Name="ItemCountText" Margin="24,0,0,0" />
+            </StackPanel>
+        </Border>
+
+        <Grid Grid.Row="2">
+            <Border Background="White"
+                    BorderBrush="#FFD7DCE3"
+                    BorderThickness="1"
+                    CornerRadius="6">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <ItemsControl x:Name="ExperimentalPeopleGrid">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Margin="8,4"
+                                        Padding="12,8"
+                                        Background="#FFF8FAFC"
+                                        BorderBrush="#FFE3E7ED"
+                                        BorderThickness="1"
+                                        CornerRadius="4">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Opacity" Value="1" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsAnimated}" Value="True">
+                                                    <DataTrigger.EnterActions>
+                                                        <BeginStoryboard>
+                                                            <Storyboard AutoReverse="True" RepeatBehavior="3x">
+                                                                <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                                                 To="0.55"
+                                                                                 Duration="0:0:0.35" />
+                                                            </Storyboard>
+                                                        </BeginStoryboard>
+                                                    </DataTrigger.EnterActions>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="72" />
+                                            <ColumnDefinition Width="2*" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock VerticalAlignment="Center" Text="{Binding Id}" />
+                                        <TextBlock Grid.Column="1"
+                                                   VerticalAlignment="Center"
+                                                   FontWeight="SemiBold"
+                                                   Text="{Binding DisplayNmae}" />
+                                        <TextBlock Grid.Column="2"
+                                                   VerticalAlignment="Center"
+                                                   Foreground="#FF5B6573"
+                                                   Text="{Binding Department}" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Border>
+
+            <Border x:Name="FallbackView"
+                    Padding="36"
+                    Background="White"
+                    BorderBrush="#FF8BC4A2"
+                    BorderThickness="1"
+                    CornerRadius="6"
+                    Visibility="Collapsed">
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <TextBlock HorizontalAlignment="Center"
+                               FontSize="24"
+                               FontWeight="SemiBold"
+                               Foreground="#FF216E43"
+                               Text="Safe fallback is active" />
+                    <TextBlock Margin="0,10,0,0"
+                               Foreground="#FF5B6573"
+                               Text="The experimental grid was removed after the approved recovery action." />
+                </StackPanel>
+            </Border>
+        </Grid>
     </Grid>
 </Window>
