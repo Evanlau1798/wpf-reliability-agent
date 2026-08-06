@@ -82,9 +82,9 @@ public partial class MainWindow : Window
                 && dataItem.GetType().GetProperty(bindingPath) is null)
             {
                 _sensor!.ReportBindingFailure(
+                    textBlock,
                     bindingPath,
                     TextBlock.TextProperty.Name,
-                    nameof(TextBlock),
                     string.IsNullOrEmpty(textBlock.Name) ? null : textBlock.Name);
             }
 

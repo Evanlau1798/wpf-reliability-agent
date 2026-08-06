@@ -449,19 +449,4 @@ public sealed partial class ReliabilitySensor : IAsyncDisposable
         }
     }
 
-    private sealed class ElementIdentityRegistry(string appSessionId)
-    {
-        private readonly ConditionalWeakTable<object, ElementIdentity> _identities = new();
-        private long _nextId;
-
-        public string GetOrCreate(object element)
-        {
-            ArgumentNullException.ThrowIfNull(element);
-            return _identities.GetValue(
-                element,
-                _ => new ElementIdentity($"element-{appSessionId}-{Interlocked.Increment(ref _nextId)}")).Value;
-        }
-
-        private sealed record ElementIdentity(string Value);
-    }
 }
