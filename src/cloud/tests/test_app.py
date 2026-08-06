@@ -187,6 +187,26 @@ def test_telemetry_batch_rejects_more_than_50_events(monkeypatch) -> None:
     assert response.status_code == 422
 
 
+def test_telemetry_batch_rejects_invalid_event_without_rejecting_batch(monkeypatch) -> None:
+    _set_required_environment(monkeypatch, "api")
+    invalid = _valid_telemetry_event("event-invalid")
+    invalid["timestamp_utc"] = "not-a-timestamp"
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/telemetry:batch",
+            headers={"Authorization": "Bearer secret-token"},
+            json={"events": [invalid]},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "accepted_event_ids": [],
+        "duplicate_event_ids": [],
+        "rejected": [{"event_id": "event-invalid", "code": "INVALID_EVENT"}],
+    }
+
+
 async def _startup_role() -> str:
     async with app.router.lifespan_context(app):
         return app.state.settings.service_role
@@ -197,3 +217,26 @@ def _set_required_environment(monkeypatch, role: str) -> None:
     monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "project-test")
     monkeypatch.setenv("DEMO_DEVICE_ID", "device-test")
     monkeypatch.setenv("DEMO_DEVICE_TOKEN", "secret-token")
+
+
+def _valid_telemetry_event(event_id: str) -> dict[str, object]:
+    return {
+        "schema_version": "1.0",
+        "event_id": event_id,
+        "event_type": "binding.aggregate",
+        "severity": "ERROR",
+        "timestamp_utc": "2026-08-07T00:00:00Z",
+        "device_id": "device-test",
+        "application_id": "demo-broken-wpf-app",
+        "application_version": "0.1.0",
+        "app_session_id": "session-test",
+        "sequence_no": 1,
+        "correlation": {"binding_path": "DisplayNmae"},
+        "payload": {
+            "fingerprint": "binding-1",
+            "occurrence_count": 1,
+            "target_property": "Text",
+        },
+        "redaction_profile": "default-v1",
+        "evidence_hash": "1" * 64,
+    }

@@ -7,6 +7,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request, status
 
 from app.auth import authenticate_device_token
 from app.config import Settings
+from app.ingest import validate_telemetry_events
 from app.logging_config import configure_logging
 
 
@@ -76,10 +77,11 @@ async def parse_telemetry_events(
 @app.post("/v1/telemetry:batch")
 def telemetry_batch(
     _: Annotated[str, Depends(authenticate_device_token)],
-    _events: Annotated[list[object], Depends(parse_telemetry_events)],
+    events: Annotated[list[object], Depends(parse_telemetry_events)],
 ) -> dict[str, list[object]]:
+    _, rejected = validate_telemetry_events(events)
     return {
         "accepted_event_ids": [],
         "duplicate_event_ids": [],
-        "rejected": [],
+        "rejected": rejected,
     }
