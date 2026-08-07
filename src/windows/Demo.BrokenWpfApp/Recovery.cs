@@ -36,19 +36,19 @@ public sealed class ExperimentalPeopleGridState
         var started = Stopwatch.GetTimestamp();
         var beforeState = IsEnabled;
 
-        if (!beforeState)
-        {
-            return Result(RecoveryStatus.ALREADY_APPLIED, false, false, started);
-        }
-
-        if (!expectedCurrentState)
+        if (beforeState != expectedCurrentState)
         {
             return Result(
                 RecoveryStatus.REJECTED,
-                true,
-                true,
+                beforeState,
+                beforeState,
                 started,
                 "EXPECTED_STATE_MISMATCH");
+        }
+
+        if (!beforeState)
+        {
+            return Result(RecoveryStatus.ALREADY_APPLIED, false, false, started);
         }
 
         var previous = Interlocked.CompareExchange(ref _enabled, 0, 1);

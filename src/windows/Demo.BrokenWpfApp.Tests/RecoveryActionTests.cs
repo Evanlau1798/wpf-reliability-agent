@@ -9,7 +9,7 @@ public sealed class RecoveryActionTests
     }
 
     [Fact]
-    public void RegisteredDisableActionAppliesOnlyOnce()
+    public void RegisteredDisableActionRejectsStaleExpectedStateAfterApply()
     {
         var state = new ExperimentalPeopleGridState();
         var registry = new RecoveryActionRegistry();
@@ -21,7 +21,8 @@ public sealed class RecoveryActionTests
         Assert.Equal(RecoveryStatus.APPLIED, first.Status);
         Assert.True(first.BeforeState);
         Assert.False(first.AfterState);
-        Assert.Equal(RecoveryStatus.ALREADY_APPLIED, second.Status);
+        Assert.Equal(RecoveryStatus.REJECTED, second.Status);
+        Assert.Equal("EXPECTED_STATE_MISMATCH", second.ErrorCode);
         Assert.False(state.IsEnabled);
     }
 
