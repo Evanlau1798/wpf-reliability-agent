@@ -7,7 +7,12 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 from pydantic import BaseModel, Field
 
 from app.contracts import sha256_canonical
-from app.firestore_client import COMMANDS_COLLECTION
+from app.firestore_client import (
+    COMMANDS_COLLECTION,
+    EVIDENCE_COLLECTION,
+    INCIDENTS_COLLECTION,
+    next_evidence_revision,
+)
 from app.models import CommandResult, DiagnosticCommand, ResultStatus
 
 
@@ -176,6 +181,8 @@ def complete_command_once(
     result: CommandResult,
 ) -> bool:
     document = client.collection(COMMANDS_COLLECTION).document(command_id)
+    incident_document = client.collection(INCIDENTS_COLLECTION).document(result.incident_id)
+    evidence_document = incident_document.collection(EVIDENCE_COLLECTION).document(command_id)
 
     @firestore.transactional
     def complete(transaction: firestore.Transaction) -> bool:
@@ -198,11 +205,25 @@ def complete_command_once(
                 return True
             raise ValueError("Command result conflict")
 
-        _validate_completion_data(
+        command = _validate_completion_data(
             data,
             command_id=command_id,
             lease_owner=lease_owner,
             result=result,
+        )
+        incident_snapshot = incident_document.get(transaction=transaction)
+        if not incident_snapshot.exists:
+            raise ValueError("Incident does not exist")
+        incident = incident_snapshot.to_dict() or {}
+        if incident.get("app_session_id") != result.app_session_id:
+            raise ValueError("Incident app session mismatch")
+        pending_command_id = incident.get("pending_command_id")
+        if pending_command_id not in {None, command_id}:
+            raise ValueError("Incident pending command mismatch")
+        evidence_revision = next_evidence_revision(
+            incident.get("evidence_revision"),
+            event_type="tool.result",
+            observed_event_types=frozenset({"tool.result"}),
         )
         status_value = (
             CommandStatus.COMPLETED.value
@@ -222,6 +243,26 @@ def complete_command_once(
                 "lease_until": None,
                 "completed_at": firestore.SERVER_TIMESTAMP,
                 "updated_at": firestore.SERVER_TIMESTAMP,
+            },
+        )
+        transaction.update(
+            incident_document,
+            {
+                "evidence_revision": evidence_revision,
+                "pending_command_id": None,
+                "updated_at": firestore.SERVER_TIMESTAMP,
+            },
+        )
+        transaction.create(
+            evidence_document,
+            {
+                "event_type": "tool.result",
+                "command_id": command_id,
+                "tool": command.tool.value,
+                "app_session_id": result.app_session_id,
+                "evidence_hash": result.result_hash,
+                "result": result.model_dump(mode="json"),
+                "created_at": firestore.SERVER_TIMESTAMP,
             },
         )
         return False

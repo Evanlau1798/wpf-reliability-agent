@@ -288,8 +288,18 @@ def test_command_completion_rejects_mismatched_result_hash(monkeypatch) -> None:
 def test_same_command_result_resubmission_is_idempotent(monkeypatch) -> None:
     client = Mock()
     transaction = Mock()
-    document = client.collection.return_value.document.return_value
+    command_collection = Mock()
+    incident_collection = Mock()
+    document = Mock()
+    incident_document = Mock()
     client.transaction.return_value = transaction
+    client.collection.side_effect = lambda name: (
+        command_collection
+        if name == "commands"
+        else incident_collection
+    )
+    command_collection.document.return_value = document
+    incident_collection.document.return_value = incident_document
     command = json.loads(
         (FIXTURES / "diagnostic-command-valid-read.json").read_text(encoding="utf-8")
     )
@@ -307,6 +317,14 @@ def test_same_command_result_resubmission_is_idempotent(monkeypatch) -> None:
         Mock(exists=True, to_dict=lambda: command),
         Mock(exists=True, to_dict=lambda: completed),
     ]
+    incident_document.get.return_value = Mock(
+        exists=True,
+        to_dict=lambda: {
+            "app_session_id": "session-1",
+            "evidence_revision": 5,
+            "pending_command_id": "command-read-1",
+        },
+    )
     monkeypatch.setattr(commands.firestore, "transactional", lambda callback: callback)
 
     first = complete_command_once(
@@ -324,7 +342,7 @@ def test_same_command_result_resubmission_is_idempotent(monkeypatch) -> None:
 
     assert first is False
     assert replay is True
-    transaction.update.assert_called_once()
+    assert transaction.update.call_count == 2
 
 
 def test_conflicting_command_result_is_rejected_without_overwrite(monkeypatch) -> None:
@@ -357,3 +375,66 @@ def test_conflicting_command_result_is_rejected_without_overwrite(monkeypatch) -
         )
 
     transaction.update.assert_not_called()
+
+
+def test_first_completion_persists_material_tool_result_evidence(monkeypatch) -> None:
+    client = Mock()
+    transaction = Mock()
+    command_collection = Mock()
+    incident_collection = Mock()
+    command_document = Mock()
+    incident_document = Mock()
+    evidence_document = Mock()
+    client.transaction.return_value = transaction
+    client.collection.side_effect = lambda name: (
+        command_collection
+        if name == "commands"
+        else incident_collection
+    )
+    command_collection.document.return_value = command_document
+    incident_collection.document.return_value = incident_document
+    incident_document.collection.return_value.document.return_value = evidence_document
+    command = json.loads(
+        (FIXTURES / "diagnostic-command-valid-read.json").read_text(encoding="utf-8")
+    )
+    command.update({"status": CommandStatus.LEASED.value, "lease_owner": "device-a"})
+    command_document.get.return_value = Mock(exists=True, to_dict=lambda: command)
+    incident_document.get.return_value = Mock(
+        exists=True,
+        to_dict=lambda: {
+            "app_session_id": "session-1",
+            "evidence_revision": 5,
+            "pending_command_id": "command-read-1",
+        },
+    )
+    monkeypatch.setattr(commands.firestore, "transactional", lambda callback: callback)
+    result = CommandResult.model_validate_json(
+        (FIXTURES / "command-result-success.json").read_text(encoding="utf-8")
+    )
+    result = result.model_copy(update={"result_hash": command_result_hash(result)})
+
+    replay = complete_command_once(
+        client,
+        command_id="command-read-1",
+        lease_owner="device-a",
+        result=result,
+    )
+
+    assert replay is False
+    assert transaction.update.call_count == 2
+    assert transaction.update.call_args_list[1].args == (
+        incident_document,
+        {
+            "evidence_revision": 6,
+            "pending_command_id": None,
+            "updated_at": commands.firestore.SERVER_TIMESTAMP,
+        },
+    )
+    transaction.create.assert_called_once()
+    stored = transaction.create.call_args.args
+    assert stored[0] is evidence_document
+    assert stored[1]["event_type"] == "tool.result"
+    assert stored[1]["command_id"] == "command-read-1"
+    assert stored[1]["tool"] == "ui.get_subtree"
+    assert stored[1]["evidence_hash"] == result.result_hash
+    assert stored[1]["result"] == result.model_dump(mode="json")
