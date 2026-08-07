@@ -72,6 +72,17 @@ def test_material_evidence_advances_revision(
     ) == 8
 
 
+def test_evidence_snapshot_hash_changes_with_material_evidence() -> None:
+    before = [("evidence-1", "1" * 64)]
+    after = [*before, ("evidence-2", "2" * 64)]
+
+    before_hash = firestore_client.evidence_snapshot_hash(before)
+    after_hash = firestore_client.evidence_snapshot_hash(after)
+
+    assert before_hash != after_hash
+    assert after_hash == firestore_client.evidence_snapshot_hash(reversed(after))
+
+
 def test_processed_run_lookup_reports_existing_run() -> None:
     client = Mock()
     document = Mock()

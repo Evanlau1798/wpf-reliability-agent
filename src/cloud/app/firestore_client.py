@@ -1,7 +1,9 @@
-from collections.abc import Collection
+from collections.abc import Collection, Iterable
 from functools import cache
 
 from google.cloud import firestore
+
+from app.contracts import sha256_canonical
 
 
 DEVICES_COLLECTION = "devices"
@@ -14,6 +16,17 @@ REPORTS_COLLECTION = "reports"
 COMMANDS_COLLECTION = "commands"
 EVENT_DEDUP_COLLECTION = "event_dedup"
 PROCESSED_RUNS_COLLECTION = "processed_runs"
+
+
+def evidence_snapshot_hash(material_evidence: Iterable[tuple[str, str]]) -> str:
+    snapshot = sorted(
+        (
+            {"evidence_id": evidence_id, "evidence_hash": evidence_hash}
+            for evidence_id, evidence_hash in material_evidence
+        ),
+        key=lambda item: item["evidence_id"],
+    )
+    return sha256_canonical(snapshot)
 
 
 def next_evidence_revision(
