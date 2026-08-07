@@ -94,6 +94,77 @@ public sealed class CommandPollingTests
         Assert.Equal(0, handled);
     }
 
+    [Fact]
+    public async Task CompletedCommandIsReplayedFromLocalJournalWithoutExecution()
+    {
+        var databasePath = Path.Combine(
+            Path.GetTempPath(),
+            "wpf-reliability-agent-tests",
+            $"command-{Guid.NewGuid():N}.db");
+        var outbox = await SqliteOutbox.OpenAsync(databasePath);
+        try
+        {
+            var fixture = await File.ReadAllTextAsync(Path.Combine(
+                AppContext.BaseDirectory,
+                "fixtures",
+                "diagnostic-command-valid-read.json"));
+            var command = JsonSerializer.Deserialize(
+                fixture,
+                Reliability.Contracts.ContractJsonContext.Default.DiagnosticCommand)!;
+            var now = DateTimeOffset.UtcNow;
+            Assert.Equal(
+                CommandClaimStatus.CLAIMED,
+                await outbox.BeginCommandAsync(command.CommandId, command.ArgumentsHash, now));
+            await outbox.CompleteCommandAsync(
+                command.CommandId,
+                command.ArgumentsHash,
+                "{\"status\":\"SUCCEEDED\"}",
+                "result-hash",
+                now);
+
+            using var cancellation = new CancellationTokenSource();
+            var handler = new LeaseHandler();
+            using var client = new TelemetryApiClient(
+                new Uri("https://reliability.example.test"),
+                "test-token",
+                handler,
+                TimeSpan.FromSeconds(25));
+            var executed = 0;
+            CompletedCommand? replayed = null;
+
+            await ReliabilitySensor.RunCommandPollerAsync(
+                client,
+                "device-test",
+                "session-1",
+                (_, _) =>
+                {
+                    executed++;
+                    cancellation.Cancel();
+                    return Task.CompletedTask;
+                },
+                cancellation.Token,
+                outbox,
+                (_, completed, _) =>
+                {
+                    replayed = completed;
+                    cancellation.Cancel();
+                    return Task.CompletedTask;
+                });
+
+            Assert.Equal(0, executed);
+            Assert.Equal("result-hash", replayed?.ResultHash);
+            Assert.Equal("{\"status\":\"SUCCEEDED\"}", replayed?.ResultJson);
+        }
+        finally
+        {
+            await outbox.DisposeAsync();
+            foreach (var suffix in new[] { string.Empty, "-wal", "-shm" })
+            {
+                File.Delete(databasePath + suffix);
+            }
+        }
+    }
+
     private sealed class LeaseHandler : HttpMessageHandler
     {
         public string? RequestPath { get; private set; }

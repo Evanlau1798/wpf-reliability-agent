@@ -11,7 +11,9 @@ public sealed partial class ReliabilitySensor
         string deviceId,
         string appSessionId,
         Func<DiagnosticCommand, CancellationToken, Task> handleCommand,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        SqliteOutbox? commandJournal = null,
+        Func<DiagnosticCommand, CompletedCommand, CancellationToken, Task>? replayCompletedCommand = null)
     {
         while (!cancellationToken.IsCancellationRequested)
         {
@@ -33,6 +35,23 @@ public sealed partial class ReliabilitySensor
                         StringComparison.Ordinal)
                     && IsReadOnlyTool(command.Tool))
                 {
+                    if (commandJournal is not null)
+                    {
+                        var completed = await commandJournal.LoadCompletedCommandAsync(
+                            command.CommandId,
+                            command.ArgumentsHash,
+                            cancellationToken).ConfigureAwait(false);
+                        if (completed is not null)
+                        {
+                            if (replayCompletedCommand is not null)
+                            {
+                                await replayCompletedCommand(command, completed, cancellationToken)
+                                    .ConfigureAwait(false);
+                            }
+                            continue;
+                        }
+                    }
+
                     await handleCommand(command, cancellationToken).ConfigureAwait(false);
                 }
             }
