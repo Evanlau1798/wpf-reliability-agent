@@ -20,4 +20,8 @@ def risk_for_tool(tool: DiagnosticTool | str) -> RiskLevel:
         normalized = tool if isinstance(tool, DiagnosticTool) else DiagnosticTool(tool)
     except ValueError:
         return RiskLevel.BLOCKED
-    return RiskLevel.LOW if normalized in READ_ONLY_DIAGNOSTIC_TOOLS else RiskLevel.BLOCKED
+    if normalized in READ_ONLY_DIAGNOSTIC_TOOLS:
+        return RiskLevel.LOW
+    if normalized is DiagnosticTool.RECOVERY_SET_FEATURE_FLAG:
+        return RiskLevel.HIGH
+    return RiskLevel.BLOCKED
