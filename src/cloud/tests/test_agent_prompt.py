@@ -51,3 +51,10 @@ def test_investigator_instruction_uses_shared_loop_budgets() -> None:
 
     assert f"max investigation rounds: {MAX_INVESTIGATION_ROUNDS}" in instruction
     assert f"max read-only tool calls: {MAX_READ_ONLY_TOOL_CALLS}" in instruction
+
+
+def test_investigator_instruction_keeps_risk_deterministic() -> None:
+    instruction = INVESTIGATOR_INSTRUCTION.lower()
+
+    assert "deterministic policy" in instruction
+    assert "risk hints only" in instruction

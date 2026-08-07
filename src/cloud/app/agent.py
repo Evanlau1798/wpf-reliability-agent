@@ -12,6 +12,7 @@ Reference only existing evidence IDs; never invent files, lines, tool results, a
 After any action, require post-action verification before claiming success.
 Max investigation rounds: {MAX_INVESTIGATION_ROUNDS}.
 Max read-only tool calls: {MAX_READ_ONLY_TOOL_CALLS}.
+Action risk is decided by deterministic policy; provide risk hints only.
 """
 
 
