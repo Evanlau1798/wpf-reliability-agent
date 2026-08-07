@@ -331,6 +331,38 @@ def test_new_incident_run_commits_transition_and_processed_marker_together(monke
     )
 
 
+def test_duplicate_new_incident_run_does_not_repeat_transition(monkeypatch) -> None:
+    client = Mock()
+    transaction = Mock()
+    incident_collection = Mock()
+    processed_collection = Mock()
+    incident_document = Mock()
+    processed_document = Mock()
+    client.transaction.return_value = transaction
+    client.collection.side_effect = lambda name: (
+        incident_collection
+        if name == firestore_client.INCIDENTS_COLLECTION
+        else processed_collection
+    )
+    incident_collection.document.return_value = incident_document
+    processed_collection.document.return_value = processed_document
+    processed_document.get.return_value = Mock(exists=True)
+    monkeypatch.setattr(workflow_state.firestore, "transactional", lambda callback: callback)
+
+    committed = workflow_state.commit_new_incident_run(
+        client,
+        run_key="incident-1:2:binding.aggregate",
+        incident_id="incident-1",
+        evidence_revision=2,
+        trigger="binding.aggregate",
+    )
+
+    assert committed is False
+    incident_document.get.assert_not_called()
+    transaction.update.assert_not_called()
+    transaction.create.assert_not_called()
+
+
 def test_failed_transition_does_not_mark_run_processed(monkeypatch) -> None:
     client = Mock()
     transaction = Mock()
