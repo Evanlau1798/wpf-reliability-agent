@@ -319,6 +319,28 @@ def test_double_approve_conflicts_without_second_mutation_command(monkeypatch) -
     assert len(command_creates) == 1
 
 
+def test_approved_action_cannot_substitute_different_arguments(monkeypatch) -> None:
+    approval_document = _approval_document()
+    approval_document["canonical_arguments"] = {
+        "feature": "ExperimentalPeopleGrid",
+        "enabled": True,
+        "expected_current_value": True,
+    }
+    client, transaction, _ = _approval_client(approval_document)
+    monkeypatch.setattr(firestore_client.firestore, "transactional", lambda callback: callback)
+
+    with pytest.raises(ValueError, match="Approval arguments hash mismatch"):
+        firestore_client.approve_pending_approval(
+            client,
+            approval_id="approval-1",
+            actor="demo-operator",
+            now=datetime(2026, 8, 8, 5, tzinfo=UTC),
+        )
+
+    client.collection.assert_not_called()
+    transaction.create.assert_not_called()
+
+
 def _approval_client(
     document: dict[str, object],
     *,
