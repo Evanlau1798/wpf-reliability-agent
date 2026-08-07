@@ -190,3 +190,7 @@ def map_correlation_confidence(
     if binding_path and named_ancestor and time_window:
         return Confidence.MEDIUM
     return Confidence.LOW
+
+
+def can_propose_mutation(claim: CandidateClaim) -> bool:
+    return claim.confidence is not Confidence.LOW
