@@ -1,0 +1,71 @@
+using System.Net;
+using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Text;
+
+namespace Reliability.Sensor.Tests;
+
+public sealed class CommandPollingSecurityTests
+{
+    [Fact]
+    public async Task StaleTargetSessionIsRejectedBeforeDispatch()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var handler = new SingleCommandThenBlockHandler(json => json
+            .Replace("\"target_app_session_id\": \"session-1\"", "\"target_app_session_id\": \"session-stale\"")
+            .Replace("2026-08-07T00:00:00Z", "2099-01-01T00:00:00Z")
+            .Replace("2026-08-07T00:01:00Z", "2099-01-01T00:01:00Z"));
+        using var client = new TelemetryApiClient(
+            new Uri("https://reliability.example.test"),
+            "test-token",
+            handler,
+            TimeSpan.FromSeconds(25));
+        var handled = 0;
+        var poller = ReliabilitySensor.RunCommandPollerAsync(
+            client,
+            "device-test",
+            "session-1",
+            (_, _) =>
+            {
+                handled++;
+                return Task.CompletedTask;
+            },
+            cancellation.Token);
+
+        await handler.SecondRequestStarted.Task.WaitAsync(TimeSpan.FromSeconds(1));
+        cancellation.Cancel();
+        await poller.WaitAsync(TimeSpan.FromSeconds(1));
+
+        Assert.Equal(0, handled);
+    }
+
+    private sealed class SingleCommandThenBlockHandler(Func<string, string> mutate) : HttpMessageHandler
+    {
+        private int _requests;
+
+        public TaskCompletionSource SecondRequestStarted { get; } = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            if (Interlocked.Increment(ref _requests) == 1)
+            {
+                var fixture = await File.ReadAllTextAsync(
+                    Path.Combine(
+                        AppContext.BaseDirectory,
+                        "fixtures",
+                        "diagnostic-command-valid-read.json"),
+                    cancellationToken);
+                var content = new ByteArrayContent(Encoding.UTF8.GetBytes(mutate(fixture)));
+                content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+                return new HttpResponseMessage(HttpStatusCode.OK) { Content = content };
+            }
+
+            SecondRequestStarted.TrySetResult();
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            throw new InvalidOperationException("Lease request unexpectedly completed.");
+        }
+    }
+}

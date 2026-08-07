@@ -21,7 +21,11 @@ public sealed partial class ReliabilitySensor
                     deviceId,
                     appSessionId,
                     cancellationToken).ConfigureAwait(false);
-                if (command is not null)
+                if (command is not null
+                    && string.Equals(
+                        command.TargetAppSessionId,
+                        appSessionId,
+                        StringComparison.Ordinal))
                 {
                     await handleCommand(command, cancellationToken).ConfigureAwait(false);
                 }
