@@ -117,6 +117,39 @@ def test_incident_lease_allows_only_one_active_owner(monkeypatch) -> None:
     )
 
 
+def test_expired_incident_lease_can_be_acquired_by_new_owner(monkeypatch) -> None:
+    client = Mock()
+    transaction = Mock()
+    incident_document = Mock()
+    now = datetime(2026, 8, 7, tzinfo=UTC)
+    client.transaction.return_value = transaction
+    client.collection.return_value.document.return_value = incident_document
+    incident_document.get.return_value = Mock(
+        exists=True,
+        to_dict=lambda: {
+            "lease_owner": "worker-a",
+            "lease_until": now - timedelta(seconds=1),
+        },
+    )
+    monkeypatch.setattr(workflow_state.firestore, "transactional", lambda callback: callback)
+
+    assert workflow_state.acquire_incident_lease(
+        client,
+        incident_id="incident-1",
+        owner="worker-b",
+        now=now,
+        duration=timedelta(seconds=30),
+    ) is True
+    transaction.update.assert_called_once_with(
+        incident_document,
+        {
+            "lease_owner": "worker-b",
+            "lease_until": now + timedelta(seconds=30),
+            "updated_at": firestore_client.firestore.SERVER_TIMESTAMP,
+        },
+    )
+
+
 def test_new_incident_run_commits_transition_and_processed_marker_together(monkeypatch) -> None:
     client = Mock()
     transaction = Mock()
