@@ -1,6 +1,7 @@
 from google.adk.agents import Agent
 
 from app.correlation import AgentCorrelationContext
+from app.models import AgentDecision
 
 
 MAX_INVESTIGATION_ROUNDS = 4
@@ -24,6 +25,7 @@ def build_root_agent(model_id: str) -> Agent:
         name="reliability_investigator",
         model=model_id,
         instruction=INVESTIGATOR_INSTRUCTION,
+        output_schema=AgentDecision,
     )
 
 

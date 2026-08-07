@@ -10,6 +10,7 @@ from app.agent import (
     build_investigator_contents,
 )
 from app.correlation import AgentCorrelationContext, NormalizedEvidenceSummary
+from app.models import AgentDecision, DecisionType
 
 
 def test_investigator_instruction_enforces_core_safety_rules() -> None:
@@ -79,3 +80,18 @@ def test_build_root_agent_creates_one_adk_root_workflow() -> None:
     assert root.model == "gemini-test"
     assert root.instruction == INVESTIGATOR_INSTRUCTION
     assert root.sub_agents == []
+
+
+def test_root_agent_uses_agent_decision_output_schema() -> None:
+    root = build_root_agent("gemini-test")
+    parsed = AgentDecision.model_validate(
+        {
+            "schema_version": "1.0",
+            "decision": "NO_ACTION",
+            "hypotheses": [],
+            "missing_evidence": [],
+        }
+    )
+
+    assert root.output_schema is AgentDecision
+    assert parsed.decision is DecisionType.NO_ACTION
