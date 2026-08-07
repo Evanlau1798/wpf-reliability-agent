@@ -121,6 +121,36 @@ def acquire_incident_lease(
     return acquire(client.transaction())
 
 
+def release_incident_lease(
+    client: firestore.Client,
+    *,
+    incident_id: str,
+    owner: str,
+) -> None:
+    if not owner:
+        raise ValueError("Invalid lease owner")
+    incident_document = client.collection(INCIDENTS_COLLECTION).document(incident_id)
+
+    @firestore.transactional
+    def release(transaction: firestore.Transaction) -> None:
+        snapshot = incident_document.get(transaction=transaction)
+        if not snapshot.exists:
+            raise ValueError("Incident does not exist")
+        incident = snapshot.to_dict() or {}
+        if incident.get("lease_owner") != owner:
+            raise ValueError("Lease owner mismatch")
+        transaction.update(
+            incident_document,
+            {
+                "lease_owner": None,
+                "lease_until": None,
+                "updated_at": firestore.SERVER_TIMESTAMP,
+            },
+        )
+
+    release(client.transaction())
+
+
 def commit_new_incident_run(
     client: firestore.Client,
     *,

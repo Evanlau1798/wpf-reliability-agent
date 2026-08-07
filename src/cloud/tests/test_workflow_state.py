@@ -150,6 +150,56 @@ def test_expired_incident_lease_can_be_acquired_by_new_owner(monkeypatch) -> Non
     )
 
 
+def test_release_incident_lease_clears_owned_lease(monkeypatch) -> None:
+    client = Mock()
+    transaction = Mock()
+    incident_document = Mock()
+    client.transaction.return_value = transaction
+    client.collection.return_value.document.return_value = incident_document
+    incident_document.get.return_value = Mock(
+        exists=True,
+        to_dict=lambda: {"lease_owner": "worker-a"},
+    )
+    monkeypatch.setattr(workflow_state.firestore, "transactional", lambda callback: callback)
+
+    workflow_state.release_incident_lease(
+        client,
+        incident_id="incident-1",
+        owner="worker-a",
+    )
+
+    transaction.update.assert_called_once_with(
+        incident_document,
+        {
+            "lease_owner": None,
+            "lease_until": None,
+            "updated_at": firestore_client.firestore.SERVER_TIMESTAMP,
+        },
+    )
+
+
+def test_release_incident_lease_rejects_owner_mismatch(monkeypatch) -> None:
+    client = Mock()
+    transaction = Mock()
+    incident_document = Mock()
+    client.transaction.return_value = transaction
+    client.collection.return_value.document.return_value = incident_document
+    incident_document.get.return_value = Mock(
+        exists=True,
+        to_dict=lambda: {"lease_owner": "worker-b"},
+    )
+    monkeypatch.setattr(workflow_state.firestore, "transactional", lambda callback: callback)
+
+    with pytest.raises(ValueError, match="Lease owner mismatch"):
+        workflow_state.release_incident_lease(
+            client,
+            incident_id="incident-1",
+            owner="worker-a",
+        )
+
+    transaction.update.assert_not_called()
+
+
 def test_new_incident_run_commits_transition_and_processed_marker_together(monkeypatch) -> None:
     client = Mock()
     transaction = Mock()
