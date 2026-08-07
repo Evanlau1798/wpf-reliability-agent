@@ -5,6 +5,7 @@ from app.correlation import (
     NormalizedEvidenceSummary,
     match_element_name_and_type,
     match_exact_element_id,
+    match_nearest_named_ancestor,
     match_normalized_binding_path,
     match_unique_live_candidate,
 )
@@ -69,3 +70,18 @@ def test_element_name_match_requires_same_element_type() -> None:
 
     assert match_element_name_and_type(left, same)
     assert not match_element_name_and_type(left, different_type)
+
+
+def test_nearest_named_ancestor_match_is_medium_confidence() -> None:
+    left = _evidence("binding-1", None).model_copy(
+        update={"nearest_named_ancestor": "ExperimentalPeopleGrid"}
+    )
+    same = _evidence("ui-1", None).model_copy(
+        update={"nearest_named_ancestor": "ExperimentalPeopleGrid"}
+    )
+    different = _evidence("ui-2", None).model_copy(
+        update={"nearest_named_ancestor": "FallbackPeopleList"}
+    )
+
+    assert match_nearest_named_ancestor(left, same) is Confidence.MEDIUM
+    assert match_nearest_named_ancestor(left, different) is None

@@ -29,6 +29,7 @@ class NormalizedEvidenceSummary(BaseModel):
     binding_path: Identifier | None = None
     element_name: Identifier | None = None
     element_type: Identifier | None = None
+    nearest_named_ancestor: Identifier | None = None
 
 
 class CandidateClaim(BaseModel):
@@ -89,3 +90,15 @@ def match_element_name_and_type(
         and left.element_name == right.element_name
         and left.element_type == right.element_type
     )
+
+
+def match_nearest_named_ancestor(
+    left: NormalizedEvidenceSummary,
+    right: NormalizedEvidenceSummary,
+) -> Confidence | None:
+    if (
+        left.nearest_named_ancestor
+        and left.nearest_named_ancestor == right.nearest_named_ancestor
+    ):
+        return Confidence.MEDIUM
+    return None
