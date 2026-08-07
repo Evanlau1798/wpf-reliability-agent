@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 from google.adk.agents import Agent
+import pytest
 
 from app import agent
 from app.agent import (
@@ -170,6 +171,59 @@ def test_investigator_runs_exactly_one_model_invocation() -> None:
 
     assert decision.decision is DecisionType.NO_ACTION
     assert sum("run_async" in call for call in calls) == 1
+
+
+def test_investigator_allows_one_schema_repair_then_stops() -> None:
+    calls: list[dict[str, object]] = []
+    outputs = [
+        {"schema_version": "1.0", "decision": "NO_ACTION", "hypotheses": []},
+        {"schema_version": "1.0", "decision": "NO_ACTION", "hypotheses": []},
+    ]
+
+    class SessionService:
+        async def create_session(self, **kwargs):
+            calls.append({"create_session": kwargs})
+
+    class Runner:
+        app_name = "wpf_reliability_agent"
+        session_service = SessionService()
+
+        def run_async(self, **kwargs):
+            calls.append({"run_async": kwargs})
+            output = outputs.pop(0)
+
+            async def events():
+                yield SimpleNamespace(
+                    is_final_response=lambda: True,
+                    output=output,
+                    content=None,
+                )
+
+            return events()
+
+    context = AgentCorrelationContext(
+        evidence=[],
+        candidate_claims=[],
+        tool_calls_remaining=6,
+        max_context_bytes=65_536,
+        max_context_tokens=32_768,
+    )
+
+    with pytest.raises(ValueError):
+        asyncio.run(
+            run_investigator_once(
+                Runner(),
+                incident_id="incident-1",
+                run_key="incident-1:1:binding.aggregate",
+                context=context,
+            )
+        )
+
+    run_calls = [call["run_async"] for call in calls if "run_async" in call]
+    assert len(run_calls) == 2
+    repair_message = run_calls[1]["new_message"].parts[0].text.lower()
+    assert "repair" in repair_message
+    assert "do not change" in repair_message
 
 
 def test_request_evidence_creates_deterministic_idempotent_server_command(monkeypatch) -> None:

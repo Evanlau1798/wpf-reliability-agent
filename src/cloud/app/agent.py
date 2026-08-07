@@ -43,6 +43,10 @@ Max read-only tool calls: {MAX_READ_ONLY_TOOL_CALLS}.
 Action risk is decided by deterministic policy; provide risk hints only.
 A temporary mitigation is not a permanent fix and must never be called RESOLVED.
 """
+SCHEMA_REPAIR_INSTRUCTION = """Repair your previous response as valid AgentDecision JSON.
+Do not change evidence references, tool choice, arguments, proposed action, or meaning.
+Return one corrected decision only.
+"""
 
 
 def build_root_agent(model_id: str) -> Agent:
@@ -89,6 +93,33 @@ async def run_investigator_once(
         role="user",
         parts=[types.Part(text=build_investigator_contents(context))],
     )
+    try:
+        return await _run_investigator_message(
+            runner,
+            incident_id=incident_id,
+            run_key=run_key,
+            message=message,
+        )
+    except ValueError:
+        repair_message = types.Content(
+            role="user",
+            parts=[types.Part(text=SCHEMA_REPAIR_INSTRUCTION)],
+        )
+        return await _run_investigator_message(
+            runner,
+            incident_id=incident_id,
+            run_key=run_key,
+            message=repair_message,
+        )
+
+
+async def _run_investigator_message(
+    runner: Any,
+    *,
+    incident_id: str,
+    run_key: str,
+    message: types.Content,
+) -> AgentDecision:
     async for event in runner.run_async(
         user_id=incident_id,
         session_id=run_key,
