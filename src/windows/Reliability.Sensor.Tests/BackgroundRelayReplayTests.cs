@@ -170,6 +170,12 @@ public sealed class BackgroundRelayReplayTests
             HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
+            if (request.RequestUri?.AbsolutePath.EndsWith("commands:lease", StringComparison.Ordinal) is true)
+            {
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+                return new HttpResponseMessage(HttpStatusCode.NoContent);
+            }
+
             Interlocked.Increment(ref _requestCount);
             var body = await request.Content!.ReadAsStringAsync(cancellationToken);
             using var document = JsonDocument.Parse(body);

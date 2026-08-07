@@ -143,6 +143,20 @@ internal sealed class TelemetryApiClient : IDisposable
         return ContractValidator.Validate(command, json) ? command : null;
     }
 
+    public async Task CompleteCommandAsync(
+        CommandResult result,
+        CancellationToken cancellationToken = default)
+    {
+        using var content = JsonContent.Create(
+            result,
+            ContractJsonContext.Default.CommandResult);
+        using var response = await _httpClient.PostAsync(
+            $"v1/commands/{Uri.EscapeDataString(result.CommandId)}:complete",
+            content,
+            cancellationToken).ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+    }
+
     public void Dispose() => _httpClient.Dispose();
 
     private static (IReadOnlyList<OutboxEvent> Events, byte[] Body) SelectBatch(IReadOnlyList<OutboxEvent> events)

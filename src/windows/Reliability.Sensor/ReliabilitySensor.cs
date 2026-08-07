@@ -121,7 +121,7 @@ public sealed partial class ReliabilitySensor : IAsyncDisposable
 
     internal ChannelReader<DiagnosticEnvelope> Events => _events.Reader;
 
-    internal Task Completion { get; }
+    internal Task Completion { get; private set; }
 
     internal long DroppedEventCount => Interlocked.Read(ref _droppedEventCount);
 
@@ -162,18 +162,19 @@ public sealed partial class ReliabilitySensor : IAsyncDisposable
                 canUpload,
                 lifetime,
                 events,
-                options.DisableBackgroundPersistence
-                    ? WaitForCancellationAsync(lifetime.Token)
-                    : RunRelayAsync(
-                        events.Reader,
-                        options.OutboxPath ?? SqliteOutbox.GetDefaultPath(options.ApplicationId),
-                        canUpload ? options.ApiBaseUri : null,
-                        canUpload ? options.DeviceToken : null,
-                        options.TelemetryHandler,
-                        options.RelayPollInterval,
-                        lifetime.Token,
-                        diagnosticLogger),
+                Task.CompletedTask,
                 diagnosticLogger);
+            sensor.Completion = options.DisableBackgroundPersistence
+                ? WaitForCancellationAsync(lifetime.Token)
+                : sensor.RunRelayAsync(
+                    events.Reader,
+                    options.OutboxPath ?? SqliteOutbox.GetDefaultPath(options.ApplicationId),
+                    canUpload ? options.ApiBaseUri : null,
+                    canUpload ? options.DeviceToken : null,
+                    options.TelemetryHandler,
+                    options.RelayPollInterval,
+                    lifetime.Token,
+                    diagnosticLogger);
             if (!canUpload)
             {
                 Emit(diagnosticLogger, SensorDiagnostic.MissingDeviceToken);

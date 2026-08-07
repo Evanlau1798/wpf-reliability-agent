@@ -6,7 +6,7 @@ namespace Reliability.Sensor;
 
 public sealed partial class ReliabilitySensor
 {
-    private static async Task RunRelayAsync(
+    private async Task RunRelayAsync(
         ChannelReader<DiagnosticEnvelope> events,
         string outboxPath,
         Uri? apiBaseUri,
@@ -22,6 +22,9 @@ public sealed partial class ReliabilitySensor
             using var client = apiBaseUri is null || deviceToken is null
                 ? null
                 : new TelemetryApiClient(apiBaseUri, deviceToken, telemetryHandler);
+            var commandTask = client is null
+                ? Task.CompletedTask
+                : RunReadOnlyCommandLoopAsync(client, outboxPath, cancellationToken);
             try
             {
                 while (!cancellationToken.IsCancellationRequested)
@@ -48,6 +51,7 @@ public sealed partial class ReliabilitySensor
             {
                 await outbox.EnforceLimitsAsync().ConfigureAwait(false);
             }
+            await commandTask.ConfigureAwait(false);
         }
         catch (Exception)
         {
