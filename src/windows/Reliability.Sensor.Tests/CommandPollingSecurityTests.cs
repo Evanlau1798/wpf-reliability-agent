@@ -40,6 +40,42 @@ public sealed class CommandPollingSecurityTests
     }
 
     [Fact]
+    public async Task StaleMutationTargetSessionIsRejectedBeforeDispatch()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var handler = new SingleCommandThenBlockHandler(
+            json => json
+                .Replace("\"target_app_session_id\": \"session-1\"", "\"target_app_session_id\": \"session-stale\"")
+                .Replace("2026-08-07T00:00:00Z", "2099-01-01T00:00:00Z")
+                .Replace("2026-08-07T00:01:00Z", "2099-01-01T00:01:00Z"),
+            "diagnostic-command-valid-mutation.json");
+        using var client = new TelemetryApiClient(
+            new Uri("https://reliability.example.test"),
+            "test-token",
+            handler,
+            TimeSpan.FromSeconds(25));
+        var mutationHandled = 0;
+        var poller = ReliabilitySensor.RunCommandPollerAsync(
+            client,
+            "device-test",
+            "session-1",
+            (_, _) => Task.CompletedTask,
+            cancellation.Token,
+            handleMutationCommand: (_, _) =>
+            {
+                mutationHandled++;
+                cancellation.Cancel();
+                return Task.CompletedTask;
+            });
+
+        await handler.SecondRequestStarted.Task.WaitAsync(TimeSpan.FromSeconds(1));
+        cancellation.Cancel();
+        await poller.WaitAsync(TimeSpan.FromSeconds(1));
+
+        Assert.Equal(0, mutationHandled);
+    }
+
+    [Fact]
     public async Task ExpiredCommandIsRejectedBeforeDispatch()
     {
         using var cancellation = new CancellationTokenSource();
