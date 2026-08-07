@@ -174,3 +174,19 @@ def build_performance_amplifier_edge(
         target_evidence_id=performance.evidence_id,
         edge_type=EvidenceEdgeType.PERFORMANCE_AMPLIFIER,
     )
+
+
+def map_correlation_confidence(
+    *,
+    exact_element: bool = False,
+    unique_live_candidate: bool = False,
+    independent_evidence_matches: int = 0,
+    binding_path: bool = False,
+    named_ancestor: bool = False,
+    time_window: bool = False,
+) -> Confidence:
+    if exact_element or unique_live_candidate or independent_evidence_matches >= 2:
+        return Confidence.HIGH
+    if binding_path and named_ancestor and time_window:
+        return Confidence.MEDIUM
+    return Confidence.LOW
