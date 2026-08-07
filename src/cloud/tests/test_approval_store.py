@@ -341,11 +341,35 @@ def test_approved_action_cannot_substitute_different_arguments(monkeypatch) -> N
     transaction.create.assert_not_called()
 
 
+def test_occurrence_only_evidence_update_does_not_stale_approval(monkeypatch) -> None:
+    client, transaction, _ = _approval_client(
+        _approval_document(),
+        occurrence_count=42,
+    )
+    monkeypatch.setattr(firestore_client.firestore, "transactional", lambda callback: callback)
+
+    command_id = firestore_client.approve_pending_approval(
+        client,
+        approval_id="approval-1",
+        actor="demo-operator",
+        now=datetime(2026, 8, 8, 5, tzinfo=UTC),
+    )
+
+    command_creates = [
+        call
+        for call in transaction.create.call_args_list
+        if call.args[1].get("tool") == "recovery.set_feature_flag"
+    ]
+    assert command_id.startswith("cmd-")
+    assert len(command_creates) == 1
+
+
 def _approval_client(
     document: dict[str, object],
     *,
     incident: dict[str, object] | None = None,
     evidence: list[tuple[str, str]] | None = None,
+    occurrence_count: int | None = None,
 ) -> tuple[Mock, Mock, Mock]:
     client = Mock()
     transaction = Mock()
@@ -356,7 +380,10 @@ def _approval_client(
     evidence_snapshots = [
         Mock(
             id=evidence_id,
-            to_dict=lambda evidence_hash=evidence_hash: {"evidence_hash": evidence_hash},
+            to_dict=lambda evidence_hash=evidence_hash: {
+                "evidence_hash": evidence_hash,
+                "payload": {"occurrence_count": occurrence_count},
+            },
         )
         for evidence_id, evidence_hash in (evidence or [("evidence-1", "a" * 64)])
     ]
