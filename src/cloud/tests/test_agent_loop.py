@@ -238,3 +238,41 @@ def test_two_consecutive_rounds_without_new_evidence_stop(monkeypatch) -> None:
             "updated_at": workflow_state.firestore.SERVER_TIMESTAMP,
         },
     )
+
+
+def test_incident_starts_with_zero_mutation_proposals() -> None:
+    incident = firestore_client.build_incident_document(
+        application_id="app-1",
+        app_session_id="session-1",
+        severity="ERROR",
+        summary="Binding error burst",
+    )
+
+    assert incident["mutation_proposal_count"] == 0
+
+
+def test_second_mutation_proposal_fails_safe(monkeypatch) -> None:
+    client = Mock()
+    transaction = Mock()
+    document = Mock()
+    snapshot = Mock(exists=True)
+    client.transaction.return_value = transaction
+    client.collection.return_value.document.return_value = document
+    document.get.return_value = snapshot
+    monkeypatch.setattr(workflow_state.firestore, "transactional", lambda callback: callback)
+
+    snapshot.to_dict.return_value = {"mutation_proposal_count": 0}
+    assert workflow_state.claim_mutation_proposal(client, incident_id="incident-1") == 1
+    transaction.update.assert_called_once_with(
+        document,
+        {
+            "mutation_proposal_count": 1,
+            "updated_at": workflow_state.firestore.SERVER_TIMESTAMP,
+        },
+    )
+
+    snapshot.to_dict.return_value = {"mutation_proposal_count": 1}
+    with pytest.raises(ValueError, match="Mutation proposal limit"):
+        workflow_state.claim_mutation_proposal(client, incident_id="incident-1")
+
+    assert workflow_state.MAX_MUTATION_PROPOSALS == 1

@@ -10,6 +10,7 @@ from app.firestore_client import AUDIT_COLLECTION, INCIDENTS_COLLECTION, PROCESS
 MAX_INVESTIGATION_ROUNDS = 4
 MAX_READ_ONLY_TOOL_CALLS = 6
 MAX_NO_NEW_EVIDENCE_ROUNDS = 2
+MAX_MUTATION_PROPOSALS = 1
 
 
 class IncidentState(StrEnum):
@@ -164,6 +165,32 @@ def record_investigation_evidence_progress(
         return next_count >= MAX_NO_NEW_EVIDENCE_ROUNDS
 
     return record(client.transaction())
+
+
+def claim_mutation_proposal(client: firestore.Client, *, incident_id: str) -> int:
+    incident_document = client.collection(INCIDENTS_COLLECTION).document(incident_id)
+
+    @firestore.transactional
+    def claim(transaction: firestore.Transaction) -> int:
+        snapshot = incident_document.get(transaction=transaction)
+        if not snapshot.exists:
+            raise ValueError("Incident does not exist")
+        current = (snapshot.to_dict() or {}).get("mutation_proposal_count")
+        if type(current) is not int or current < 0:
+            raise ValueError("Mutation proposal count is invalid")
+        if current >= MAX_MUTATION_PROPOSALS:
+            raise ValueError("Mutation proposal limit reached")
+        next_count = current + 1
+        transaction.update(
+            incident_document,
+            {
+                "mutation_proposal_count": next_count,
+                "updated_at": firestore.SERVER_TIMESTAMP,
+            },
+        )
+        return next_count
+
+    return claim(client.transaction())
 
 
 def transition_incident(

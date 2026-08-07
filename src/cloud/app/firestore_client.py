@@ -131,6 +131,7 @@ def build_incident_document(
         "read_only_tool_request_keys": [],
         "last_investigated_evidence_revision": None,
         "no_new_evidence_count": 0,
+        "mutation_proposal_count": 0,
         "application_id": application_id,
         "app_session_id": app_session_id,
         "severity": severity,
