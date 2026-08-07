@@ -1,9 +1,13 @@
 from collections.abc import Collection, Iterable
+from datetime import datetime
 from functools import cache
 
 from google.cloud import firestore
 
+from app.approval import validate_recovery_proposal
 from app.contracts import sha256_canonical
+from app.models import ApprovalRecord, ApprovalStatus, ProposedAction, RiskLevel
+from app.policy import POLICY_VERSION
 
 
 DEVICES_COLLECTION = "devices"
@@ -27,6 +31,44 @@ def evidence_snapshot_hash(material_evidence: Iterable[tuple[str, str]]) -> str:
         key=lambda item: item["evidence_id"],
     )
     return sha256_canonical(snapshot)
+
+
+def create_pending_approval(
+    client: firestore.Client,
+    *,
+    approval_id: str,
+    incident_id: str,
+    proposal_version: int,
+    evidence_snapshot_hash_value: str,
+    action_id: str,
+    proposal: ProposedAction,
+    target_app_session_id: str,
+    expires_at_utc: datetime,
+) -> ApprovalRecord:
+    proposal = validate_recovery_proposal(proposal)
+    approval = ApprovalRecord(
+        schema_version="1.0",
+        approval_id=approval_id,
+        incident_id=incident_id,
+        proposal_version=proposal_version,
+        evidence_snapshot_hash=evidence_snapshot_hash_value,
+        action_id=action_id,
+        tool=proposal.tool,
+        canonical_arguments=proposal.arguments,
+        canonical_arguments_hash=sha256_canonical(proposal.arguments),
+        target_app_session_id=target_app_session_id,
+        policy_version=POLICY_VERSION,
+        risk_level=RiskLevel.HIGH,
+        expected_effect=proposal.expected_effect,
+        rollback_plan=proposal.rollback_plan,
+        expires_at_utc=expires_at_utc,
+        status=ApprovalStatus.PENDING,
+    )
+    incident = client.collection(INCIDENTS_COLLECTION).document(incident_id)
+    incident.collection(APPROVALS_COLLECTION).document(approval_id).create(
+        approval.model_dump(mode="json")
+    )
+    return approval
 
 
 def next_evidence_revision(

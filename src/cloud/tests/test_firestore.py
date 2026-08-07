@@ -1,9 +1,11 @@
+from datetime import datetime, timezone
 from unittest.mock import Mock
 
 import pytest
 from google.api_core.exceptions import AlreadyExists
 
 from app import firestore_client
+from app.models import ApprovalStatus, ProposedAction, RiskLevel
 
 
 def test_firestore_client_provider_reuses_client_for_project(monkeypatch) -> None:
@@ -175,6 +177,66 @@ def test_incident_create_writes_complete_initial_state() -> None:
             "updated_at": firestore_client.firestore.SERVER_TIMESTAMP,
         }
     )
+
+
+def test_pending_approval_document_binds_exact_proposal() -> None:
+    client = Mock()
+    incident = Mock()
+    approval_document = Mock()
+    client.collection.return_value.document.return_value = incident
+    incident.collection.return_value.document.return_value = approval_document
+    proposal = ProposedAction.model_validate(
+        {
+            "tool": "recovery.set_feature_flag",
+            "arguments": {
+                "feature": "ExperimentalPeopleGrid",
+                "enabled": False,
+                "expected_current_value": True,
+            },
+            "evidence_ids": ["evidence-1"],
+            "expected_effect": "Reduce UI load.",
+            "rollback_plan": "Re-enable the feature.",
+        }
+    )
+    expires_at = datetime(2026, 8, 8, 1, 0, tzinfo=timezone.utc)
+
+    approval = firestore_client.create_pending_approval(
+        client,
+        approval_id="approval-1",
+        incident_id="incident-1",
+        proposal_version=3,
+        evidence_snapshot_hash_value="1" * 64,
+        action_id="action-1",
+        proposal=proposal,
+        target_app_session_id="session-1",
+        expires_at_utc=expires_at,
+    )
+
+    assert approval.model_dump(mode="json") == {
+        "schema_version": "1.0",
+        "approval_id": "approval-1",
+        "incident_id": "incident-1",
+        "proposal_version": 3,
+        "evidence_snapshot_hash": "1" * 64,
+        "action_id": "action-1",
+        "tool": "recovery.set_feature_flag",
+        "canonical_arguments": proposal.arguments,
+        "canonical_arguments_hash": firestore_client.sha256_canonical(proposal.arguments),
+        "target_app_session_id": "session-1",
+        "policy_version": "1",
+        "risk_level": RiskLevel.HIGH.value,
+        "expected_effect": "Reduce UI load.",
+        "rollback_plan": "Re-enable the feature.",
+        "expires_at_utc": "2026-08-08T01:00:00Z",
+        "status": ApprovalStatus.PENDING.value,
+        "approved_by": None,
+        "approved_at_utc": None,
+    }
+    client.collection.assert_called_once_with(firestore_client.INCIDENTS_COLLECTION)
+    client.collection.return_value.document.assert_called_once_with("incident-1")
+    incident.collection.assert_called_once_with(firestore_client.APPROVALS_COLLECTION)
+    incident.collection.return_value.document.assert_called_once_with("approval-1")
+    approval_document.create.assert_called_once_with(approval.model_dump(mode="json"))
 
 
 def test_incident_evidence_append_rejects_duplicate_id() -> None:
