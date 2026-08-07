@@ -1,5 +1,6 @@
-from app.models import DiagnosticTool, ProposedAction
 from app.approval import next_proposal_version
+from app.firestore_client import evidence_snapshot_hash
+from app.models import DiagnosticTool, ProposedAction
 
 
 def test_action_proposal_model_binds_exact_required_fields() -> None:
@@ -27,3 +28,11 @@ def test_action_proposal_model_binds_exact_required_fields() -> None:
 def test_each_new_material_proposal_increments_version() -> None:
     assert next_proposal_version(0) == 1
     assert next_proposal_version(1) == 2
+
+
+def test_proposal_evidence_snapshot_hash_binds_material_evidence() -> None:
+    first = [("evidence-1", "1" * 64)]
+    second = [*first, ("evidence-2", "2" * 64)]
+
+    assert evidence_snapshot_hash(first) != evidence_snapshot_hash(second)
+    assert evidence_snapshot_hash(second) == evidence_snapshot_hash(reversed(second))
