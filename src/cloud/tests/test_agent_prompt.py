@@ -2,15 +2,18 @@ from datetime import UTC, datetime
 import asyncio
 import json
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 from google.adk.agents import Agent
 
+from app import agent
 from app.agent import (
     INVESTIGATOR_INSTRUCTION,
     MAX_INVESTIGATION_ROUNDS,
     MAX_READ_ONLY_TOOL_CALLS,
     build_root_agent,
     build_investigator_contents,
+    create_evidence_command,
     run_investigator_once,
 )
 from app.correlation import AgentCorrelationContext, NormalizedEvidenceSummary
@@ -165,3 +168,49 @@ def test_investigator_runs_exactly_one_model_invocation() -> None:
 
     assert decision.decision is DecisionType.NO_ACTION
     assert sum("run_async" in call for call in calls) == 1
+
+
+def test_request_evidence_creates_deterministic_idempotent_server_command(monkeypatch) -> None:
+    client = Mock()
+    written = []
+    monkeypatch.setattr(
+        agent,
+        "write_command_once",
+        lambda _client, command: written.append(command) or command.command_id,
+    )
+    decision = AgentDecision.model_validate(
+        {
+            "schema_version": "1.0",
+            "decision": "REQUEST_EVIDENCE",
+            "hypotheses": [],
+            "next_command": {
+                "tool": "ui.get_subtree",
+                "arguments": {"element_id": "element-1", "max_depth": 2},
+            },
+            "missing_evidence": ["bounded UI subtree"],
+        }
+    )
+    now = datetime(2026, 8, 7, tzinfo=UTC)
+
+    first = create_evidence_command(
+        client,
+        decision,
+        incident_id="incident-1",
+        evidence_revision=3,
+        app_session_id="session-1",
+        now=now,
+    )
+    second = create_evidence_command(
+        client,
+        decision,
+        incident_id="incident-1",
+        evidence_revision=3,
+        app_session_id="session-1",
+        now=now,
+    )
+
+    assert first == second
+    assert written[0].command_id == written[1].command_id
+    assert written[0].idempotency_key == written[1].idempotency_key
+    assert written[0].risk_level.value == "LOW"
+    assert written[0].approval_id is None

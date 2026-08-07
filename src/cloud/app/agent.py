@@ -1,12 +1,21 @@
 import json
+from datetime import datetime, timedelta
 from typing import Any
 
 from google.adk.agents import Agent
 from google.adk.runners import InMemoryRunner
 from google.genai import types
 
+from app.commands import write_command_once
+from app.contracts import sha256_canonical
 from app.correlation import AgentCorrelationContext
-from app.models import AgentDecision, DiagnosticTool
+from app.models import (
+    AgentDecision,
+    DecisionType,
+    DiagnosticCommand,
+    DiagnosticTool,
+    RiskLevel,
+)
 
 
 MAX_INVESTIGATION_ROUNDS = 4
@@ -94,3 +103,45 @@ async def run_investigator_once(
             if text:
                 return AgentDecision.model_validate_json(text)
     raise RuntimeError("Investigator did not return a final decision")
+
+
+def create_evidence_command(
+    client: Any,
+    decision: AgentDecision,
+    *,
+    incident_id: str,
+    evidence_revision: int,
+    app_session_id: str,
+    now: datetime,
+) -> str:
+    if decision.decision is not DecisionType.REQUEST_EVIDENCE or decision.next_command is None:
+        raise ValueError("REQUEST_EVIDENCE decision required")
+    if decision.next_command.tool is DiagnosticTool.RECOVERY_SET_FEATURE_FLAG:
+        raise ValueError("Mutation tool cannot be requested as evidence")
+
+    arguments = decision.next_command.arguments
+    arguments_hash = sha256_canonical(arguments)
+    idempotency_key = sha256_canonical(
+        {
+            "incident_id": incident_id,
+            "evidence_revision": evidence_revision,
+            "tool": decision.next_command.tool.value,
+            "arguments_hash": arguments_hash,
+        }
+    )
+    command = DiagnosticCommand(
+        schema_version="1.0",
+        command_id=f"cmd-{idempotency_key}",
+        incident_id=incident_id,
+        target_app_session_id=app_session_id,
+        tool=decision.next_command.tool,
+        arguments=arguments,
+        arguments_hash=arguments_hash,
+        risk_level=RiskLevel.LOW,
+        approval_id=None,
+        idempotency_key=idempotency_key,
+        issued_at_utc=now,
+        expires_at_utc=now + timedelta(minutes=1),
+        timeout_ms=10_000,
+    )
+    return write_command_once(client, command)
