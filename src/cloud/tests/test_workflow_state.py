@@ -200,12 +200,61 @@ def test_release_incident_lease_rejects_owner_mismatch(monkeypatch) -> None:
     transaction.update.assert_not_called()
 
 
+def test_state_transitions_write_monotonic_audit_sequence(monkeypatch) -> None:
+    client = Mock()
+    transaction = Mock()
+    incident_document = Mock()
+    audit_collection = Mock()
+    audit_documents = [Mock(), Mock()]
+    client.transaction.return_value = transaction
+    client.collection.return_value.document.return_value = incident_document
+    incident_document.collection.return_value = audit_collection
+    audit_collection.document.side_effect = audit_documents
+    incident_document.get.side_effect = [
+        Mock(
+            exists=True,
+            to_dict=lambda: {"state": "NEW", "state_version": 1, "audit_sequence": 0},
+        ),
+        Mock(
+            exists=True,
+            to_dict=lambda: {"state": "TRIAGING", "state_version": 2, "audit_sequence": 1},
+        ),
+    ]
+    monkeypatch.setattr(workflow_state.firestore, "transactional", lambda callback: callback)
+
+    assert workflow_state.transition_incident(
+        client,
+        incident_id="incident-1",
+        expected_state=workflow_state.IncidentState.NEW,
+        expected_version=1,
+        target_state=workflow_state.IncidentState.TRIAGING,
+    ) == 2
+    assert workflow_state.transition_incident(
+        client,
+        incident_id="incident-1",
+        expected_state=workflow_state.IncidentState.TRIAGING,
+        expected_version=2,
+        target_state=workflow_state.IncidentState.COLLECTING_EVIDENCE,
+    ) == 3
+
+    assert [call.args[0] for call in audit_collection.document.call_args_list] == ["1", "2"]
+    assert [call.args[1]["sequence"] for call in transaction.create.call_args_list] == [1, 2]
+    assert [call.args[1]["type"] for call in transaction.create.call_args_list] == [
+        "state.transition",
+        "state.transition",
+    ]
+    assert [call.kwargs if call.kwargs else call.args[1] for call in transaction.update.call_args_list]
+    assert transaction.update.call_args_list[0].args[1]["audit_sequence"] == 1
+    assert transaction.update.call_args_list[1].args[1]["audit_sequence"] == 2
+
+
 def test_new_incident_run_commits_transition_and_processed_marker_together(monkeypatch) -> None:
     client = Mock()
     transaction = Mock()
     incident_collection = Mock()
     processed_collection = Mock()
     incident_document = Mock()
+    audit_document = Mock()
     processed_document = Mock()
     client.transaction.return_value = transaction
     client.collection.side_effect = lambda name: (
@@ -214,15 +263,25 @@ def test_new_incident_run_commits_transition_and_processed_marker_together(monke
         else processed_collection
     )
     incident_collection.document.return_value = incident_document
+    incident_document.collection.return_value.document.return_value = audit_document
     processed_collection.document.return_value = processed_document
     processed_document.get.return_value = Mock(exists=False)
     incident_document.get.return_value = Mock(
         exists=True,
-        to_dict=lambda: {"state": "NEW", "state_version": 1, "evidence_revision": 2},
+        to_dict=lambda: {
+            "state": "NEW",
+            "state_version": 1,
+            "audit_sequence": 0,
+            "evidence_revision": 2,
+        },
     )
     order: list[str] = []
     transaction.update.side_effect = lambda *_args, **_kwargs: order.append("transition")
-    transaction.create.side_effect = lambda *_args, **_kwargs: order.append("processed")
+
+    def record_create(document, _value):
+        order.append("audit" if document is audit_document else "processed")
+
+    transaction.create.side_effect = record_create
     monkeypatch.setattr(workflow_state.firestore, "transactional", lambda callback: callback)
 
     committed = workflow_state.commit_new_incident_run(
@@ -234,16 +293,19 @@ def test_new_incident_run_commits_transition_and_processed_marker_together(monke
     )
 
     assert committed is True
-    assert order == ["transition", "processed"]
+    assert order == ["transition", "audit", "processed"]
     transaction.update.assert_called_once_with(
         incident_document,
         {
             "state": "TRIAGING",
             "state_version": 2,
+            "audit_sequence": 1,
             "updated_at": firestore_client.firestore.SERVER_TIMESTAMP,
         },
     )
-    transaction.create.assert_called_once_with(
+    assert transaction.create.call_args_list[0].args[0] is audit_document
+    assert transaction.create.call_args_list[0].args[1]["sequence"] == 1
+    assert transaction.create.call_args_list[1].args == (
         processed_document,
         {
             "incident_id": "incident-1",
@@ -272,7 +334,12 @@ def test_failed_transition_does_not_mark_run_processed(monkeypatch) -> None:
     processed_document.get.return_value = Mock(exists=False)
     incident_document.get.return_value = Mock(
         exists=True,
-        to_dict=lambda: {"state": "NEW", "state_version": 1, "evidence_revision": 2},
+        to_dict=lambda: {
+            "state": "NEW",
+            "state_version": 1,
+            "audit_sequence": 0,
+            "evidence_revision": 2,
+        },
     )
     transaction.update.side_effect = RuntimeError("crash before commit")
     monkeypatch.setattr(workflow_state.firestore, "transactional", lambda callback: callback)

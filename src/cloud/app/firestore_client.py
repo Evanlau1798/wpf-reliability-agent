@@ -90,6 +90,7 @@ def build_incident_document(
     return {
         "state": "NEW",
         "state_version": 1,
+        "audit_sequence": 0,
         "evidence_revision": evidence_revision,
         "proposal_version": 0,
         "application_id": application_id,
