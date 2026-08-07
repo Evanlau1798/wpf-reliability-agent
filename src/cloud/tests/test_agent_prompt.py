@@ -14,6 +14,7 @@ from app.agent import (
     build_root_agent,
     build_investigator_contents,
     create_evidence_command,
+    decision_for_reporting,
     proposed_action_for_policy,
     run_investigator_once,
 )
@@ -249,3 +250,22 @@ def test_propose_action_routes_to_policy_without_creating_command(monkeypatch) -
 
     assert proposal.tool is DiagnosticTool.RECOVERY_SET_FEATURE_FLAG
     assert proposal.evidence_ids == ["evidence-1"]
+
+
+def test_finalize_and_no_action_route_to_reporting_without_action() -> None:
+    for decision_type in (DecisionType.FINALIZE, DecisionType.NO_ACTION):
+        decision = AgentDecision.model_validate(
+            {
+                "schema_version": "1.0",
+                "decision": decision_type.value,
+                "hypotheses": [],
+                "stop_reason": "No safe action is required.",
+                "missing_evidence": [],
+            }
+        )
+
+        reporting_decision = decision_for_reporting(decision)
+
+        assert reporting_decision is decision
+        assert reporting_decision.proposed_action is None
+        assert reporting_decision.next_command is None

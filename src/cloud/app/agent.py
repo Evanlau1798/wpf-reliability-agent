@@ -152,3 +152,9 @@ def proposed_action_for_policy(decision: AgentDecision) -> ProposedAction:
     if decision.decision is not DecisionType.PROPOSE_ACTION or decision.proposed_action is None:
         raise ValueError("PROPOSE_ACTION decision required")
     return decision.proposed_action
+
+
+def decision_for_reporting(decision: AgentDecision) -> AgentDecision:
+    if decision.decision not in {DecisionType.FINALIZE, DecisionType.NO_ACTION}:
+        raise ValueError("FINALIZE or NO_ACTION decision required")
+    return decision
