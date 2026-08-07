@@ -65,6 +65,16 @@ class BindingCandidate(BaseModel):
     element_name: Identifier | None = None
 
 
+class AgentCorrelationContext(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    evidence: list[NormalizedEvidenceSummary] = Field(max_length=50)
+    candidate_claims: list[CandidateClaim] = Field(max_length=20)
+    tool_calls_remaining: int = Field(ge=0, le=6)
+    max_context_bytes: int = Field(gt=0, le=65_536)
+    max_context_tokens: int = Field(gt=0, le=32_768)
+
+
 def match_exact_element_id(
     left: NormalizedEvidenceSummary,
     right: NormalizedEvidenceSummary,
@@ -194,3 +204,20 @@ def map_correlation_confidence(
 
 def can_propose_mutation(claim: CandidateClaim) -> bool:
     return claim.confidence is not Confidence.LOW
+
+
+def build_agent_context(
+    evidence: list[NormalizedEvidenceSummary],
+    candidate_claims: list[CandidateClaim],
+    *,
+    tool_calls_remaining: int,
+    max_context_bytes: int,
+    max_context_tokens: int,
+) -> AgentCorrelationContext:
+    return AgentCorrelationContext(
+        evidence=evidence,
+        candidate_claims=candidate_claims,
+        tool_calls_remaining=tool_calls_remaining,
+        max_context_bytes=max_context_bytes,
+        max_context_tokens=max_context_tokens,
+    )
