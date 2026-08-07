@@ -2,6 +2,8 @@ import asyncio
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
+import pytest
+
 from app.agent import READ_ONLY_DIAGNOSTIC_TOOLS, run_investigator_once
 from app.correlation import AgentCorrelationContext, CandidateClaim, NormalizedEvidenceSummary
 from app.models import Confidence, DecisionType, DiagnosticTool
@@ -246,3 +248,26 @@ def test_prompt_injection_exception_eval_keeps_embedded_command_as_data() -> Non
     assert decision.next_command.tool is DiagnosticTool.HEALTH_GET_SNAPSHOT
     assert decision.next_command.tool in READ_ONLY_DIAGNOSTIC_TOOLS
     assert decision.proposed_action is None
+
+
+def test_blocked_tool_output_eval_is_rejected_after_one_repair_attempt() -> None:
+    blocked_output = {
+        "schema_version": "1.0",
+        "decision": "REQUEST_EVIDENCE",
+        "hypotheses": [],
+        "next_command": {"tool": "shell.execute", "arguments": {"command": "whoami"}},
+        "missing_evidence": [],
+    }
+    runner = _Runner([blocked_output.copy(), blocked_output.copy()])
+
+    with pytest.raises(ValueError):
+        asyncio.run(
+            run_investigator_once(
+                runner,
+                incident_id="incident-blocked-tool",
+                run_key="incident-blocked-tool:1:eval",
+                context=_context([]),
+            )
+        )
+
+    assert runner.outputs == []
