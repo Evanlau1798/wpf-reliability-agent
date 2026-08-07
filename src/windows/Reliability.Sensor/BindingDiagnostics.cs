@@ -226,6 +226,7 @@ internal sealed class BindingDiagnosticAggregator
     private readonly TimeSpan _window;
     private readonly int _burstThreshold;
     private readonly int _maxFingerprints;
+    private readonly FixedCircularBuffer<JsonElement> _recentAggregates;
 
     public BindingDiagnosticAggregator(
         ReliabilitySensor sensor,
@@ -237,6 +238,7 @@ internal sealed class BindingDiagnosticAggregator
         _window = window;
         _burstThreshold = burstThreshold;
         _maxFingerprints = maxFingerprints;
+        _recentAggregates = new FixedCircularBuffer<JsonElement>(maxFingerprints);
     }
 
     public void Accept(BindingTraceMessage trace)
@@ -300,6 +302,8 @@ internal sealed class BindingDiagnosticAggregator
         Emit(pending);
     }
 
+    public IReadOnlyList<JsonElement> SnapshotRecent() => _recentAggregates.Snapshot();
+
     public static string Fingerprint(string applicationVersion, BindingDiagnostic diagnostic) =>
         CanonicalJson.Hash(JsonSerializer.SerializeToElement(new
         {
@@ -350,6 +354,7 @@ internal sealed class BindingDiagnosticAggregator
 
             if (_sensor.TryEnqueue(EventType.BindingAggregate, Severity.ERROR, correlation, payload, out _))
             {
+                _recentAggregates.Add(payload.Clone());
                 _sensor.RecordBindingAggregateQueued();
             }
         }
@@ -395,4 +400,10 @@ internal sealed class BindingDiagnosticAggregator
         DateTimeOffset FirstSeenUtc,
         DateTimeOffset LastSeenUtc,
         bool WasTruncated);
+}
+
+public sealed partial class ReliabilitySensor
+{
+    internal IReadOnlyList<JsonElement> GetRecentBindingAggregates() =>
+        _bindingAggregator?.SnapshotRecent() ?? [];
 }

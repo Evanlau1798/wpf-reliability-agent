@@ -42,6 +42,42 @@ public sealed class ReadOnlyCommandExecutorTests
     }
 
     [Fact]
+    public async Task BindingGetErrorsReturnsRecentAggregateSummaries()
+    {
+        await using var sensor = ReliabilitySensor.Start(new ReliabilitySensorOptions
+        {
+            ApiBaseUri = new Uri("https://reliability.example.test"),
+            DeviceId = "device-test",
+            DeviceToken = "test-token",
+            ApplicationId = "demo-app",
+            ApplicationVersion = "1.2.3",
+            BindingBurstThreshold = 1,
+            DisableBackgroundPersistence = true,
+        });
+        Assert.True(sensor.ReportBindingFailure(
+            "DisplayNmae",
+            "Text",
+            "TextBlock",
+            "PersonName"));
+        var command = (await ReadCommandAsync()) with
+        {
+            Tool = DiagnosticTool.BindingGetErrors,
+            Arguments = JsonSerializer.SerializeToElement(new { }),
+        };
+        var executor = new ReadOnlyCommandExecutor(sensor);
+
+        var result = await executor.ExecuteAsync(command, CancellationToken.None);
+
+        var aggregates = result.GetProperty("aggregates");
+        Assert.Equal(1, aggregates.GetArrayLength());
+        var aggregate = aggregates[0];
+        Assert.Equal("DisplayNmae", aggregate.GetProperty("binding_path").GetString());
+        Assert.Equal("Text", aggregate.GetProperty("target_property").GetString());
+        Assert.Equal("TextBlock", aggregate.GetProperty("element_type").GetString());
+        Assert.Equal(1, aggregate.GetProperty("occurrence_count").GetInt32());
+    }
+
+    [Fact]
     public async Task MutationToolIsRejectedBySwitchDispatcher()
     {
         await using var sensor = ReliabilitySensor.Start(null);

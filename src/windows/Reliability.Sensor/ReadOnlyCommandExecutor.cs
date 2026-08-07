@@ -29,8 +29,11 @@ internal sealed class ReadOnlyCommandExecutor
                 queued_event_count = _sensor.QueuedEventCount,
                 dropped_event_count = _sensor.DroppedEventCount,
             })),
-            DiagnosticTool.BindingGetErrors
-                or DiagnosticTool.BindingGetLiveCandidates
+            DiagnosticTool.BindingGetErrors => Task.FromResult(JsonSerializer.SerializeToElement(new
+            {
+                aggregates = _sensor.GetRecentBindingAggregates(),
+            })),
+            DiagnosticTool.BindingGetLiveCandidates
                 or DiagnosticTool.ExceptionGetRecent
                 or DiagnosticTool.UiGetSubtree
                 or DiagnosticTool.UiGetElementDetails
