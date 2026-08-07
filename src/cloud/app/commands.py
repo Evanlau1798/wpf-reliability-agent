@@ -6,6 +6,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 from pydantic import BaseModel, Field
 
+from app.contracts import sha256_canonical
 from app.firestore_client import COMMANDS_COLLECTION
 from app.models import CommandResult, DiagnosticCommand
 
@@ -22,6 +23,10 @@ class CommandLeaseRequest(BaseModel):
     app_session_id: str = Field(min_length=1, max_length=256)
     wait_seconds: int = Field(ge=0, le=25)
     max_commands: Literal[1]
+
+
+def command_result_hash(result: CommandResult) -> str:
+    return sha256_canonical(result.model_dump(mode="json", exclude={"result_hash"}))
 
 
 def write_command(client: firestore.Client, command: DiagnosticCommand) -> None:
@@ -167,6 +172,8 @@ def validate_command_completion_binding(
             or result.incident_id != command.incident_id
         ):
             raise ValueError("Command completion binding mismatch")
+        if result.result_hash != command_result_hash(result):
+            raise ValueError("Result hash mismatch")
         return command
 
     return validate(client.transaction())

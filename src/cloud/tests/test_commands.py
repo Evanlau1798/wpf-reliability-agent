@@ -8,6 +8,7 @@ import pytest
 from app import commands
 from app.commands import (
     CommandStatus,
+    command_result_hash,
     expire_command_if_needed,
     lease_next_command,
     pending_command_query,
@@ -244,5 +245,40 @@ def test_command_completion_rejects_wrong_lease_owner_or_session(
             client,
             command_id="command-read-1",
             lease_owner=lease_owner,
+            result=result,
+        )
+
+
+def test_command_result_hash_covers_the_complete_result_envelope() -> None:
+    result = CommandResult.model_validate_json(
+        (FIXTURES / "command-result-success.json").read_text(encoding="utf-8")
+    )
+    expected = command_result_hash(result)
+
+    assert len(expected) == 64
+    assert command_result_hash(result.model_copy(update={"result": {"nodes": 43}})) != expected
+    assert command_result_hash(result.model_copy(update={"app_session_id": "session-2"})) != expected
+
+
+def test_command_completion_rejects_mismatched_result_hash(monkeypatch) -> None:
+    client = Mock()
+    transaction = Mock()
+    document = client.collection.return_value.document.return_value
+    client.transaction.return_value = transaction
+    payload = json.loads(
+        (FIXTURES / "diagnostic-command-valid-read.json").read_text(encoding="utf-8")
+    )
+    payload.update({"status": CommandStatus.LEASED.value, "lease_owner": "device-a"})
+    document.get.return_value = Mock(exists=True, to_dict=lambda: payload)
+    monkeypatch.setattr(commands.firestore, "transactional", lambda callback: callback)
+    result = CommandResult.model_validate_json(
+        (FIXTURES / "command-result-success.json").read_text(encoding="utf-8")
+    )
+
+    with pytest.raises(ValueError, match="Result hash mismatch"):
+        validate_command_completion_binding(
+            client,
+            command_id="command-read-1",
+            lease_owner="device-a",
             result=result,
         )
