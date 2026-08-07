@@ -1,9 +1,15 @@
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import Mock
 
 from app import commands
-from app.commands import CommandStatus, write_command, write_command_once
+from app.commands import (
+    CommandStatus,
+    expire_command_if_needed,
+    write_command,
+    write_command_once,
+)
 from app.models import DiagnosticCommand
 
 
@@ -60,3 +66,33 @@ def test_command_idempotency_key_returns_existing_command_without_second_create(
     assert command_id == "command-existing"
     transaction.get.assert_called_once_with(query)
     transaction.create.assert_not_called()
+
+
+def test_expired_pending_command_transitions_to_expired(monkeypatch) -> None:
+    client = Mock()
+    transaction = Mock()
+    document = client.collection.return_value.document.return_value
+    client.transaction.return_value = transaction
+    payload = json.loads(
+        (FIXTURES / "diagnostic-command-valid-read.json").read_text(encoding="utf-8")
+    )
+    payload["status"] = CommandStatus.PENDING.value
+    document.get.return_value = Mock(exists=True, to_dict=lambda: payload)
+    monkeypatch.setattr(commands.firestore, "transactional", lambda callback: callback)
+
+    expired = expire_command_if_needed(
+        client,
+        command_id=payload["command_id"],
+        now=datetime(2026, 8, 7, 0, 2, tzinfo=UTC),
+    )
+
+    assert expired is True
+    transaction.update.assert_called_once_with(
+        document,
+        {
+            "status": CommandStatus.EXPIRED.value,
+            "lease_owner": None,
+            "lease_until": None,
+            "updated_at": commands.firestore.SERVER_TIMESTAMP,
+        },
+    )

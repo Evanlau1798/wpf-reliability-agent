@@ -1,4 +1,5 @@
 from enum import StrEnum
+from datetime import datetime
 
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
@@ -39,6 +40,42 @@ def write_command_once(client: firestore.Client, command: DiagnosticCommand) -> 
         return command.command_id
 
     return write(client.transaction())
+
+
+def expire_command_if_needed(
+    client: firestore.Client,
+    *,
+    command_id: str,
+    now: datetime,
+) -> bool:
+    document = client.collection(COMMANDS_COLLECTION).document(command_id)
+
+    @firestore.transactional
+    def expire(transaction: firestore.Transaction) -> bool:
+        snapshot = document.get(transaction=transaction)
+        if not snapshot.exists:
+            raise ValueError("Command does not exist")
+        data = snapshot.to_dict() or {}
+        if data.get("status") not in {
+            CommandStatus.PENDING.value,
+            CommandStatus.LEASED.value,
+        }:
+            return False
+        command = DiagnosticCommand.model_validate(data)
+        if command.expires_at_utc > now:
+            return False
+        transaction.update(
+            document,
+            {
+                "status": CommandStatus.EXPIRED.value,
+                "lease_owner": None,
+                "lease_until": None,
+                "updated_at": firestore.SERVER_TIMESTAMP,
+            },
+        )
+        return True
+
+    return expire(client.transaction())
 
 
 def _command_document(command: DiagnosticCommand) -> dict[str, object]:
