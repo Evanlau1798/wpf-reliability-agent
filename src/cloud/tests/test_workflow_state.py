@@ -23,6 +23,35 @@ def test_incident_state_enum_matches_proposal_states() -> None:
     }
 
 
+def test_allowed_transition_table_covers_every_state_pair() -> None:
+    state = workflow_state.IncidentState
+    expected = {
+        (state.NEW, state.TRIAGING),
+        (state.TRIAGING, state.COLLECTING_EVIDENCE),
+        (state.COLLECTING_EVIDENCE, state.INVESTIGATING),
+        (state.INVESTIGATING, state.COLLECTING_EVIDENCE),
+        (state.INVESTIGATING, state.AWAITING_APPROVAL),
+        (state.INVESTIGATING, state.REPORTING),
+        (state.AWAITING_APPROVAL, state.EXECUTING),
+        (state.AWAITING_APPROVAL, state.REJECTED),
+        (state.EXECUTING, state.VERIFYING),
+        (state.EXECUTING, state.FAILED_SAFE),
+        (state.VERIFYING, state.MITIGATED),
+        (state.VERIFYING, state.INVESTIGATING),
+        (state.VERIFYING, state.FAILED_SAFE),
+        (state.REPORTING, state.CLOSED),
+        (state.MITIGATED, state.REPORTING),
+        (state.REJECTED, state.REPORTING),
+        (state.FAILED_SAFE, state.REPORTING),
+    }
+
+    for source in state:
+        for target in state:
+            assert ((source, target) in workflow_state.ALLOWED_TRANSITIONS) is (
+                (source, target) in expected
+            )
+
+
 def test_new_incident_run_commits_transition_and_processed_marker_together(monkeypatch) -> None:
     client = Mock()
     transaction = Mock()

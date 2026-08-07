@@ -20,6 +20,29 @@ class IncidentState(StrEnum):
     CLOSED = "CLOSED"
 
 
+ALLOWED_TRANSITIONS = frozenset(
+    {
+        (IncidentState.NEW, IncidentState.TRIAGING),
+        (IncidentState.TRIAGING, IncidentState.COLLECTING_EVIDENCE),
+        (IncidentState.COLLECTING_EVIDENCE, IncidentState.INVESTIGATING),
+        (IncidentState.INVESTIGATING, IncidentState.COLLECTING_EVIDENCE),
+        (IncidentState.INVESTIGATING, IncidentState.AWAITING_APPROVAL),
+        (IncidentState.INVESTIGATING, IncidentState.REPORTING),
+        (IncidentState.AWAITING_APPROVAL, IncidentState.EXECUTING),
+        (IncidentState.AWAITING_APPROVAL, IncidentState.REJECTED),
+        (IncidentState.EXECUTING, IncidentState.VERIFYING),
+        (IncidentState.EXECUTING, IncidentState.FAILED_SAFE),
+        (IncidentState.VERIFYING, IncidentState.MITIGATED),
+        (IncidentState.VERIFYING, IncidentState.INVESTIGATING),
+        (IncidentState.VERIFYING, IncidentState.FAILED_SAFE),
+        (IncidentState.REPORTING, IncidentState.CLOSED),
+        (IncidentState.MITIGATED, IncidentState.REPORTING),
+        (IncidentState.REJECTED, IncidentState.REPORTING),
+        (IncidentState.FAILED_SAFE, IncidentState.REPORTING),
+    }
+)
+
+
 def commit_new_incident_run(
     client: firestore.Client,
     *,
