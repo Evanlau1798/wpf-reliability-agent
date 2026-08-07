@@ -206,6 +206,10 @@ public sealed partial class ReliabilitySensor
                     {
                         continue;
                     }
+                    if (isMutation && !MutationCommandVerifier.HasRequiredRisk(command))
+                    {
+                        continue;
+                    }
                     if (commandJournal is not null)
                     {
                         var completed = await commandJournal.LoadCompletedCommandAsync(
