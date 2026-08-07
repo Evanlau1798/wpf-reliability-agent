@@ -8,6 +8,7 @@ from typing import Annotated
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from pydantic import SecretStr
 
+from app import firestore_client
 from app.auth import (
     OPERATOR_CSRF_COOKIE,
     OPERATOR_SESSION_COOKIE,
@@ -78,11 +79,33 @@ def operator_login(
 
 @app.post("/v1/approvals/{approval_id}:decide")
 def decide_approval(
+    request: Request,
     approval_id: str,
     decision: ApprovalDecisionRequest,
-    _: Annotated[str, Depends(authenticate_operator_session)],
+    operator_id: Annotated[str, Depends(authenticate_operator_session)],
     _csrf: Annotated[None, Depends(validate_operator_csrf)],
 ) -> dict[str, str]:
+    client = get_firestore_client(request.app.state.settings.google_cloud_project)
+    try:
+        if decision.decision == "approve":
+            firestore_client.approve_pending_approval(
+                client,
+                approval_id=approval_id,
+                actor=operator_id,
+                now=datetime.now(UTC),
+            )
+        else:
+            firestore_client.reject_pending_approval(
+                client,
+                approval_id=approval_id,
+                actor=operator_id,
+                now=datetime.now(UTC),
+            )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Approval decision rejected",
+        ) from exc
     return {"approval_id": approval_id, "decision": decision.decision}
 
 

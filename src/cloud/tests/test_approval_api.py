@@ -5,7 +5,7 @@ from typing import Annotated
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
-from app import auth
+from app import auth, firestore_client
 from app.main import app
 
 
@@ -93,6 +93,17 @@ def test_approval_post_requires_matching_csrf_token() -> None:
 
 def test_approval_decide_route_accepts_only_approve_or_reject(monkeypatch) -> None:
     _set_api_environment(monkeypatch)
+    monkeypatch.setattr("app.main.get_firestore_client", lambda _project_id: object())
+    monkeypatch.setattr(
+        firestore_client,
+        "approve_pending_approval",
+        lambda _client, *, approval_id, actor, now: f"command-{approval_id}",
+    )
+    monkeypatch.setattr(
+        firestore_client,
+        "reject_pending_approval",
+        lambda _client, *, approval_id, actor, now: 1,
+    )
 
     with TestClient(app, base_url="https://testserver") as client:
         login = client.post("/console/login", json={"token": "operator-secret"})
@@ -119,6 +130,48 @@ def test_approval_decide_route_accepts_only_approve_or_reject(monkeypatch) -> No
     assert reject.status_code == 200
     assert reject.json() == {"approval_id": "approval-1", "decision": "reject"}
     assert invalid.status_code == 422
+
+
+def test_approval_decide_route_records_authenticated_operator_actor(monkeypatch) -> None:
+    _set_api_environment(monkeypatch)
+    client_marker = object()
+    calls: list[tuple[str, object, str, str]] = []
+    monkeypatch.setattr("app.main.get_firestore_client", lambda _project_id: client_marker)
+
+    def approve(client, *, approval_id, actor, now):
+        assert now.tzinfo is not None
+        calls.append(("approve", client, approval_id, actor))
+        return "command-1"
+
+    def reject(client, *, approval_id, actor, now):
+        assert now.tzinfo is not None
+        calls.append(("reject", client, approval_id, actor))
+        return 6
+
+    monkeypatch.setattr(firestore_client, "approve_pending_approval", approve)
+    monkeypatch.setattr(firestore_client, "reject_pending_approval", reject)
+
+    with TestClient(app, base_url="https://testserver") as client:
+        login = client.post("/console/login", json={"token": "operator-secret"})
+        csrf = login.cookies.get(auth.OPERATOR_CSRF_COOKIE)
+        assert csrf is not None
+        approve_response = client.post(
+            "/v1/approvals/approval-1:decide",
+            headers={auth.OPERATOR_CSRF_HEADER: csrf},
+            json={"decision": "approve"},
+        )
+        reject_response = client.post(
+            "/v1/approvals/approval-2:decide",
+            headers={auth.OPERATOR_CSRF_HEADER: csrf},
+            json={"decision": "reject"},
+        )
+
+    assert approve_response.status_code == 200
+    assert reject_response.status_code == 200
+    assert calls == [
+        ("approve", client_marker, "approval-1", "demo-operator"),
+        ("reject", client_marker, "approval-2", "demo-operator"),
+    ]
 
 
 def test_approval_decide_route_requires_valid_operator_session(monkeypatch) -> None:

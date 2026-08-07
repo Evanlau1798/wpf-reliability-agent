@@ -104,8 +104,12 @@ def approve_pending_approval(
     client: firestore.Client,
     *,
     approval_id: str,
+    actor: str,
     now: datetime,
 ) -> str:
+    if not actor:
+        raise ValueError("Approval actor is required")
+
     @firestore.transactional
     def approve(transaction: firestore.Transaction) -> str | None:
         validated = _validate_pending_approval_in_transaction(
@@ -116,7 +120,10 @@ def approve_pending_approval(
         )
         if validated is None:
             return None
-        approval = validated[0]
+        approval, approval_document, incident_document, incident = validated
+        audit_sequence = incident.get("audit_sequence")
+        if type(audit_sequence) is not int or audit_sequence < 0:
+            raise ValueError("Incident audit sequence is invalid")
         idempotency_key = sha256_canonical(
             {
                 "incident_id": approval.incident_id,
@@ -146,6 +153,24 @@ def approve_pending_approval(
             client.collection(COMMANDS_COLLECTION).document(command.command_id),
             command_document(command),
         )
+        transaction.update(
+            approval_document,
+            {
+                "status": ApprovalStatus.APPROVED.value,
+                "approved_by": actor,
+                "approved_at_utc": now.isoformat().replace("+00:00", "Z"),
+                "updated_at": firestore.SERVER_TIMESTAMP,
+            },
+        )
+        _write_approval_decision_audit(
+            transaction,
+            incident_document=incident_document,
+            sequence=audit_sequence + 1,
+            approval_id=approval.approval_id,
+            actor=actor,
+            status=ApprovalStatus.APPROVED,
+            now=now,
+        )
         return command.command_id
 
     command_id = approve(client.transaction())
@@ -158,8 +183,12 @@ def reject_pending_approval(
     client: firestore.Client,
     *,
     approval_id: str,
+    actor: str,
     now: datetime,
 ) -> int:
+    if not actor:
+        raise ValueError("Approval actor is required")
+
     @firestore.transactional
     def reject(transaction: firestore.Transaction) -> int | None:
         validated = _validate_pending_approval_in_transaction(
@@ -174,6 +203,9 @@ def reject_pending_approval(
         state_version = incident.get("state_version")
         if type(state_version) is not int:
             raise ValueError("Incident state version is invalid")
+        audit_sequence = incident.get("audit_sequence")
+        if type(audit_sequence) is not int or audit_sequence < 0:
+            raise ValueError("Incident audit sequence is invalid")
 
         from app.workflow_state import IncidentState, transition_incident_in_transaction
 
@@ -191,12 +223,51 @@ def reject_pending_approval(
                 "updated_at": firestore.SERVER_TIMESTAMP,
             },
         )
+        _write_approval_decision_audit(
+            transaction,
+            incident_document=incident_document,
+            sequence=audit_sequence + 2,
+            approval_id=approval_id,
+            actor=actor,
+            status=ApprovalStatus.REJECTED,
+            now=now,
+        )
         return next_version
 
     next_version = reject(client.transaction())
     if next_version is None:
         raise ValueError("Approval expired")
     return next_version
+
+
+def _write_approval_decision_audit(
+    transaction: firestore.Transaction,
+    *,
+    incident_document: firestore.DocumentReference,
+    sequence: int,
+    approval_id: str,
+    actor: str,
+    status: ApprovalStatus,
+    now: datetime,
+) -> None:
+    transaction.update(
+        incident_document,
+        {
+            "audit_sequence": sequence,
+            "updated_at": firestore.SERVER_TIMESTAMP,
+        },
+    )
+    transaction.create(
+        incident_document.collection(AUDIT_COLLECTION).document(str(sequence)),
+        {
+            "sequence": sequence,
+            "type": "approval.decision",
+            "actor": actor,
+            "approval_id": approval_id,
+            "status": status.value,
+            "timestamp_utc": now.isoformat().replace("+00:00", "Z"),
+        },
+    )
 
 
 def _validate_pending_approval_in_transaction(

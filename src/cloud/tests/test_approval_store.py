@@ -147,7 +147,7 @@ def test_app_session_mismatch_rejects_approval(monkeypatch) -> None:
 
 
 def test_approved_decision_creates_exact_unique_mutation_command(monkeypatch) -> None:
-    client, transaction, _ = _approval_client(_approval_document())
+    client, transaction, snapshot = _approval_client(_approval_document())
     monkeypatch.setattr(firestore_client.firestore, "transactional", lambda callback: callback)
     now = datetime(2026, 8, 8, 5, tzinfo=UTC)
     arguments_hash = firestore_client.sha256_canonical(
@@ -169,14 +169,19 @@ def test_approved_decision_creates_exact_unique_mutation_command(monkeypatch) ->
     command_id = firestore_client.approve_pending_approval(
         client,
         approval_id="approval-1",
+        actor="demo-operator",
         now=now,
     )
 
     assert command_id == f"cmd-{idempotency_key}"
     client.collection.assert_called_once_with(firestore_client.COMMANDS_COLLECTION)
     client.collection.return_value.document.assert_called_once_with(command_id)
-    transaction.create.assert_called_once()
-    command_document = transaction.create.call_args.args[1]
+    assert transaction.create.call_count == 2
+    command_document = next(
+        call.args[1]
+        for call in transaction.create.call_args_list
+        if call.args[1].get("tool") == "recovery.set_feature_flag"
+    )
     assert command_document["incident_id"] == "incident-1"
     assert command_document["target_app_session_id"] == "session-1"
     assert command_document["tool"] == "recovery.set_feature_flag"
@@ -193,6 +198,30 @@ def test_approved_decision_creates_exact_unique_mutation_command(monkeypatch) ->
     assert command_document["expires_at_utc"] == "2026-08-08T05:01:00Z"
     assert command_document["timeout_ms"] == 10_000
     assert command_document["status"] == "PENDING"
+    transaction.update.assert_any_call(
+        snapshot.reference,
+        {
+            "status": "APPROVED",
+            "approved_by": "demo-operator",
+            "approved_at_utc": "2026-08-08T05:00:00Z",
+            "updated_at": firestore_client.firestore.SERVER_TIMESTAMP,
+        },
+    )
+    transaction.update.assert_any_call(
+        snapshot.reference.parent.parent,
+        {
+            "audit_sequence": 9,
+            "updated_at": firestore_client.firestore.SERVER_TIMESTAMP,
+        },
+    )
+    audit_event = next(
+        call.args[1]
+        for call in transaction.create.call_args_list
+        if call.args[1].get("type") == "approval.decision"
+    )
+    assert audit_event["actor"] == "demo-operator"
+    assert audit_event["status"] == "APPROVED"
+    assert audit_event["timestamp_utc"] == "2026-08-08T05:00:00Z"
 
 
 def test_rejected_decision_enters_rejected_reporting_path_without_command(monkeypatch) -> None:
@@ -207,15 +236,17 @@ def test_rejected_decision_enters_rejected_reporting_path_without_command(monkey
         },
     )
     monkeypatch.setattr(firestore_client.firestore, "transactional", lambda callback: callback)
+    now = datetime(2026, 8, 8, 5, tzinfo=UTC)
 
     next_version = firestore_client.reject_pending_approval(
         client,
         approval_id="approval-1",
-        now=datetime(2026, 8, 8, 5, tzinfo=UTC),
+        actor="demo-operator",
+        now=now,
     )
 
     assert next_version == 6
-    assert transaction.update.call_count == 2
+    assert transaction.update.call_count == 3
     transaction.update.assert_any_call(
         snapshot.reference,
         {
@@ -232,7 +263,22 @@ def test_rejected_decision_enters_rejected_reporting_path_without_command(monkey
             "updated_at": firestore_client.firestore.SERVER_TIMESTAMP,
         },
     )
-    transaction.create.assert_called_once()
+    transaction.update.assert_any_call(
+        snapshot.reference.parent.parent,
+        {
+            "audit_sequence": 10,
+            "updated_at": firestore_client.firestore.SERVER_TIMESTAMP,
+        },
+    )
+    assert transaction.create.call_count == 2
+    audit_event = next(
+        call.args[1]
+        for call in transaction.create.call_args_list
+        if call.args[1].get("type") == "approval.decision"
+    )
+    assert audit_event["actor"] == "demo-operator"
+    assert audit_event["status"] == "REJECTED"
+    assert audit_event["timestamp_utc"] == "2026-08-08T05:00:00Z"
     assert client.collection.call_count == 0
 
 
@@ -259,7 +305,14 @@ def _approval_client(
     incident_document.collection.return_value = evidence_query
     incident_document.get.return_value = Mock(
         exists=True,
-        to_dict=lambda: incident or {"proposal_version": 3, "app_session_id": "session-1"},
+        to_dict=lambda: incident
+        or {
+            "proposal_version": 3,
+            "app_session_id": "session-1",
+            "state": "AWAITING_APPROVAL",
+            "state_version": 5,
+            "audit_sequence": 8,
+        },
     )
     client.transaction.return_value = transaction
     client.collection_group.return_value.where.return_value.limit.return_value = query
