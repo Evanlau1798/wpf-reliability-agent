@@ -1,7 +1,9 @@
 import json
 from pathlib import Path
 
-from app.approval import next_proposal_version
+import pytest
+
+from app.approval import next_proposal_version, validate_recovery_proposal
 from app.contracts import sha256_canonical
 from app.firestore_client import evidence_snapshot_hash
 from app.models import DiagnosticTool, ProposedAction
@@ -47,3 +49,22 @@ def test_proposal_arguments_hash_matches_cross_language_fixture() -> None:
     fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
 
     assert sha256_canonical(fixture["input"]) == fixture["sha256"]
+
+
+def test_recovery_proposal_rejects_arbitrary_feature_name() -> None:
+    proposal = ProposedAction.model_validate(
+        {
+            "tool": "recovery.set_feature_flag",
+            "arguments": {
+                "feature": "UnreviewedFeature",
+                "enabled": False,
+                "expected_current_value": True,
+            },
+            "evidence_ids": ["evidence-1"],
+            "expected_effect": "Reduce UI load.",
+            "rollback_plan": "Restore the feature.",
+        }
+    )
+
+    with pytest.raises(ValueError, match="ExperimentalPeopleGrid"):
+        validate_recovery_proposal(proposal)
