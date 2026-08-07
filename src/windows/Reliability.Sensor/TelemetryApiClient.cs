@@ -138,8 +138,9 @@ internal sealed class TelemetryApiClient : IDisposable
 
         response.EnsureSuccessStatusCode();
         var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-        return JsonSerializer.Deserialize(json, ContractJsonContext.Default.DiagnosticCommand)
+        var command = JsonSerializer.Deserialize(json, ContractJsonContext.Default.DiagnosticCommand)
             ?? throw new JsonException("Command lease response is empty.");
+        return ContractValidator.Validate(command, json) ? command : null;
     }
 
     public void Dispose() => _httpClient.Dispose();
