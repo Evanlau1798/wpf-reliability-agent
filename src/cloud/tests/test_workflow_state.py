@@ -77,6 +77,21 @@ def test_state_transition_rejects_stale_version(monkeypatch) -> None:
     transaction.update.assert_not_called()
 
 
+def test_illegal_new_to_executing_transition_leaves_document_unchanged() -> None:
+    client = Mock()
+
+    with pytest.raises(ValueError, match="Illegal state transition"):
+        workflow_state.transition_incident(
+            client,
+            incident_id="incident-1",
+            expected_state=workflow_state.IncidentState.NEW,
+            expected_version=1,
+            target_state=workflow_state.IncidentState.EXECUTING,
+        )
+
+    client.collection.assert_not_called()
+
+
 def test_incident_lease_allows_only_one_active_owner(monkeypatch) -> None:
     client = Mock()
     transaction = Mock()
