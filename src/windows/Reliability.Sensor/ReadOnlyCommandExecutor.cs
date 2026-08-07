@@ -60,8 +60,9 @@ internal sealed class ReadOnlyCommandExecutor
             DiagnosticTool.PerformanceSample => await ExecutePerformanceSampleAsync(
                 command.Arguments,
                 cancellationToken).ConfigureAwait(false),
-            DiagnosticTool.StateCompareSnapshots => throw new NotSupportedException(
-                    "Read-only diagnostic tool is not implemented yet."),
+            DiagnosticTool.StateCompareSnapshots => StateSnapshotComparer.Compare(
+                RequiredObject(command.Arguments, "before"),
+                RequiredObject(command.Arguments, "after")),
             _ => throw new InvalidOperationException(
                 "Command tool is not available to the read-only executor."),
         };
@@ -169,6 +170,15 @@ internal sealed class ReadOnlyCommandExecutor
             throw new InvalidOperationException("Command arguments are invalid.");
         }
         return value.EnumerateArray().Select(item => item.GetString()!).ToArray();
+    }
+
+    private static JsonElement RequiredObject(JsonElement arguments, string name)
+    {
+        if (!arguments.TryGetProperty(name, out var value) || value.ValueKind is not JsonValueKind.Object)
+        {
+            throw new InvalidOperationException("Command arguments are invalid.");
+        }
+        return value;
     }
 
     private async Task<JsonElement> ExecutePerformanceSampleAsync(

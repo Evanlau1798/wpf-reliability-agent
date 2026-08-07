@@ -1,0 +1,18 @@
+{
+  "before": {
+    "binding_errors_per_second": 100.0,
+    "frame": {
+      "p95_ms": 40.0
+    },
+    "visual_count": 1500,
+    "status": "DEGRADED"
+  },
+  "after": {
+    "binding_errors_per_second": 0.0,
+    "frame": {
+      "p95_ms": 20.0
+    },
+    "visual_count": 400,
+    "status": "HEALTHY"
+  }
+}
