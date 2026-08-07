@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from app.models import AgentDecision, RiskLevel
+from app.models import AgentDecision, DiagnosticTool, RiskLevel
 from app.policy import POLICY_VERSION, READ_ONLY_DIAGNOSTIC_TOOLS, risk_for_tool
 
 
@@ -62,3 +62,13 @@ def test_policy_version_matches_approval_contract_fixture() -> None:
     approval = json.loads(fixture_path.read_text(encoding="utf-8"))
 
     assert POLICY_VERSION == approval["policy_version"]
+
+
+def test_known_tool_risk_table_covers_every_diagnostic_tool() -> None:
+    expected = {
+        **{tool: RiskLevel.LOW for tool in READ_ONLY_DIAGNOSTIC_TOOLS},
+        DiagnosticTool.RECOVERY_SET_FEATURE_FLAG: RiskLevel.HIGH,
+    }
+
+    assert set(expected) == set(DiagnosticTool)
+    assert {tool: risk_for_tool(tool) for tool in DiagnosticTool} == expected
