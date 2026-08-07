@@ -1,4 +1,5 @@
 import io
+import json
 
 from fastapi.testclient import TestClient
 
@@ -25,6 +26,53 @@ def test_publisher_client_provider_reuses_client(monkeypatch) -> None:
 
     assert first is second
     assert len(created) == 1
+
+
+def test_publish_work_sends_only_minimal_data_and_string_attributes(monkeypatch) -> None:
+    calls: list[tuple[str, bytes, dict[str, str]]] = []
+
+    class Future:
+        def result(self, *, timeout: int) -> str:
+            assert timeout == 10
+            return "message-1"
+
+    class Publisher:
+        def topic_path(self, project_id: str, topic_name: str) -> str:
+            return f"projects/{project_id}/topics/{topic_name}"
+
+        def publish(self, topic_path: str, data: bytes, **attributes: str) -> Future:
+            calls.append((topic_path, data, attributes))
+            return Future()
+
+    monkeypatch.setattr(pubsub, "get_publisher_client", lambda: Publisher())
+    message_id = pubsub.publish_work(
+        "project-test",
+        "incident-work",
+        {
+            "incident_id": "incident-1",
+            "evidence_revision": 2,
+            "trigger": "binding.aggregate",
+            "event_id": "event-1",
+            "raw_evidence": {"message": "must-not-publish"},
+        },
+    )
+
+    assert message_id == "message-1"
+    assert len(calls) == 1
+    topic_path, data, attributes = calls[0]
+    assert topic_path == "projects/project-test/topics/incident-work"
+    assert json.loads(data) == {
+        "incident_id": "incident-1",
+        "evidence_revision": 2,
+        "trigger": "binding.aggregate",
+        "event_id": "event-1",
+    }
+    assert attributes == {
+        "incident_id": "incident-1",
+        "evidence_revision": "2",
+        "trigger": "binding.aggregate",
+        "event_id": "event-1",
+    }
 
 
 def test_telemetry_publishes_work_after_durable_ingest(monkeypatch) -> None:
