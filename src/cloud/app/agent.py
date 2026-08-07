@@ -17,21 +17,10 @@ from app.models import (
     ProposedAction,
     RiskLevel,
 )
+from app.policy import READ_ONLY_DIAGNOSTIC_TOOLS
 from app.workflow_state import MAX_INVESTIGATION_ROUNDS, MAX_READ_ONLY_TOOL_CALLS
 
 
-READ_ONLY_DIAGNOSTIC_TOOLS = frozenset(
-    {
-        DiagnosticTool.HEALTH_GET_SNAPSHOT,
-        DiagnosticTool.BINDING_GET_ERRORS,
-        DiagnosticTool.BINDING_GET_LIVE_CANDIDATES,
-        DiagnosticTool.EXCEPTION_GET_RECENT,
-        DiagnosticTool.UI_GET_SUBTREE,
-        DiagnosticTool.UI_GET_ELEMENT_DETAILS,
-        DiagnosticTool.PERFORMANCE_SAMPLE,
-        DiagnosticTool.STATE_COMPARE_SNAPSHOTS,
-    }
-)
 TOOL_DESCRIPTIONS = {
     DiagnosticTool.HEALTH_GET_SNAPSHOT.value: "Current app, session, and sensor health.",
     DiagnosticTool.BINDING_GET_ERRORS.value: "Aggregated binding error evidence.",
