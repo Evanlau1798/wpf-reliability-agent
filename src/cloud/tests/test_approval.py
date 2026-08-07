@@ -68,3 +68,22 @@ def test_recovery_proposal_rejects_arbitrary_feature_name() -> None:
 
     with pytest.raises(ValueError, match="ExperimentalPeopleGrid"):
         validate_recovery_proposal(proposal)
+
+
+def test_recovery_proposal_requires_expected_enabled_precondition() -> None:
+    proposal = ProposedAction.model_validate(
+        {
+            "tool": "recovery.set_feature_flag",
+            "arguments": {
+                "feature": "ExperimentalPeopleGrid",
+                "enabled": False,
+                "expected_current_value": False,
+            },
+            "evidence_ids": ["evidence-1"],
+            "expected_effect": "Reduce UI load.",
+            "rollback_plan": "Re-enable the feature.",
+        }
+    )
+
+    with pytest.raises(ValueError, match="expected current value"):
+        validate_recovery_proposal(proposal)
