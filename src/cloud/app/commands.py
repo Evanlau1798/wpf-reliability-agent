@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 from app.contracts import sha256_canonical
 from app.firestore_client import COMMANDS_COLLECTION
-from app.models import CommandResult, DiagnosticCommand
+from app.models import CommandResult, DiagnosticCommand, ResultStatus
 
 
 class CommandStatus(StrEnum):
@@ -158,25 +158,122 @@ def validate_command_completion_binding(
         snapshot = document.get(transaction=transaction)
         if not snapshot.exists:
             raise ValueError("Command does not exist")
-        data = snapshot.to_dict() or {}
-        if data.get("status") != CommandStatus.LEASED.value:
-            raise ValueError("Command is not leased")
-        if data.get("lease_owner") != lease_owner:
-            raise ValueError("Lease owner mismatch")
-        command = DiagnosticCommand.model_validate(data)
-        if result.app_session_id != command.target_app_session_id:
-            raise ValueError("App session mismatch")
-        if (
-            result.command_id != command_id
-            or result.command_id != command.command_id
-            or result.incident_id != command.incident_id
-        ):
-            raise ValueError("Command completion binding mismatch")
-        if result.result_hash != command_result_hash(result):
-            raise ValueError("Result hash mismatch")
-        return command
+        return _validate_completion_data(
+            snapshot.to_dict() or {},
+            command_id=command_id,
+            lease_owner=lease_owner,
+            result=result,
+        )
 
     return validate(client.transaction())
+
+
+def complete_command_once(
+    client: firestore.Client,
+    *,
+    command_id: str,
+    lease_owner: str,
+    result: CommandResult,
+) -> bool:
+    document = client.collection(COMMANDS_COLLECTION).document(command_id)
+
+    @firestore.transactional
+    def complete(transaction: firestore.Transaction) -> bool:
+        snapshot = document.get(transaction=transaction)
+        if not snapshot.exists:
+            raise ValueError("Command does not exist")
+        data = snapshot.to_dict() or {}
+        if data.get("status") in {
+            CommandStatus.COMPLETED.value,
+            CommandStatus.FAILED.value,
+            CommandStatus.EXPIRED.value,
+        } and isinstance(data.get("result_hash"), str):
+            _validate_replayed_completion(
+                data,
+                command_id=command_id,
+                lease_owner=lease_owner,
+                result=result,
+            )
+            if data["result_hash"] == result.result_hash:
+                return True
+            raise ValueError("Command result conflict")
+
+        _validate_completion_data(
+            data,
+            command_id=command_id,
+            lease_owner=lease_owner,
+            result=result,
+        )
+        status_value = (
+            CommandStatus.COMPLETED.value
+            if result.status is ResultStatus.SUCCEEDED
+            else (
+                CommandStatus.EXPIRED.value
+                if result.status is ResultStatus.EXPIRED
+                else CommandStatus.FAILED.value
+            )
+        )
+        transaction.update(
+            document,
+            {
+                "status": status_value,
+                "completion_result": result.model_dump(mode="json"),
+                "result_hash": result.result_hash,
+                "lease_until": None,
+                "completed_at": firestore.SERVER_TIMESTAMP,
+                "updated_at": firestore.SERVER_TIMESTAMP,
+            },
+        )
+        return False
+
+    return complete(client.transaction())
+
+
+def _validate_completion_data(
+    data: dict[str, object],
+    *,
+    command_id: str,
+    lease_owner: str,
+    result: CommandResult,
+) -> DiagnosticCommand:
+    if data.get("status") != CommandStatus.LEASED.value:
+        raise ValueError("Command is not leased")
+    if data.get("lease_owner") != lease_owner:
+        raise ValueError("Lease owner mismatch")
+    command = DiagnosticCommand.model_validate(data)
+    _validate_result_binding(command, command_id=command_id, result=result)
+    return command
+
+
+def _validate_replayed_completion(
+    data: dict[str, object],
+    *,
+    command_id: str,
+    lease_owner: str,
+    result: CommandResult,
+) -> None:
+    if data.get("lease_owner") != lease_owner:
+        raise ValueError("Lease owner mismatch")
+    command = DiagnosticCommand.model_validate(data)
+    _validate_result_binding(command, command_id=command_id, result=result)
+
+
+def _validate_result_binding(
+    command: DiagnosticCommand,
+    *,
+    command_id: str,
+    result: CommandResult,
+) -> None:
+    if result.app_session_id != command.target_app_session_id:
+        raise ValueError("App session mismatch")
+    if (
+        result.command_id != command_id
+        or result.command_id != command.command_id
+        or result.incident_id != command.incident_id
+    ):
+        raise ValueError("Command completion binding mismatch")
+    if result.result_hash != command_result_hash(result):
+        raise ValueError("Result hash mismatch")
 
 
 def _command_document(command: DiagnosticCommand) -> dict[str, object]:

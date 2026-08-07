@@ -9,6 +9,7 @@ from app import commands
 from app.commands import (
     CommandStatus,
     command_result_hash,
+    complete_command_once,
     expire_command_if_needed,
     lease_next_command,
     pending_command_query,
@@ -282,3 +283,45 @@ def test_command_completion_rejects_mismatched_result_hash(monkeypatch) -> None:
             lease_owner="device-a",
             result=result,
         )
+
+
+def test_same_command_result_resubmission_is_idempotent(monkeypatch) -> None:
+    client = Mock()
+    transaction = Mock()
+    document = client.collection.return_value.document.return_value
+    client.transaction.return_value = transaction
+    command = json.loads(
+        (FIXTURES / "diagnostic-command-valid-read.json").read_text(encoding="utf-8")
+    )
+    command.update({"status": CommandStatus.LEASED.value, "lease_owner": "device-a"})
+    result = CommandResult.model_validate_json(
+        (FIXTURES / "command-result-success.json").read_text(encoding="utf-8")
+    )
+    result = result.model_copy(update={"result_hash": command_result_hash(result)})
+    completed = {
+        **command,
+        "status": CommandStatus.COMPLETED.value,
+        "result_hash": result.result_hash,
+    }
+    document.get.side_effect = [
+        Mock(exists=True, to_dict=lambda: command),
+        Mock(exists=True, to_dict=lambda: completed),
+    ]
+    monkeypatch.setattr(commands.firestore, "transactional", lambda callback: callback)
+
+    first = complete_command_once(
+        client,
+        command_id="command-read-1",
+        lease_owner="device-a",
+        result=result,
+    )
+    replay = complete_command_once(
+        client,
+        command_id="command-read-1",
+        lease_owner="device-a",
+        result=result,
+    )
+
+    assert first is False
+    assert replay is True
+    transaction.update.assert_called_once()

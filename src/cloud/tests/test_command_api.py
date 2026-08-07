@@ -59,6 +59,34 @@ def test_command_complete_requires_device_auth(monkeypatch) -> None:
     assert response.headers["www-authenticate"] == "Bearer"
 
 
+def test_command_complete_reports_idempotent_replay(monkeypatch) -> None:
+    _set_environment(monkeypatch)
+    firestore_client = object()
+    monkeypatch.setattr(main, "get_firestore_client", lambda _project_id: firestore_client)
+    completed: list[tuple[object, str, str]] = []
+
+    def complete(client, *, command_id, lease_owner, result):
+        completed.append((client, command_id, lease_owner))
+        return True
+
+    monkeypatch.setattr(main, "complete_command_once", complete, raising=False)
+    result = (FIXTURES / "command-result-success.json").read_text(encoding="utf-8")
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/commands/command-read-1:complete",
+            content=result,
+            headers={
+                "Authorization": "Bearer secret-token",
+                "Content-Type": "application/json",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {"accepted": True, "idempotent": True}
+    assert completed == [(firestore_client, "command-read-1", "device-test")]
+
+
 def _set_environment(monkeypatch) -> None:
     monkeypatch.setenv("SERVICE_ROLE", "api")
     monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "project-test")

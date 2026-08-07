@@ -9,8 +9,8 @@ from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from app.auth import authenticate_device_token
 from app.commands import (
     CommandLeaseRequest,
+    complete_command_once,
     lease_next_command,
-    validate_command_completion_binding,
 )
 from app.config import Settings
 from app.firestore_client import claim_event_once, get_firestore_client, is_run_processed
@@ -78,7 +78,7 @@ def complete_command(
 ) -> object:
     client = get_firestore_client(request.app.state.settings.google_cloud_project)
     try:
-        validate_command_completion_binding(
+        idempotent = complete_command_once(
             client,
             command_id=command_id,
             lease_owner=authenticated_device_id,
@@ -89,10 +89,7 @@ def complete_command(
             status_code=status.HTTP_409_CONFLICT,
             detail="Command completion rejected",
         ) from exc
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Command completion is not available yet",
-    )
+    return {"accepted": True, "idempotent": idempotent}
 
 
 @app.post("/v1/work:push", status_code=status.HTTP_204_NO_CONTENT)
