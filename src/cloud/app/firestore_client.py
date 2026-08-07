@@ -79,7 +79,14 @@ def validate_pending_approval_decision(
     now: datetime,
 ) -> ApprovalRecord:
     @firestore.transactional
-    def validate(transaction: firestore.Transaction) -> ApprovalRecord | None:
+    def validate(
+        transaction: firestore.Transaction,
+    ) -> tuple[
+        ApprovalRecord,
+        firestore.DocumentReference,
+        firestore.DocumentReference,
+        dict[str, object],
+    ] | None:
         return _validate_pending_approval_in_transaction(
             client,
             transaction,
@@ -87,10 +94,10 @@ def validate_pending_approval_decision(
             now=now,
         )
 
-    approval = validate(client.transaction())
-    if approval is None:
+    validated = validate(client.transaction())
+    if validated is None:
         raise ValueError("Approval expired")
-    return approval
+    return validated[0]
 
 
 def approve_pending_approval(
@@ -101,14 +108,15 @@ def approve_pending_approval(
 ) -> str:
     @firestore.transactional
     def approve(transaction: firestore.Transaction) -> str | None:
-        approval = _validate_pending_approval_in_transaction(
+        validated = _validate_pending_approval_in_transaction(
             client,
             transaction,
             approval_id=approval_id,
             now=now,
         )
-        if approval is None:
+        if validated is None:
             return None
+        approval = validated[0]
         idempotency_key = sha256_canonical(
             {
                 "incident_id": approval.incident_id,
@@ -146,13 +154,63 @@ def approve_pending_approval(
     return command_id
 
 
+def reject_pending_approval(
+    client: firestore.Client,
+    *,
+    approval_id: str,
+    now: datetime,
+) -> int:
+    @firestore.transactional
+    def reject(transaction: firestore.Transaction) -> int | None:
+        validated = _validate_pending_approval_in_transaction(
+            client,
+            transaction,
+            approval_id=approval_id,
+            now=now,
+        )
+        if validated is None:
+            return None
+        _, approval_document, incident_document, incident = validated
+        state_version = incident.get("state_version")
+        if type(state_version) is not int:
+            raise ValueError("Incident state version is invalid")
+
+        from app.workflow_state import IncidentState, transition_incident_in_transaction
+
+        next_version = transition_incident_in_transaction(
+            transaction,
+            incident_document=incident_document,
+            expected_state=IncidentState.AWAITING_APPROVAL,
+            expected_version=state_version,
+            target_state=IncidentState.REJECTED,
+        )
+        transaction.update(
+            approval_document,
+            {
+                "status": ApprovalStatus.REJECTED.value,
+                "updated_at": firestore.SERVER_TIMESTAMP,
+            },
+        )
+        return next_version
+
+    next_version = reject(client.transaction())
+    if next_version is None:
+        raise ValueError("Approval expired")
+    return next_version
+
+
 def _validate_pending_approval_in_transaction(
     client: firestore.Client,
     transaction: firestore.Transaction,
     *,
     approval_id: str,
     now: datetime,
-) -> ApprovalRecord | None:
+) -> tuple[
+    ApprovalRecord,
+    firestore.DocumentReference,
+    firestore.DocumentReference,
+    dict[str, object],
+] | None:
     query = client.collection_group(APPROVALS_COLLECTION).where(
         filter=FieldFilter("approval_id", "==", approval_id)
     ).limit(2)
@@ -197,7 +255,7 @@ def _validate_pending_approval_in_transaction(
         raise ValueError("Approval arguments hash mismatch")
     if incident.get("app_session_id") != approval.target_app_session_id:
         raise ValueError("Approval app session mismatch")
-    return approval
+    return approval, snapshots[0].reference, incident_document, incident
 
 
 def next_evidence_revision(

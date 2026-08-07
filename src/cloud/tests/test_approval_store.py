@@ -195,6 +195,47 @@ def test_approved_decision_creates_exact_unique_mutation_command(monkeypatch) ->
     assert command_document["status"] == "PENDING"
 
 
+def test_rejected_decision_enters_rejected_reporting_path_without_command(monkeypatch) -> None:
+    client, transaction, snapshot = _approval_client(
+        _approval_document(),
+        incident={
+            "proposal_version": 3,
+            "app_session_id": "session-1",
+            "state": "AWAITING_APPROVAL",
+            "state_version": 5,
+            "audit_sequence": 8,
+        },
+    )
+    monkeypatch.setattr(firestore_client.firestore, "transactional", lambda callback: callback)
+
+    next_version = firestore_client.reject_pending_approval(
+        client,
+        approval_id="approval-1",
+        now=datetime(2026, 8, 8, 5, tzinfo=UTC),
+    )
+
+    assert next_version == 6
+    assert transaction.update.call_count == 2
+    transaction.update.assert_any_call(
+        snapshot.reference,
+        {
+            "status": "REJECTED",
+            "updated_at": firestore_client.firestore.SERVER_TIMESTAMP,
+        },
+    )
+    transaction.update.assert_any_call(
+        snapshot.reference.parent.parent,
+        {
+            "state": "REJECTED",
+            "state_version": 6,
+            "audit_sequence": 9,
+            "updated_at": firestore_client.firestore.SERVER_TIMESTAMP,
+        },
+    )
+    transaction.create.assert_called_once()
+    assert client.collection.call_count == 0
+
+
 def _approval_client(
     document: dict[str, object],
     *,

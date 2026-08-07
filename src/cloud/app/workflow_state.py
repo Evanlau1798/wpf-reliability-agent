@@ -207,47 +207,66 @@ def transition_incident(
 
     @firestore.transactional
     def transition(transaction: firestore.Transaction) -> int:
-        snapshot = incident_document.get(transaction=transaction)
-        if not snapshot.exists:
-            raise ValueError("Incident does not exist")
-        incident = snapshot.to_dict() or {}
-        state_version = incident.get("state_version")
-        audit_sequence = incident.get("audit_sequence")
-        if incident.get("state") != expected_state.value:
-            raise ValueError("Incident state does not match")
-        if type(state_version) is not int or state_version != expected_version:
-            raise ValueError("Stale state version")
-        if type(audit_sequence) is not int or audit_sequence < 0:
-            raise ValueError("Incident audit sequence is invalid")
-
-        next_version = state_version + 1
-        next_audit_sequence = audit_sequence + 1
-        audit_document = incident_document.collection(AUDIT_COLLECTION).document(
-            str(next_audit_sequence)
+        return transition_incident_in_transaction(
+            transaction,
+            incident_document=incident_document,
+            expected_state=expected_state,
+            expected_version=expected_version,
+            target_state=target_state,
         )
-        transaction.update(
-            incident_document,
-            {
-                "state": target_state.value,
-                "state_version": next_version,
-                "audit_sequence": next_audit_sequence,
-                "updated_at": firestore.SERVER_TIMESTAMP,
-            },
-        )
-        transaction.create(
-            audit_document,
-            {
-                "sequence": next_audit_sequence,
-                "type": "state.transition",
-                "from_state": expected_state.value,
-                "to_state": target_state.value,
-                "state_version": next_version,
-                "created_at": firestore.SERVER_TIMESTAMP,
-            },
-        )
-        return next_version
 
     return transition(client.transaction())
+
+
+def transition_incident_in_transaction(
+    transaction: firestore.Transaction,
+    *,
+    incident_document: firestore.DocumentReference,
+    expected_state: IncidentState,
+    expected_version: int,
+    target_state: IncidentState,
+) -> int:
+    if (expected_state, target_state) not in ALLOWED_TRANSITIONS:
+        raise ValueError("Illegal state transition")
+    snapshot = incident_document.get(transaction=transaction)
+    if not snapshot.exists:
+        raise ValueError("Incident does not exist")
+    incident = snapshot.to_dict() or {}
+    state_version = incident.get("state_version")
+    audit_sequence = incident.get("audit_sequence")
+    if incident.get("state") != expected_state.value:
+        raise ValueError("Incident state does not match")
+    if type(state_version) is not int or state_version != expected_version:
+        raise ValueError("Stale state version")
+    if type(audit_sequence) is not int or audit_sequence < 0:
+        raise ValueError("Incident audit sequence is invalid")
+
+    next_version = state_version + 1
+    next_audit_sequence = audit_sequence + 1
+    audit_document = incident_document.collection(AUDIT_COLLECTION).document(
+        str(next_audit_sequence)
+    )
+    transaction.update(
+        incident_document,
+        {
+            "state": target_state.value,
+            "state_version": next_version,
+            "audit_sequence": next_audit_sequence,
+            "updated_at": firestore.SERVER_TIMESTAMP,
+        },
+    )
+    transaction.create(
+        audit_document,
+        {
+            "sequence": next_audit_sequence,
+            "type": "state.transition",
+            "from_state": expected_state.value,
+            "to_state": target_state.value,
+            "state_version": next_version,
+            "created_at": firestore.SERVER_TIMESTAMP,
+        },
+    )
+    return next_version
 
 
 def acquire_incident_lease(
