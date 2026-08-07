@@ -1,7 +1,11 @@
 from fastapi.testclient import TestClient
+from pathlib import Path
 
 from app import main
 from app.main import app
+
+
+FIXTURES = Path(__file__).parents[3] / "contracts" / "fixtures"
 
 
 def test_command_lease_requires_device_auth(monkeypatch) -> None:
@@ -38,6 +42,21 @@ def test_command_lease_returns_204_when_no_pending_command(monkeypatch) -> None:
 
     assert response.status_code == 204
     assert leased == [(firestore_client, "session-1", "device-test")]
+
+
+def test_command_complete_requires_device_auth(monkeypatch) -> None:
+    _set_environment(monkeypatch)
+    result = (FIXTURES / "command-result-success.json").read_text(encoding="utf-8")
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/commands/command-read-1:complete",
+            content=result,
+            headers={"Content-Type": "application/json"},
+        )
+
+    assert response.status_code == 401
+    assert response.headers["www-authenticate"] == "Bearer"
 
 
 def _set_environment(monkeypatch) -> None:

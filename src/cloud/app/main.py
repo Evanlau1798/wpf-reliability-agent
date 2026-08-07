@@ -12,7 +12,7 @@ from app.config import Settings
 from app.firestore_client import claim_event_once, get_firestore_client, is_run_processed
 from app.ingest import ingest_binding_event, ingest_performance_event, validate_telemetry_events
 from app.logging_config import configure_logging
-from app.models import EventType
+from app.models import CommandResult, EventType
 from app.pubsub import publish_work
 from app.worker import build_run_key, decode_pubsub_envelope, pubsub_message_id
 from app.worker_auth import authenticate_pubsub_push
@@ -60,6 +60,22 @@ def lease_command(
     if command is None:
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     return command
+
+
+@app.post(
+    "/v1/commands/{command_id}:complete",
+    response_model=None,
+)
+def complete_command(
+    command_id: str,
+    result: CommandResult,
+    _authenticated_device_id: Annotated[str, Depends(authenticate_device_token)],
+) -> object:
+    del command_id, result
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail="Command completion is not available yet",
+    )
 
 
 @app.post("/v1/work:push", status_code=status.HTTP_204_NO_CONTENT)
