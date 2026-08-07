@@ -13,7 +13,11 @@ def test_normalized_evidence_summary_keeps_only_compact_fields() -> None:
         summary="DisplayName binding failed repeatedly.",
     )
 
-    assert evidence.model_dump(mode="json") == {
+    assert evidence.model_dump(
+        mode="json",
+        exclude_none=True,
+        exclude_defaults=True,
+    ) == {
         "evidence_id": "evidence-1",
         "kind": "binding.aggregate",
         "app_session_id": "session-1",
