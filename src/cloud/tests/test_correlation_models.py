@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from app.correlation import NormalizedEvidenceSummary
+from app.correlation import EvidenceEdgeType, NormalizedEvidenceSummary
 
 
 def test_normalized_evidence_summary_keeps_only_compact_fields() -> None:
@@ -18,4 +18,15 @@ def test_normalized_evidence_summary_keeps_only_compact_fields() -> None:
         "app_session_id": "session-1",
         "observed_at_utc": "2026-08-07T00:00:00Z",
         "summary": "DisplayName binding failed repeatedly.",
+    }
+
+
+def test_evidence_edge_types_cover_gate_11_relationships() -> None:
+    assert {edge.value for edge in EvidenceEdgeType} == {
+        "same_element",
+        "same_binding_path",
+        "same_time_window",
+        "performance_amplifier",
+        "verifies",
+        "contradicts",
     }
