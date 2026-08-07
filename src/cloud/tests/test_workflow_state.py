@@ -1,3 +1,4 @@
+from datetime import UTC, datetime, timedelta
 from unittest.mock import Mock
 
 import pytest
@@ -74,6 +75,46 @@ def test_state_transition_rejects_stale_version(monkeypatch) -> None:
         )
 
     transaction.update.assert_not_called()
+
+
+def test_incident_lease_allows_only_one_active_owner(monkeypatch) -> None:
+    client = Mock()
+    transaction = Mock()
+    incident_document = Mock()
+    now = datetime(2026, 8, 7, tzinfo=UTC)
+    client.transaction.return_value = transaction
+    client.collection.return_value.document.return_value = incident_document
+    incident_document.get.side_effect = [
+        Mock(exists=True, to_dict=lambda: {"lease_owner": None, "lease_until": None}),
+        Mock(
+            exists=True,
+            to_dict=lambda: {"lease_owner": "worker-a", "lease_until": now + timedelta(seconds=30)},
+        ),
+    ]
+    monkeypatch.setattr(workflow_state.firestore, "transactional", lambda callback: callback)
+
+    assert workflow_state.acquire_incident_lease(
+        client,
+        incident_id="incident-1",
+        owner="worker-a",
+        now=now,
+        duration=timedelta(seconds=30),
+    ) is True
+    assert workflow_state.acquire_incident_lease(
+        client,
+        incident_id="incident-1",
+        owner="worker-b",
+        now=now,
+        duration=timedelta(seconds=30),
+    ) is False
+    transaction.update.assert_called_once_with(
+        incident_document,
+        {
+            "lease_owner": "worker-a",
+            "lease_until": now + timedelta(seconds=30),
+            "updated_at": firestore_client.firestore.SERVER_TIMESTAMP,
+        },
+    )
 
 
 def test_new_incident_run_commits_transition_and_processed_marker_together(monkeypatch) -> None:

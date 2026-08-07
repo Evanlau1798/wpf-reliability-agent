@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 from enum import StrEnum
 
 from google.cloud import firestore
@@ -79,6 +80,45 @@ def transition_incident(
         return next_version
 
     return transition(client.transaction())
+
+
+def acquire_incident_lease(
+    client: firestore.Client,
+    *,
+    incident_id: str,
+    owner: str,
+    now: datetime,
+    duration: timedelta,
+) -> bool:
+    if not owner or now.tzinfo is None or duration <= timedelta(0):
+        raise ValueError("Invalid lease request")
+    incident_document = client.collection(INCIDENTS_COLLECTION).document(incident_id)
+
+    @firestore.transactional
+    def acquire(transaction: firestore.Transaction) -> bool:
+        snapshot = incident_document.get(transaction=transaction)
+        if not snapshot.exists:
+            raise ValueError("Incident does not exist")
+        incident = snapshot.to_dict() or {}
+        lease_owner = incident.get("lease_owner")
+        lease_until = incident.get("lease_until")
+        if lease_owner:
+            if lease_until is not None and not isinstance(lease_until, datetime):
+                raise ValueError("Incident lease is invalid")
+            if lease_until is not None and lease_until > now and lease_owner != owner:
+                return False
+
+        transaction.update(
+            incident_document,
+            {
+                "lease_owner": owner,
+                "lease_until": now + duration,
+                "updated_at": firestore.SERVER_TIMESTAMP,
+            },
+        )
+        return True
+
+    return acquire(client.transaction())
 
 
 def commit_new_incident_run(
