@@ -17,6 +17,14 @@ class EvidenceEdgeType(StrEnum):
     CONTRADICTS = "contradicts"
 
 
+class EvidenceEdge(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_evidence_id: Identifier
+    target_evidence_id: Identifier
+    edge_type: EvidenceEdgeType
+
+
 class NormalizedEvidenceSummary(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -142,3 +150,27 @@ def same_session_visual_metrics(
     if binding.app_session_id != ui.app_session_id:
         return None
     return ui.visual_count, ui.subtree_node_count
+
+
+def build_performance_amplifier_edge(
+    binding: NormalizedEvidenceSummary,
+    performance: NormalizedEvidenceSummary,
+) -> EvidenceEdge | None:
+    rate = binding_errors_per_second(binding)
+    has_performance_metric = any(
+        value is not None
+        for value in (
+            performance.frame_p95_ms,
+            performance.visual_count,
+            performance.subtree_node_count,
+        )
+    )
+    if rate is None or rate <= 0 or not has_performance_metric:
+        return None
+    if not match_time_window(binding, performance):
+        return None
+    return EvidenceEdge(
+        source_evidence_id=binding.evidence_id,
+        target_evidence_id=performance.evidence_id,
+        edge_type=EvidenceEdgeType.PERFORMANCE_AMPLIFIER,
+    )

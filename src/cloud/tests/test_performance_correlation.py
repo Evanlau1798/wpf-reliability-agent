@@ -1,8 +1,10 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from app.correlation import (
+    EvidenceEdgeType,
     NormalizedEvidenceSummary,
     binding_errors_per_second,
+    build_performance_amplifier_edge,
     same_session_frame_p95,
     same_session_visual_metrics,
 )
@@ -48,3 +50,24 @@ def test_visual_metrics_preserve_missing_values_without_guessing() -> None:
     )
 
     assert same_session_visual_metrics(binding, ui) == (1_500, None)
+
+
+def test_performance_amplifier_edge_keeps_root_cause_and_symptom_separate() -> None:
+    binding = _evidence(
+        evidence_id="binding-1",
+        occurrence_count=30,
+        window_seconds=10.0,
+    )
+    performance = _evidence(
+        evidence_id="perf-1",
+        kind="performance.sample",
+        observed_at_utc=binding.observed_at_utc + timedelta(seconds=5),
+        frame_p95_ms=48.0,
+    )
+
+    edge = build_performance_amplifier_edge(binding, performance)
+
+    assert edge is not None
+    assert edge.source_evidence_id == "binding-1"
+    assert edge.target_evidence_id == "perf-1"
+    assert edge.edge_type is EvidenceEdgeType.PERFORMANCE_AMPLIFIER
