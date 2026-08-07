@@ -162,3 +162,47 @@ def test_ambiguous_candidate_eval_requests_evidence_instead_of_action() -> None:
     assert decision.next_command is not None
     assert decision.next_command.tool is DiagnosticTool.BINDING_GET_LIVE_CANDIDATES
     assert decision.proposed_action is None
+
+
+def test_insufficient_evidence_eval_stops_when_tool_budget_is_exhausted() -> None:
+    context = AgentCorrelationContext(
+        evidence=[
+            NormalizedEvidenceSummary(
+                evidence_id="binding-inconclusive",
+                kind="binding_aggregate",
+                app_session_id="session-1",
+                observed_at_utc=datetime(2026, 8, 8, tzinfo=UTC),
+                summary="Binding failure has no stable element attribution.",
+                binding_path="DisplayName",
+            )
+        ],
+        candidate_claims=[],
+        tool_calls_remaining=0,
+        max_context_bytes=65_536,
+        max_context_tokens=32_768,
+    )
+    runner = _Runner(
+        [
+            {
+                "schema_version": "1.0",
+                "decision": "NO_ACTION",
+                "hypotheses": [],
+                "stop_reason": "Read-only tool budget exhausted with insufficient evidence.",
+                "missing_evidence": ["stable element attribution"],
+            }
+        ]
+    )
+
+    decision = asyncio.run(
+        run_investigator_once(
+            runner,
+            incident_id="incident-inconclusive",
+            run_key="incident-inconclusive:4:eval",
+            context=context,
+        )
+    )
+
+    assert decision.decision is DecisionType.NO_ACTION
+    assert decision.next_command is None
+    assert decision.proposed_action is None
+    assert "budget exhausted" in (decision.stop_reason or "").lower()
