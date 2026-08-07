@@ -386,6 +386,8 @@ def _set_required_environment(monkeypatch, role: str) -> None:
     monkeypatch.setenv("DEMO_DEVICE_ID", "device-test")
     monkeypatch.setenv("DEMO_DEVICE_TOKEN", "secret-token")
     monkeypatch.setenv("PUBSUB_TOPIC", "incident-work")
+    monkeypatch.setenv("PUBSUB_PUSH_AUDIENCE", "https://worker.example.test")
+    monkeypatch.setenv("PUBSUB_INVOKER_EMAIL", "pubsub-invoker@example.test")
 
 
 def _valid_telemetry_event(event_id: str) -> dict[str, object]:

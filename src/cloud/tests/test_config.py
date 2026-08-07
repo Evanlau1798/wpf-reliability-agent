@@ -19,6 +19,8 @@ def test_settings_model_contains_only_runtime_values() -> None:
         "demo_device_id",
         "demo_device_token",
         "pubsub_topic",
+        "pubsub_push_audience",
+        "pubsub_invoker_email",
     }
     assert settings.service_role == "api"
     assert isinstance(settings.demo_device_token, SecretStr)
@@ -33,12 +35,16 @@ def test_settings_load_from_environment_names() -> None:
             "DEMO_DEVICE_ID": "device-test",
             "DEMO_DEVICE_TOKEN": "secret-token",
             "PUBSUB_TOPIC": "incident-work",
+            "PUBSUB_PUSH_AUDIENCE": "https://worker.example.test",
+            "PUBSUB_INVOKER_EMAIL": "pubsub-invoker@example.test",
         }
     )
 
     assert settings.service_role == "worker"
     assert settings.google_cloud_project == "project-test"
     assert settings.pubsub_topic == "incident-work"
+    assert settings.pubsub_push_audience == "https://worker.example.test"
+    assert settings.pubsub_invoker_email == "pubsub-invoker@example.test"
 
 
 def test_missing_settings_report_environment_variable_names() -> None:
@@ -47,3 +53,19 @@ def test_missing_settings_report_environment_variable_names() -> None:
         match="GOOGLE_CLOUD_PROJECT, DEMO_DEVICE_ID, DEMO_DEVICE_TOKEN, PUBSUB_TOPIC",
     ):
         Settings.from_environment({"SERVICE_ROLE": "api"})
+
+
+def test_worker_settings_require_pubsub_identity_values() -> None:
+    with pytest.raises(
+        ValueError,
+        match="PUBSUB_PUSH_AUDIENCE, PUBSUB_INVOKER_EMAIL",
+    ):
+        Settings.from_environment(
+            {
+                "SERVICE_ROLE": "worker",
+                "GOOGLE_CLOUD_PROJECT": "project-test",
+                "DEMO_DEVICE_ID": "device-test",
+                "DEMO_DEVICE_TOKEN": "secret-token",
+                "PUBSUB_TOPIC": "incident-work",
+            }
+        )

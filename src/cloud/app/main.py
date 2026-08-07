@@ -12,6 +12,7 @@ from app.ingest import ingest_binding_event, ingest_performance_event, validate_
 from app.logging_config import configure_logging
 from app.models import EventType
 from app.pubsub import publish_work
+from app.worker_auth import authenticate_pubsub_push
 
 
 MAX_TELEMETRY_BATCH_BYTES = 512 * 1024
@@ -36,6 +37,7 @@ def healthz() -> dict[str, str]:
 def worker_push(request: Request) -> None:
     if request.app.state.settings.service_role != "worker":
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    authenticate_pubsub_push(request)
 
 
 async def enforce_telemetry_body_limit(request: Request) -> None:
