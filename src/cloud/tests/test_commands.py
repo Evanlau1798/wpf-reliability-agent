@@ -325,3 +325,35 @@ def test_same_command_result_resubmission_is_idempotent(monkeypatch) -> None:
     assert first is False
     assert replay is True
     transaction.update.assert_called_once()
+
+
+def test_conflicting_command_result_is_rejected_without_overwrite(monkeypatch) -> None:
+    client = Mock()
+    transaction = Mock()
+    document = client.collection.return_value.document.return_value
+    client.transaction.return_value = transaction
+    command = json.loads(
+        (FIXTURES / "diagnostic-command-valid-read.json").read_text(encoding="utf-8")
+    )
+    command.update({"status": CommandStatus.COMPLETED.value, "lease_owner": "device-a"})
+    original = CommandResult.model_validate_json(
+        (FIXTURES / "command-result-success.json").read_text(encoding="utf-8")
+    )
+    original = original.model_copy(update={"result_hash": command_result_hash(original)})
+    command["result_hash"] = original.result_hash
+    conflicting = original.model_copy(update={"result": {"nodes": 43}})
+    conflicting = conflicting.model_copy(
+        update={"result_hash": command_result_hash(conflicting)}
+    )
+    document.get.return_value = Mock(exists=True, to_dict=lambda: command)
+    monkeypatch.setattr(commands.firestore, "transactional", lambda callback: callback)
+
+    with pytest.raises(ValueError, match="Command result conflict"):
+        complete_command_once(
+            client,
+            command_id="command-read-1",
+            lease_owner="device-a",
+            result=conflicting,
+        )
+
+    transaction.update.assert_not_called()
