@@ -75,11 +75,39 @@ def test_policy_version_mismatch_rejects_approval(monkeypatch) -> None:
     transaction.create.assert_not_called()
 
 
-def _approval_client(document: dict[str, object]) -> tuple[Mock, Mock, Mock]:
+def test_proposal_version_mismatch_rejects_approval(monkeypatch) -> None:
+    client, transaction, _ = _approval_client(
+        _approval_document(),
+        incident={"proposal_version": 4},
+    )
+    monkeypatch.setattr(firestore_client.firestore, "transactional", lambda callback: callback)
+
+    with pytest.raises(ValueError, match="Approval proposal version mismatch"):
+        firestore_client.validate_pending_approval_decision(
+            client,
+            approval_id="approval-1",
+            now=datetime(2026, 8, 8, 5, tzinfo=UTC),
+        )
+
+    transaction.update.assert_not_called()
+    transaction.create.assert_not_called()
+
+
+def _approval_client(
+    document: dict[str, object],
+    *,
+    incident: dict[str, object] | None = None,
+) -> tuple[Mock, Mock, Mock]:
     client = Mock()
     transaction = Mock()
     query = Mock()
     snapshot = Mock(to_dict=lambda: document)
+    incident_document = Mock()
+    snapshot.reference.parent.parent = incident_document
+    incident_document.get.return_value = Mock(
+        exists=True,
+        to_dict=lambda: incident or {"proposal_version": 3},
+    )
     client.transaction.return_value = transaction
     client.collection_group.return_value.where.return_value.limit.return_value = query
     transaction.get.return_value = iter([snapshot])

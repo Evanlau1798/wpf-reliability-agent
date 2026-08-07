@@ -101,6 +101,15 @@ def validate_pending_approval_decision(
             return None
         if approval.policy_version != POLICY_VERSION:
             raise ValueError("Approval policy version mismatch")
+        incident_document = snapshots[0].reference.parent.parent
+        if incident_document is None:
+            raise ValueError("Approval incident reference is invalid")
+        incident_snapshot = incident_document.get(transaction=transaction)
+        if not incident_snapshot.exists:
+            raise ValueError("Incident does not exist")
+        incident = incident_snapshot.to_dict() or {}
+        if incident.get("proposal_version") != approval.proposal_version:
+            raise ValueError("Approval proposal version mismatch")
         return approval
 
     approval = validate(client.transaction())
