@@ -112,7 +112,10 @@ public sealed class CommandPollingTests
                     "fixtures",
                     "diagnostic-command-valid-read.json"),
                 cancellationToken);
-            var content = new ByteArrayContent(Encoding.UTF8.GetBytes(fixture));
+            var activeFixture = fixture
+                .Replace("2026-08-07T00:00:00Z", "2099-01-01T00:00:00Z")
+                .Replace("2026-08-07T00:01:00Z", "2099-01-01T00:01:00Z");
+            var content = new ByteArrayContent(Encoding.UTF8.GetBytes(activeFixture));
             content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
             return new HttpResponseMessage(HttpStatusCode.OK)
             {

@@ -27,6 +27,10 @@ public sealed partial class ReliabilitySensor
                         appSessionId,
                         StringComparison.Ordinal)
                     && command.ExpiresAtUtc > DateTimeOffset.UtcNow
+                    && string.Equals(
+                        CanonicalJson.Hash(command.Arguments),
+                        command.ArgumentsHash,
+                        StringComparison.Ordinal)
                     && IsReadOnlyTool(command.Tool))
                 {
                     await handleCommand(command, cancellationToken).ConfigureAwait(false);
