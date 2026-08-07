@@ -58,6 +58,7 @@ def test_device_token_uses_constant_time_compare(monkeypatch) -> None:
         google_cloud_project="project-test",
         demo_device_id="device-test",
         demo_device_token="secret-token",
+        pubsub_topic="incident-work",
     )
     calls: list[tuple[str, str]] = []
 
@@ -85,6 +86,7 @@ def test_device_token_binds_configured_device_id() -> None:
         google_cloud_project="project-test",
         demo_device_id="device-test",
         demo_device_token="secret-token",
+        pubsub_topic="incident-work",
     )
 
     @auth_app.post("/protected")
@@ -116,6 +118,7 @@ def test_invalid_device_token_returns_401_without_logging_token() -> None:
         google_cloud_project="project-test",
         demo_device_id="device-test",
         demo_device_token="secret-token",
+        pubsub_topic="incident-work",
     )
     auth_app.state.logger = configure_logging("api", output)
 
@@ -381,6 +384,7 @@ def _set_required_environment(monkeypatch, role: str) -> None:
     monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "project-test")
     monkeypatch.setenv("DEMO_DEVICE_ID", "device-test")
     monkeypatch.setenv("DEMO_DEVICE_TOKEN", "secret-token")
+    monkeypatch.setenv("PUBSUB_TOPIC", "incident-work")
 
 
 def _valid_telemetry_event(event_id: str) -> dict[str, object]:
