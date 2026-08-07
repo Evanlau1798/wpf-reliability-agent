@@ -186,6 +186,7 @@ def create_evidence_command(
     incident_id: str,
     evidence_revision: int,
     app_session_id: str,
+    context: AgentCorrelationContext,
     now: datetime,
 ) -> str:
     if decision.decision is not DecisionType.REQUEST_EVIDENCE or decision.next_command is None:
@@ -194,6 +195,13 @@ def create_evidence_command(
         raise ValueError("Evidence tool is not in the read-only allowlist")
 
     arguments = decision.next_command.arguments
+    element_id = arguments.get("element_id")
+    if element_id is not None and element_id not in {
+        item.element_id
+        for item in context.evidence
+        if item.app_session_id == app_session_id and item.element_id is not None
+    }:
+        raise ValueError("Element ID does not belong to current app session")
     arguments_hash = sha256_canonical(arguments)
     idempotency_key = sha256_canonical(
         {

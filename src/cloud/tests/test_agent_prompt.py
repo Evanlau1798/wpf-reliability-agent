@@ -256,6 +256,22 @@ def test_request_evidence_creates_deterministic_idempotent_server_command(monkey
             "missing_evidence": ["bounded UI subtree"],
         }
     )
+    context = AgentCorrelationContext(
+        evidence=[
+            NormalizedEvidenceSummary(
+                evidence_id="evidence-1",
+                kind="binding_aggregate",
+                app_session_id="session-1",
+                observed_at_utc=datetime(2026, 8, 7, tzinfo=UTC),
+                summary="Current binding element.",
+                element_id="element-1",
+            )
+        ],
+        candidate_claims=[],
+        tool_calls_remaining=6,
+        max_context_bytes=65_536,
+        max_context_tokens=32_768,
+    )
     now = datetime(2026, 8, 7, tzinfo=UTC)
 
     first = create_evidence_command(
@@ -264,6 +280,7 @@ def test_request_evidence_creates_deterministic_idempotent_server_command(monkey
         incident_id="incident-1",
         evidence_revision=3,
         app_session_id="session-1",
+        context=context,
         now=now,
     )
     second = create_evidence_command(
@@ -272,6 +289,7 @@ def test_request_evidence_creates_deterministic_idempotent_server_command(monkey
         incident_id="incident-1",
         evidence_revision=3,
         app_session_id="session-1",
+        context=context,
         now=now,
     )
 
@@ -280,6 +298,56 @@ def test_request_evidence_creates_deterministic_idempotent_server_command(monkey
     assert written[0].idempotency_key == written[1].idempotency_key
     assert written[0].risk_level.value == "LOW"
     assert written[0].approval_id is None
+
+
+def test_stale_element_id_does_not_create_evidence_command(monkeypatch) -> None:
+    written = []
+    monkeypatch.setattr(
+        agent,
+        "write_command_once",
+        lambda _client, command: written.append(command) or command.command_id,
+    )
+    context = AgentCorrelationContext(
+        evidence=[
+            NormalizedEvidenceSummary(
+                evidence_id="evidence-old",
+                kind="ui_snapshot",
+                app_session_id="session-old",
+                observed_at_utc=datetime(2026, 8, 7, tzinfo=UTC),
+                summary="Stale UI element.",
+                element_id="element-stale",
+            )
+        ],
+        candidate_claims=[],
+        tool_calls_remaining=6,
+        max_context_bytes=65_536,
+        max_context_tokens=32_768,
+    )
+    decision = AgentDecision.model_validate(
+        {
+            "schema_version": "1.0",
+            "decision": "REQUEST_EVIDENCE",
+            "hypotheses": [],
+            "next_command": {
+                "tool": "ui.get_subtree",
+                "arguments": {"element_id": "element-stale"},
+            },
+            "missing_evidence": ["current UI subtree"],
+        }
+    )
+
+    with pytest.raises(ValueError, match="current app session"):
+        create_evidence_command(
+            Mock(),
+            decision,
+            incident_id="incident-1",
+            evidence_revision=3,
+            app_session_id="session-current",
+            context=context,
+            now=datetime(2026, 8, 7, tzinfo=UTC),
+        )
+
+    assert written == []
 
 
 def test_propose_action_routes_to_policy_without_creating_command(monkeypatch) -> None:
