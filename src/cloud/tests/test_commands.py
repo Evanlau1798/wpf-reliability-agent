@@ -172,3 +172,38 @@ def test_pending_command_is_leased_transactionally(monkeypatch) -> None:
             "updated_at": commands.firestore.SERVER_TIMESTAMP,
         },
     )
+
+
+def test_lease_conflict_returns_command_to_only_one_caller(monkeypatch) -> None:
+    client = Mock()
+    transaction = Mock()
+    snapshot = Mock()
+    snapshot.reference = Mock()
+    payload = json.loads(
+        (FIXTURES / "diagnostic-command-valid-read.json").read_text(encoding="utf-8")
+    )
+    payload["expires_at_utc"] = "2026-08-07T00:10:00Z"
+    snapshot.to_dict.return_value = payload
+    client.transaction.return_value = transaction
+    transaction.get.side_effect = [iter([snapshot]), iter([])]
+    monkeypatch.setattr(commands.firestore, "transactional", lambda callback: callback)
+    now = datetime(2026, 8, 7, 0, 2, tzinfo=UTC)
+
+    first = lease_next_command(
+        client,
+        app_session_id="session-1",
+        lease_owner="device-a",
+        now=now,
+        duration=timedelta(seconds=30),
+    )
+    second = lease_next_command(
+        client,
+        app_session_id="session-1",
+        lease_owner="device-b",
+        now=now,
+        duration=timedelta(seconds=30),
+    )
+
+    assert first is not None
+    assert second is None
+    transaction.update.assert_called_once()
