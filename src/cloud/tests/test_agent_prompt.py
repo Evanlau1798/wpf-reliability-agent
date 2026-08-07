@@ -173,8 +173,14 @@ def test_investigator_runs_exactly_one_model_invocation() -> None:
     assert sum("run_async" in call for call in calls) == 1
 
 
-def test_investigator_allows_one_schema_repair_then_stops() -> None:
+def test_investigator_allows_one_schema_repair_then_stops(monkeypatch) -> None:
     calls: list[dict[str, object]] = []
+    commands: list[object] = []
+    monkeypatch.setattr(
+        agent,
+        "write_command_once",
+        lambda *_args, **_kwargs: commands.append(object()),
+    )
     outputs = [
         {"schema_version": "1.0", "decision": "NO_ACTION", "hypotheses": []},
         {"schema_version": "1.0", "decision": "NO_ACTION", "hypotheses": []},
@@ -224,6 +230,7 @@ def test_investigator_allows_one_schema_repair_then_stops() -> None:
     repair_message = run_calls[1]["new_message"].parts[0].text.lower()
     assert "repair" in repair_message
     assert "do not change" in repair_message
+    assert commands == []
 
 
 def test_request_evidence_creates_deterministic_idempotent_server_command(monkeypatch) -> None:
