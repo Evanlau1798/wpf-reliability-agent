@@ -9,6 +9,7 @@ from app.firestore_client import AUDIT_COLLECTION, INCIDENTS_COLLECTION, PROCESS
 
 MAX_INVESTIGATION_ROUNDS = 4
 MAX_READ_ONLY_TOOL_CALLS = 6
+MAX_NO_NEW_EVIDENCE_ROUNDS = 2
 
 
 class IncidentState(StrEnum):
@@ -121,6 +122,48 @@ def claim_read_only_tool_request(
         return request_key
 
     return claim(client.transaction())
+
+
+def record_investigation_evidence_progress(
+    client: firestore.Client,
+    *,
+    incident_id: str,
+    evidence_revision: int,
+) -> bool:
+    if type(evidence_revision) is not int or evidence_revision < 0:
+        raise ValueError("Evidence revision is invalid")
+    incident_document = client.collection(INCIDENTS_COLLECTION).document(incident_id)
+
+    @firestore.transactional
+    def record(transaction: firestore.Transaction) -> bool:
+        snapshot = incident_document.get(transaction=transaction)
+        if not snapshot.exists:
+            raise ValueError("Incident does not exist")
+        incident = snapshot.to_dict() or {}
+        last_revision = incident.get("last_investigated_evidence_revision")
+        no_new_count = incident.get("no_new_evidence_count")
+        if last_revision is not None and (type(last_revision) is not int or last_revision < 0):
+            raise ValueError("Last investigated evidence revision is invalid")
+        if type(no_new_count) is not int or no_new_count < 0:
+            raise ValueError("No-new-evidence count is invalid")
+        if last_revision is not None and evidence_revision < last_revision:
+            raise ValueError("Evidence revision is stale")
+
+        if last_revision is None or evidence_revision > last_revision:
+            next_count = 0
+        else:
+            next_count = min(no_new_count + 1, MAX_NO_NEW_EVIDENCE_ROUNDS)
+        transaction.update(
+            incident_document,
+            {
+                "last_investigated_evidence_revision": evidence_revision,
+                "no_new_evidence_count": next_count,
+                "updated_at": firestore.SERVER_TIMESTAMP,
+            },
+        )
+        return next_count >= MAX_NO_NEW_EVIDENCE_ROUNDS
+
+    return record(client.transaction())
 
 
 def transition_incident(

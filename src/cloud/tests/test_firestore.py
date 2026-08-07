@@ -158,6 +158,8 @@ def test_incident_create_writes_complete_initial_state() -> None:
             "investigation_round_count": 0,
             "read_only_tool_call_count": 0,
             "read_only_tool_request_keys": [],
+            "last_investigated_evidence_revision": None,
+            "no_new_evidence_count": 0,
             "application_id": "app-1",
             "app_session_id": "session-1",
             "severity": "ERROR",
