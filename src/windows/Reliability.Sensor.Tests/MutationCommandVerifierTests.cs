@@ -26,6 +26,25 @@ public sealed class MutationCommandVerifierTests
         Assert.True(MutationCommandVerifier.HasRequiredRisk(command));
     }
 
+    [Fact]
+    public async Task MissingApprovalReferenceIsRejected()
+    {
+        var command = await ReadMutationCommandAsync();
+
+        Assert.False(MutationCommandVerifier.HasApprovalReference(command with
+        {
+            ApprovalId = null,
+        }));
+    }
+
+    [Fact]
+    public async Task PresentApprovalReferencePassesCheck()
+    {
+        var command = await ReadMutationCommandAsync();
+
+        Assert.True(MutationCommandVerifier.HasApprovalReference(command));
+    }
+
     private static async Task<DiagnosticCommand> ReadMutationCommandAsync()
     {
         var json = await File.ReadAllTextAsync(Path.Combine(
