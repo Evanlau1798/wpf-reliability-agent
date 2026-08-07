@@ -3,6 +3,7 @@ from datetime import datetime
 from functools import cache
 
 from google.cloud import firestore
+from google.cloud.firestore_v1.base_query import FieldFilter
 
 from app.approval import validate_recovery_proposal
 from app.contracts import sha256_canonical
@@ -69,6 +70,28 @@ def create_pending_approval(
         approval.model_dump(mode="json")
     )
     return approval
+
+
+def validate_pending_approval_decision(
+    client: firestore.Client,
+    *,
+    approval_id: str,
+) -> ApprovalRecord:
+    query = client.collection_group(APPROVALS_COLLECTION).where(
+        filter=FieldFilter("approval_id", "==", approval_id)
+    ).limit(2)
+
+    @firestore.transactional
+    def validate(transaction: firestore.Transaction) -> ApprovalRecord:
+        snapshots = list(transaction.get(query))
+        if len(snapshots) != 1:
+            raise ValueError("Approval does not exist")
+        approval = ApprovalRecord.model_validate(snapshots[0].to_dict() or {})
+        if approval.status is not ApprovalStatus.PENDING:
+            raise ValueError("Approval is not pending")
+        return approval
+
+    return validate(client.transaction())
 
 
 def next_evidence_revision(
