@@ -125,7 +125,11 @@ public sealed partial class ReliabilitySensor : IAsyncDisposable
 
     internal long DroppedEventCount => Interlocked.Read(ref _droppedEventCount);
 
+    internal string ApplicationId => _applicationId;
+
     internal string ApplicationVersion => _applicationVersion;
+
+    internal int QueuedEventCount => _events.Reader.CanCount ? _events.Reader.Count : 0;
 
     public static ReliabilitySensor Start(
         ReliabilitySensorOptions? options,

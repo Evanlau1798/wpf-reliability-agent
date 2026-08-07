@@ -5,6 +5,13 @@ namespace Reliability.Sensor;
 
 internal sealed class ReadOnlyCommandExecutor
 {
+    private readonly ReliabilitySensor _sensor;
+
+    public ReadOnlyCommandExecutor(ReliabilitySensor sensor)
+    {
+        _sensor = sensor;
+    }
+
     public Task<JsonElement> ExecuteAsync(
         DiagnosticCommand command,
         CancellationToken cancellationToken)
@@ -12,8 +19,17 @@ internal sealed class ReadOnlyCommandExecutor
         cancellationToken.ThrowIfCancellationRequested();
         return command.Tool switch
         {
-            DiagnosticTool.HealthGetSnapshot
-                or DiagnosticTool.BindingGetErrors
+            DiagnosticTool.HealthGetSnapshot => Task.FromResult(JsonSerializer.SerializeToElement(new
+            {
+                application_id = _sensor.ApplicationId,
+                application_version = _sensor.ApplicationVersion,
+                app_session_id = _sensor.AppSessionId,
+                sensor_enabled = _sensor.IsEnabled,
+                can_upload = _sensor.CanUpload,
+                queued_event_count = _sensor.QueuedEventCount,
+                dropped_event_count = _sensor.DroppedEventCount,
+            })),
+            DiagnosticTool.BindingGetErrors
                 or DiagnosticTool.BindingGetLiveCandidates
                 or DiagnosticTool.ExceptionGetRecent
                 or DiagnosticTool.UiGetSubtree

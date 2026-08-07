@@ -6,20 +6,63 @@ namespace Reliability.Sensor.Tests;
 public sealed class ReadOnlyCommandExecutorTests
 {
     [Fact]
+    public async Task HealthGetSnapshotReturnsAppSensorSessionAndQueueHealth()
+    {
+        await using var sensor = ReliabilitySensor.Start(new ReliabilitySensorOptions
+        {
+            ApiBaseUri = new Uri("https://reliability.example.test"),
+            DeviceId = "device-test",
+            DeviceToken = "test-token",
+            ApplicationId = "demo-app",
+            ApplicationVersion = "1.2.3",
+            DisableBackgroundPersistence = true,
+        });
+        Assert.True(sensor.TryEnqueue(
+            EventType.PerformanceSample,
+            Severity.WARNING,
+            JsonSerializer.SerializeToElement(new { }),
+            JsonSerializer.SerializeToElement(new { p95_ms = 30 }),
+            out _));
+        var command = (await ReadCommandAsync()) with
+        {
+            Tool = DiagnosticTool.HealthGetSnapshot,
+            Arguments = JsonSerializer.SerializeToElement(new { }),
+        };
+        var executor = new ReadOnlyCommandExecutor(sensor);
+
+        var result = await executor.ExecuteAsync(command, CancellationToken.None);
+
+        Assert.Equal("demo-app", result.GetProperty("application_id").GetString());
+        Assert.Equal("1.2.3", result.GetProperty("application_version").GetString());
+        Assert.Equal(sensor.AppSessionId, result.GetProperty("app_session_id").GetString());
+        Assert.True(result.GetProperty("sensor_enabled").GetBoolean());
+        Assert.True(result.GetProperty("can_upload").GetBoolean());
+        Assert.Equal(1, result.GetProperty("queued_event_count").GetInt32());
+        Assert.Equal(0, result.GetProperty("dropped_event_count").GetInt64());
+    }
+
+    [Fact]
     public async Task MutationToolIsRejectedBySwitchDispatcher()
     {
-        var json = await File.ReadAllTextAsync(Path.Combine(
-            AppContext.BaseDirectory,
-            "fixtures",
-            "diagnostic-command-valid-mutation.json"));
-        var command = JsonSerializer.Deserialize(
-            json,
-            ContractJsonContext.Default.DiagnosticCommand)!;
-        var executor = new ReadOnlyCommandExecutor();
+        await using var sensor = ReliabilitySensor.Start(null);
+        var command = await ReadCommandAsync("diagnostic-command-valid-mutation.json");
+        var executor = new ReadOnlyCommandExecutor(sensor);
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             executor.ExecuteAsync(command, CancellationToken.None));
 
         Assert.Equal("Command tool is not available to the read-only executor.", exception.Message);
+    }
+
+    private static async Task<DiagnosticCommand> ReadCommandAsync(
+        string fixtureName = "diagnostic-command-valid-read.json")
+    {
+        var json = await File.ReadAllTextAsync(Path.Combine(
+            AppContext.BaseDirectory,
+            "fixtures",
+            fixtureName));
+        return JsonSerializer.Deserialize(
+            json,
+            ContractJsonContext.Default.DiagnosticCommand)!;
     }
 }
