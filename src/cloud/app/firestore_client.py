@@ -1,5 +1,5 @@
 from collections.abc import Collection, Iterable
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import cache
 
 from google.cloud import firestore
@@ -7,7 +7,7 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 
 from app.approval import validate_recovery_proposal
 from app.contracts import sha256_canonical
-from app.models import ApprovalRecord, ApprovalStatus, ProposedAction, RiskLevel
+from app.models import ApprovalRecord, ApprovalStatus, DiagnosticCommand, ProposedAction, RiskLevel
 from app.policy import POLICY_VERSION
 
 
@@ -78,58 +78,125 @@ def validate_pending_approval_decision(
     approval_id: str,
     now: datetime,
 ) -> ApprovalRecord:
-    query = client.collection_group(APPROVALS_COLLECTION).where(
-        filter=FieldFilter("approval_id", "==", approval_id)
-    ).limit(2)
-
     @firestore.transactional
     def validate(transaction: firestore.Transaction) -> ApprovalRecord | None:
-        snapshots = list(transaction.get(query))
-        if len(snapshots) != 1:
-            raise ValueError("Approval does not exist")
-        approval = ApprovalRecord.model_validate(snapshots[0].to_dict() or {})
-        if approval.status is not ApprovalStatus.PENDING:
-            raise ValueError("Approval is not pending")
-        if approval.expires_at_utc <= now:
-            transaction.update(
-                snapshots[0].reference,
-                {
-                    "status": ApprovalStatus.EXPIRED.value,
-                    "updated_at": firestore.SERVER_TIMESTAMP,
-                },
-            )
-            return None
-        if approval.policy_version != POLICY_VERSION:
-            raise ValueError("Approval policy version mismatch")
-        incident_document = snapshots[0].reference.parent.parent
-        if incident_document is None:
-            raise ValueError("Approval incident reference is invalid")
-        incident_snapshot = incident_document.get(transaction=transaction)
-        if not incident_snapshot.exists:
-            raise ValueError("Incident does not exist")
-        incident = incident_snapshot.to_dict() or {}
-        if incident.get("proposal_version") != approval.proposal_version:
-            raise ValueError("Approval proposal version mismatch")
-        material_evidence: list[tuple[str, str]] = []
-        for evidence_snapshot in transaction.get(
-            incident_document.collection(EVIDENCE_COLLECTION)
-        ):
-            evidence = evidence_snapshot.to_dict() or {}
-            evidence_hash = evidence.get("evidence_hash")
-            if not isinstance(evidence_hash, str):
-                raise ValueError("Incident evidence hash is invalid")
-            material_evidence.append((evidence_snapshot.id, evidence_hash))
-        if evidence_snapshot_hash(material_evidence) != approval.evidence_snapshot_hash:
-            raise ValueError("Approval evidence snapshot mismatch")
-        if sha256_canonical(approval.canonical_arguments) != approval.canonical_arguments_hash:
-            raise ValueError("Approval arguments hash mismatch")
-        if incident.get("app_session_id") != approval.target_app_session_id:
-            raise ValueError("Approval app session mismatch")
-        return approval
+        return _validate_pending_approval_in_transaction(
+            client,
+            transaction,
+            approval_id=approval_id,
+            now=now,
+        )
 
     approval = validate(client.transaction())
     if approval is None:
         raise ValueError("Approval expired")
+    return approval
+
+
+def approve_pending_approval(
+    client: firestore.Client,
+    *,
+    approval_id: str,
+    now: datetime,
+) -> str:
+    @firestore.transactional
+    def approve(transaction: firestore.Transaction) -> str | None:
+        approval = _validate_pending_approval_in_transaction(
+            client,
+            transaction,
+            approval_id=approval_id,
+            now=now,
+        )
+        if approval is None:
+            return None
+        idempotency_key = sha256_canonical(
+            {
+                "incident_id": approval.incident_id,
+                "proposal_version": approval.proposal_version,
+                "tool": approval.tool.value,
+                "arguments_hash": approval.canonical_arguments_hash,
+            }
+        )
+        command = DiagnosticCommand(
+            schema_version="1.0",
+            command_id=f"cmd-{idempotency_key}",
+            incident_id=approval.incident_id,
+            target_app_session_id=approval.target_app_session_id,
+            tool=approval.tool,
+            arguments=approval.canonical_arguments,
+            arguments_hash=approval.canonical_arguments_hash,
+            risk_level=RiskLevel.HIGH,
+            approval_id=approval.approval_id,
+            idempotency_key=idempotency_key,
+            issued_at_utc=now,
+            expires_at_utc=now + timedelta(minutes=1),
+            timeout_ms=10_000,
+        )
+        from app.commands import command_document
+
+        transaction.create(
+            client.collection(COMMANDS_COLLECTION).document(command.command_id),
+            command_document(command),
+        )
+        return command.command_id
+
+    command_id = approve(client.transaction())
+    if command_id is None:
+        raise ValueError("Approval expired")
+    return command_id
+
+
+def _validate_pending_approval_in_transaction(
+    client: firestore.Client,
+    transaction: firestore.Transaction,
+    *,
+    approval_id: str,
+    now: datetime,
+) -> ApprovalRecord | None:
+    query = client.collection_group(APPROVALS_COLLECTION).where(
+        filter=FieldFilter("approval_id", "==", approval_id)
+    ).limit(2)
+    snapshots = list(transaction.get(query))
+    if len(snapshots) != 1:
+        raise ValueError("Approval does not exist")
+    approval = ApprovalRecord.model_validate(snapshots[0].to_dict() or {})
+    if approval.status is not ApprovalStatus.PENDING:
+        raise ValueError("Approval is not pending")
+    if approval.expires_at_utc <= now:
+        transaction.update(
+            snapshots[0].reference,
+            {
+                "status": ApprovalStatus.EXPIRED.value,
+                "updated_at": firestore.SERVER_TIMESTAMP,
+            },
+        )
+        return None
+    if approval.policy_version != POLICY_VERSION:
+        raise ValueError("Approval policy version mismatch")
+    incident_document = snapshots[0].reference.parent.parent
+    if incident_document is None:
+        raise ValueError("Approval incident reference is invalid")
+    incident_snapshot = incident_document.get(transaction=transaction)
+    if not incident_snapshot.exists:
+        raise ValueError("Incident does not exist")
+    incident = incident_snapshot.to_dict() or {}
+    if incident.get("proposal_version") != approval.proposal_version:
+        raise ValueError("Approval proposal version mismatch")
+    material_evidence: list[tuple[str, str]] = []
+    for evidence_snapshot in transaction.get(
+        incident_document.collection(EVIDENCE_COLLECTION)
+    ):
+        evidence = evidence_snapshot.to_dict() or {}
+        evidence_hash = evidence.get("evidence_hash")
+        if not isinstance(evidence_hash, str):
+            raise ValueError("Incident evidence hash is invalid")
+        material_evidence.append((evidence_snapshot.id, evidence_hash))
+    if evidence_snapshot_hash(material_evidence) != approval.evidence_snapshot_hash:
+        raise ValueError("Approval evidence snapshot mismatch")
+    if sha256_canonical(approval.canonical_arguments) != approval.canonical_arguments_hash:
+        raise ValueError("Approval arguments hash mismatch")
+    if incident.get("app_session_id") != approval.target_app_session_id:
+        raise ValueError("Approval app session mismatch")
     return approval
 
 

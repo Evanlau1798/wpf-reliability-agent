@@ -146,6 +146,55 @@ def test_app_session_mismatch_rejects_approval(monkeypatch) -> None:
     transaction.create.assert_not_called()
 
 
+def test_approved_decision_creates_exact_unique_mutation_command(monkeypatch) -> None:
+    client, transaction, _ = _approval_client(_approval_document())
+    monkeypatch.setattr(firestore_client.firestore, "transactional", lambda callback: callback)
+    now = datetime(2026, 8, 8, 5, tzinfo=UTC)
+    arguments_hash = firestore_client.sha256_canonical(
+        {
+            "feature": "ExperimentalPeopleGrid",
+            "enabled": False,
+            "expected_current_value": True,
+        }
+    )
+    idempotency_key = firestore_client.sha256_canonical(
+        {
+            "incident_id": "incident-1",
+            "proposal_version": 3,
+            "tool": "recovery.set_feature_flag",
+            "arguments_hash": arguments_hash,
+        }
+    )
+
+    command_id = firestore_client.approve_pending_approval(
+        client,
+        approval_id="approval-1",
+        now=now,
+    )
+
+    assert command_id == f"cmd-{idempotency_key}"
+    client.collection.assert_called_once_with(firestore_client.COMMANDS_COLLECTION)
+    client.collection.return_value.document.assert_called_once_with(command_id)
+    transaction.create.assert_called_once()
+    command_document = transaction.create.call_args.args[1]
+    assert command_document["incident_id"] == "incident-1"
+    assert command_document["target_app_session_id"] == "session-1"
+    assert command_document["tool"] == "recovery.set_feature_flag"
+    assert command_document["arguments"] == {
+        "feature": "ExperimentalPeopleGrid",
+        "enabled": False,
+        "expected_current_value": True,
+    }
+    assert command_document["arguments_hash"] == arguments_hash
+    assert command_document["risk_level"] == "HIGH"
+    assert command_document["approval_id"] == "approval-1"
+    assert command_document["idempotency_key"] == idempotency_key
+    assert command_document["issued_at_utc"] == now.isoformat().replace("+00:00", "Z")
+    assert command_document["expires_at_utc"] == "2026-08-08T05:01:00Z"
+    assert command_document["timeout_ms"] == 10_000
+    assert command_document["status"] == "PENDING"
+
+
 def _approval_client(
     document: dict[str, object],
     *,

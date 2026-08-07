@@ -36,7 +36,7 @@ def command_result_hash(result: CommandResult) -> str:
 
 def write_command(client: firestore.Client, command: DiagnosticCommand) -> None:
     client.collection(COMMANDS_COLLECTION).document(command.command_id).create(
-        _command_document(command)
+        command_document(command)
     )
 
 
@@ -54,7 +54,7 @@ def write_command_once(client: firestore.Client, command: DiagnosticCommand) -> 
             if not isinstance(command_id, str) or not command_id:
                 raise ValueError("Existing command idempotency record is invalid")
             return command_id
-        transaction.create(collection.document(command.command_id), _command_document(command))
+        transaction.create(collection.document(command.command_id), command_document(command))
         return command.command_id
 
     return write(client.transaction())
@@ -321,7 +321,7 @@ def _validate_result_binding(
         raise ValueError("Result hash mismatch")
 
 
-def _command_document(command: DiagnosticCommand) -> dict[str, object]:
+def command_document(command: DiagnosticCommand) -> dict[str, object]:
     document = command.model_dump(mode="json")
     document.update(
         {
