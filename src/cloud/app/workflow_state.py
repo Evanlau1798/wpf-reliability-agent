@@ -1,6 +1,23 @@
+from enum import StrEnum
+
 from google.cloud import firestore
 
 from app.firestore_client import INCIDENTS_COLLECTION, PROCESSED_RUNS_COLLECTION
+
+
+class IncidentState(StrEnum):
+    NEW = "NEW"
+    TRIAGING = "TRIAGING"
+    COLLECTING_EVIDENCE = "COLLECTING_EVIDENCE"
+    INVESTIGATING = "INVESTIGATING"
+    AWAITING_APPROVAL = "AWAITING_APPROVAL"
+    EXECUTING = "EXECUTING"
+    VERIFYING = "VERIFYING"
+    MITIGATED = "MITIGATED"
+    REPORTING = "REPORTING"
+    REJECTED = "REJECTED"
+    FAILED_SAFE = "FAILED_SAFE"
+    CLOSED = "CLOSED"
 
 
 def commit_new_incident_run(

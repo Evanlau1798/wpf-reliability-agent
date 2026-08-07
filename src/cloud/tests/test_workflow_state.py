@@ -6,6 +6,23 @@ from app import firestore_client
 from app import workflow_state
 
 
+def test_incident_state_enum_matches_proposal_states() -> None:
+    assert {state.value for state in workflow_state.IncidentState} == {
+        "NEW",
+        "TRIAGING",
+        "COLLECTING_EVIDENCE",
+        "INVESTIGATING",
+        "AWAITING_APPROVAL",
+        "EXECUTING",
+        "VERIFYING",
+        "MITIGATED",
+        "REPORTING",
+        "REJECTED",
+        "FAILED_SAFE",
+        "CLOSED",
+    }
+
+
 def test_new_incident_run_commits_transition_and_processed_marker_together(monkeypatch) -> None:
     client = Mock()
     transaction = Mock()
