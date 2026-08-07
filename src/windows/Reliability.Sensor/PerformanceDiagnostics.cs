@@ -375,6 +375,24 @@ public sealed partial class ReliabilitySensor
         return result;
     }
 
+    internal Task<PerformanceSampleResult> CapturePerformanceSampleByIdAsync(
+        string? elementId,
+        CancellationToken cancellationToken = default)
+    {
+        if (elementId is null)
+        {
+            return CapturePerformanceSampleAsync(null, cancellationToken);
+        }
+        if (string.IsNullOrWhiteSpace(elementId)
+            || !_elementIds.TryResolve<DependencyObject>(elementId, out var root))
+        {
+            return Task.FromResult(Error(
+                "ELEMENT_NOT_FOUND",
+                "The element does not exist in the current application session."));
+        }
+        return CapturePerformanceSampleAsync(root, cancellationToken);
+    }
+
     private static bool IsValid(PerformanceOptions options) =>
         options.HeartbeatInterval >= TimeSpan.FromMilliseconds(100)
         && options.HeartbeatInterval <= TimeSpan.FromSeconds(10)

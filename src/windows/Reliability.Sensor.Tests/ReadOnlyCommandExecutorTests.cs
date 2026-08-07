@@ -255,6 +255,49 @@ public sealed class ReadOnlyCommandExecutorTests
     }
 
     [Fact]
+    public async Task PerformanceSampleReturnsBoundedPassiveMetrics()
+    {
+        await using var sensor = ReliabilitySensor.Start(TestOptions());
+        var ready = new TaskCompletionSource<StackPanel>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var thread = new Thread(() =>
+        {
+            var root = new StackPanel();
+            root.Children.Add(new TextBlock());
+            sensor.InstallPerformanceDiagnostics(
+                Dispatcher.CurrentDispatcher,
+                new PerformanceOptions { SampleCooldown = TimeSpan.FromMilliseconds(100) });
+            ready.SetResult(root);
+            Dispatcher.Run();
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        var root = await ready.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        try
+        {
+            var command = (await ReadCommandAsync()) with
+            {
+                Tool = DiagnosticTool.PerformanceSample,
+                Arguments = JsonSerializer.SerializeToElement(new { element_id = sensor.GetElementId(root) }),
+            };
+            var executor = new ReadOnlyCommandExecutor(sensor);
+
+            var result = await executor.ExecuteAsync(command, CancellationToken.None);
+
+            Assert.True(result.GetProperty("succeeded").GetBoolean());
+            Assert.Equal(2, result.GetProperty("visual_count").GetInt32());
+            Assert.InRange(result.GetProperty("sample_duration_ms").GetDouble(), 0, 60_000);
+            Assert.Equal("LOW", result.GetProperty("confidence").GetString());
+        }
+        finally
+        {
+            sensor.StopPerformanceDiagnostics();
+            root.Dispatcher.InvokeShutdown();
+            Assert.True(thread.Join(TimeSpan.FromSeconds(5)));
+        }
+    }
+
+    [Fact]
     public async Task MutationToolIsRejectedBySwitchDispatcher()
     {
         await using var sensor = ReliabilitySensor.Start(null);

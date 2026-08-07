@@ -57,8 +57,10 @@ internal sealed class ReadOnlyCommandExecutor
             DiagnosticTool.UiGetElementDetails => await ExecuteUiGetElementDetailsAsync(
                 command.Arguments,
                 cancellationToken).ConfigureAwait(false),
-            DiagnosticTool.PerformanceSample
-                or DiagnosticTool.StateCompareSnapshots => throw new NotSupportedException(
+            DiagnosticTool.PerformanceSample => await ExecutePerformanceSampleAsync(
+                command.Arguments,
+                cancellationToken).ConfigureAwait(false),
+            DiagnosticTool.StateCompareSnapshots => throw new NotSupportedException(
                     "Read-only diagnostic tool is not implemented yet."),
             _ => throw new InvalidOperationException(
                 "Command tool is not available to the read-only executor."),
@@ -167,5 +169,35 @@ internal sealed class ReadOnlyCommandExecutor
             throw new InvalidOperationException("Command arguments are invalid.");
         }
         return value.EnumerateArray().Select(item => item.GetString()!).ToArray();
+    }
+
+    private async Task<JsonElement> ExecutePerformanceSampleAsync(
+        JsonElement arguments,
+        CancellationToken cancellationToken)
+    {
+        var result = await _sensor.CapturePerformanceSampleByIdAsync(
+            OptionalString(arguments, "element_id"),
+            cancellationToken).ConfigureAwait(false);
+        return JsonSerializer.SerializeToElement(new
+        {
+            succeeded = result.Succeeded,
+            frame_statistics = new
+            {
+                sample_count = result.FrameStatistics.SampleCount,
+                average_ms = result.FrameStatistics.AverageMilliseconds,
+                p50_ms = result.FrameStatistics.P50Milliseconds,
+                p95_ms = result.FrameStatistics.P95Milliseconds,
+                max_ms = result.FrameStatistics.MaxMilliseconds,
+                over_16_7_ms = result.FrameStatistics.Over16Point7Milliseconds,
+                over_33_3_ms = result.FrameStatistics.Over33Point3Milliseconds,
+                over_50_ms = result.FrameStatistics.Over50Milliseconds,
+            },
+            sample_duration_ms = result.SampleDurationMilliseconds,
+            confidence = result.Confidence.ToString(),
+            heartbeat_delay_ms = result.HeartbeatDelayMilliseconds,
+            visual_count = result.VisualCount,
+            visual_count_truncated = result.VisualCountTruncated,
+            error = result.Error is null ? null : new { code = result.Error.Code, message = result.Error.Message },
+        });
     }
 }
