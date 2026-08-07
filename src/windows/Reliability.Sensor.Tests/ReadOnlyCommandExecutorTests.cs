@@ -298,6 +298,46 @@ public sealed class ReadOnlyCommandExecutorTests
     }
 
     [Fact]
+    public async Task ToolTimeoutReturnsStructuredError()
+    {
+        await using var sensor = ReliabilitySensor.Start(TestOptions());
+        using var releaseDispatcher = new ManualResetEventSlim();
+        var ready = new TaskCompletionSource<StackPanel>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var thread = new Thread(() =>
+        {
+            var root = new StackPanel { Name = "BlockedRoot" };
+            ready.SetResult(root);
+            releaseDispatcher.Wait();
+            Dispatcher.Run();
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        var root = await ready.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        try
+        {
+            var command = (await ReadCommandAsync()) with
+            {
+                Tool = DiagnosticTool.UiGetSubtree,
+                Arguments = JsonSerializer.SerializeToElement(new { element_id = sensor.GetElementId(root) }),
+                TimeoutMs = 100,
+            };
+            var executor = new ReadOnlyCommandExecutor(sensor);
+
+            var result = await executor.ExecuteAsync(command, CancellationToken.None);
+
+            Assert.False(result.GetProperty("succeeded").GetBoolean());
+            Assert.Equal("TIMEOUT", result.GetProperty("error").GetProperty("code").GetString());
+        }
+        finally
+        {
+            releaseDispatcher.Set();
+            root.Dispatcher.BeginInvokeShutdown(DispatcherPriority.Send);
+            Assert.True(thread.Join(TimeSpan.FromSeconds(5)));
+        }
+    }
+
+    [Fact]
     public async Task MutationToolIsRejectedBySwitchDispatcher()
     {
         await using var sensor = ReliabilitySensor.Start(null);

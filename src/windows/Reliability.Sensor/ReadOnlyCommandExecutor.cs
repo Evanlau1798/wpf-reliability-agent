@@ -17,6 +17,31 @@ internal sealed class ReadOnlyCommandExecutor
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromMilliseconds(command.TimeoutMs));
+        try
+        {
+            return await ExecuteCoreAsync(command, timeout.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (
+            !cancellationToken.IsCancellationRequested && timeout.IsCancellationRequested)
+        {
+            return JsonSerializer.SerializeToElement(new
+            {
+                succeeded = false,
+                error = new
+                {
+                    code = "TIMEOUT",
+                    message = "Command execution timed out.",
+                },
+            });
+        }
+    }
+
+    private async Task<JsonElement> ExecuteCoreAsync(
+        DiagnosticCommand command,
+        CancellationToken cancellationToken)
+    {
         return command.Tool switch
         {
             DiagnosticTool.HealthGetSnapshot => JsonSerializer.SerializeToElement(new
