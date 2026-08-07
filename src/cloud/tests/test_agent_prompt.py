@@ -58,3 +58,11 @@ def test_investigator_instruction_keeps_risk_deterministic() -> None:
 
     assert "deterministic policy" in instruction
     assert "risk hints only" in instruction
+
+
+def test_investigator_instruction_distinguishes_temporary_mitigation() -> None:
+    instruction = INVESTIGATOR_INSTRUCTION.lower()
+
+    assert "temporary mitigation" in instruction
+    assert "permanent fix" in instruction
+    assert "resolved" in instruction
