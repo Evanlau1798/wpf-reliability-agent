@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from enum import StrEnum
 from typing import Annotated
 
@@ -43,6 +44,7 @@ class NormalizedEvidenceSummary(BaseModel):
     frame_p95_ms: float | None = Field(default=None, ge=0)
     visual_count: int | None = Field(default=None, ge=0)
     subtree_node_count: int | None = Field(default=None, ge=0)
+    material: bool = True
 
 
 class CandidateClaim(BaseModel):
@@ -214,10 +216,50 @@ def build_agent_context(
     max_context_bytes: int,
     max_context_tokens: int,
 ) -> AgentCorrelationContext:
-    return AgentCorrelationContext(
-        evidence=evidence,
+    high_confidence_ids = {
+        evidence_id
+        for claim in candidate_claims
+        if claim.confidence is Confidence.HIGH
+        for evidence_id in claim.supporting_evidence_ids
+    }
+    ordered_evidence = sorted(
+        evidence,
+        key=lambda item: (
+            item.evidence_id in high_confidence_ids,
+            item.material,
+            item.observed_at_utc,
+        ),
+        reverse=True,
+    )
+    selected: list[NormalizedEvidenceSummary] = []
+    context = AgentCorrelationContext(
+        evidence=selected,
         candidate_claims=candidate_claims,
         tool_calls_remaining=tool_calls_remaining,
         max_context_bytes=max_context_bytes,
         max_context_tokens=max_context_tokens,
+    )
+    if not _context_fits_budget(context):
+        raise ValueError("candidate claims exceed the Agent context budget")
+
+    for item in ordered_evidence:
+        candidate = context.model_copy(update={"evidence": [*selected, item]})
+        if _context_fits_budget(candidate):
+            selected.append(item)
+            context = candidate
+    return context
+
+
+def _context_fits_budget(context: AgentCorrelationContext) -> bool:
+    encoded = json.dumps(
+        context.model_dump(mode="json"),
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    # ponytail: one token per UTF-8 byte is a conservative offline ceiling;
+    # replace with the selected model tokenizer only if context density becomes limiting.
+    token_upper_bound = len(encoded)
+    return (
+        len(encoded) <= context.max_context_bytes
+        and token_upper_bound <= context.max_context_tokens
     )
