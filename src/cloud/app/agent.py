@@ -1,6 +1,9 @@
 import json
+from typing import Any
 
 from google.adk.agents import Agent
+from google.adk.runners import InMemoryRunner
+from google.genai import types
 
 from app.correlation import AgentCorrelationContext
 from app.models import AgentDecision, DiagnosticTool
@@ -42,6 +45,13 @@ def build_root_agent(model_id: str) -> Agent:
     )
 
 
+def create_investigator_runner(model_id: str) -> InMemoryRunner:
+    return InMemoryRunner(
+        agent=build_root_agent(model_id),
+        app_name="wpf_reliability_agent",
+    )
+
+
 def build_investigator_contents(context: AgentCorrelationContext) -> str:
     tool_catalog = json.dumps(TOOL_DESCRIPTIONS, separators=(",", ":"))
     return (
@@ -52,3 +62,35 @@ def build_investigator_contents(context: AgentCorrelationContext) -> str:
         f"{context.model_dump_json()}\n"
         "END_UNTRUSTED_EVIDENCE_JSON"
     )
+
+
+async def run_investigator_once(
+    runner: Any,
+    *,
+    incident_id: str,
+    run_key: str,
+    context: AgentCorrelationContext,
+) -> AgentDecision:
+    await runner.session_service.create_session(
+        app_name=runner.app_name,
+        user_id=incident_id,
+        session_id=run_key,
+    )
+    message = types.Content(
+        role="user",
+        parts=[types.Part(text=build_investigator_contents(context))],
+    )
+    async for event in runner.run_async(
+        user_id=incident_id,
+        session_id=run_key,
+        new_message=message,
+    ):
+        if not event.is_final_response():
+            continue
+        if event.output is not None:
+            return AgentDecision.model_validate(event.output)
+        if event.content is not None:
+            text = "".join(part.text or "" for part in event.content.parts or [])
+            if text:
+                return AgentDecision.model_validate_json(text)
+    raise RuntimeError("Investigator did not return a final decision")

@@ -1,5 +1,7 @@
 from datetime import UTC, datetime
+import asyncio
 import json
+from types import SimpleNamespace
 
 from google.adk.agents import Agent
 
@@ -9,6 +11,7 @@ from app.agent import (
     MAX_READ_ONLY_TOOL_CALLS,
     build_root_agent,
     build_investigator_contents,
+    run_investigator_once,
 )
 from app.correlation import AgentCorrelationContext, NormalizedEvidenceSummary
 from app.models import AgentDecision, DecisionType, DiagnosticTool
@@ -113,3 +116,52 @@ def test_investigator_exposes_only_server_tool_enum_descriptions() -> None:
         assert tool.value in contents
     for blocked in ("shell.execute", "powershell.execute", "file.write", "process.kill"):
         assert blocked not in exposed
+
+
+def test_investigator_runs_exactly_one_model_invocation() -> None:
+    calls: list[dict[str, object]] = []
+
+    class SessionService:
+        async def create_session(self, **kwargs):
+            calls.append({"create_session": kwargs})
+
+    class Runner:
+        app_name = "wpf_reliability_agent"
+        session_service = SessionService()
+
+        def run_async(self, **kwargs):
+            calls.append({"run_async": kwargs})
+
+            async def events():
+                yield SimpleNamespace(
+                    is_final_response=lambda: True,
+                    output={
+                        "schema_version": "1.0",
+                        "decision": "NO_ACTION",
+                        "hypotheses": [],
+                        "missing_evidence": [],
+                    },
+                    content=None,
+                )
+
+            return events()
+
+    context = AgentCorrelationContext(
+        evidence=[],
+        candidate_claims=[],
+        tool_calls_remaining=6,
+        max_context_bytes=65_536,
+        max_context_tokens=32_768,
+    )
+
+    decision = asyncio.run(
+        run_investigator_once(
+            Runner(),
+            incident_id="incident-1",
+            run_key="incident-1:1:binding.aggregate",
+            context=context,
+        )
+    )
+
+    assert decision.decision is DecisionType.NO_ACTION
+    assert sum("run_async" in call for call in calls) == 1
