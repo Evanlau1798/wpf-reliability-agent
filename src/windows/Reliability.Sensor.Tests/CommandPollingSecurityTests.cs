@@ -104,6 +104,44 @@ public sealed class CommandPollingSecurityTests
     }
 
     [Fact]
+    public async Task MutationToolUsesSeparateDispatchPath()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var handler = new SingleCommandThenBlockHandler(
+            json => json
+                .Replace("2026-08-07T00:00:00Z", "2099-01-01T00:00:00Z")
+                .Replace("2026-08-07T00:01:00Z", "2099-01-01T00:01:00Z"),
+            "diagnostic-command-valid-mutation.json");
+        using var client = new TelemetryApiClient(
+            new Uri("https://reliability.example.test"),
+            "test-token",
+            handler,
+            TimeSpan.FromSeconds(25));
+        var readOnlyHandled = 0;
+        var mutationHandled = 0;
+
+        await ReliabilitySensor.RunCommandPollerAsync(
+            client,
+            "device-test",
+            "session-1",
+            (_, _) =>
+            {
+                readOnlyHandled++;
+                return Task.CompletedTask;
+            },
+            cancellation.Token,
+            handleMutationCommand: (_, _) =>
+            {
+                mutationHandled++;
+                cancellation.Cancel();
+                return Task.CompletedTask;
+            });
+
+        Assert.Equal(0, readOnlyHandled);
+        Assert.Equal(1, mutationHandled);
+    }
+
+    [Fact]
     public async Task ArgumentsHashMismatchIsRejectedBeforeDispatch()
     {
         using var cancellation = new CancellationTokenSource();

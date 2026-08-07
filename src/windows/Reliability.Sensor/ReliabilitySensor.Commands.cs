@@ -175,10 +175,11 @@ public sealed partial class ReliabilitySensor
         TelemetryApiClient client,
         string deviceId,
         string appSessionId,
-        Func<DiagnosticCommand, CancellationToken, Task> handleCommand,
+        Func<DiagnosticCommand, CancellationToken, Task> handleReadOnlyCommand,
         CancellationToken cancellationToken,
         SqliteOutbox? commandJournal = null,
-        Func<DiagnosticCommand, CompletedCommand, CancellationToken, Task>? replayCompletedCommand = null)
+        Func<DiagnosticCommand, CompletedCommand, CancellationToken, Task>? replayCompletedCommand = null,
+        Func<DiagnosticCommand, CancellationToken, Task>? handleMutationCommand = null)
     {
         while (!cancellationToken.IsCancellationRequested)
         {
@@ -197,9 +198,14 @@ public sealed partial class ReliabilitySensor
                     && string.Equals(
                         CanonicalJson.Hash(command.Arguments),
                         command.ArgumentsHash,
-                        StringComparison.Ordinal)
-                    && IsReadOnlyTool(command.Tool))
+                        StringComparison.Ordinal))
                 {
+                    var isReadOnly = IsReadOnlyTool(command.Tool);
+                    var isMutation = IsMutationTool(command.Tool);
+                    if (!isReadOnly && (!isMutation || handleMutationCommand is null))
+                    {
+                        continue;
+                    }
                     if (commandJournal is not null)
                     {
                         var completed = await commandJournal.LoadCompletedCommandAsync(
@@ -217,7 +223,14 @@ public sealed partial class ReliabilitySensor
                         }
                     }
 
-                    await handleCommand(command, cancellationToken).ConfigureAwait(false);
+                    if (isMutation)
+                    {
+                        await handleMutationCommand!(command, cancellationToken).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        await handleReadOnlyCommand(command, cancellationToken).ConfigureAwait(false);
+                    }
                 }
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -240,4 +253,7 @@ public sealed partial class ReliabilitySensor
         or DiagnosticTool.UiGetElementDetails
         or DiagnosticTool.PerformanceSample
         or DiagnosticTool.StateCompareSnapshots;
+
+    private static bool IsMutationTool(DiagnosticTool tool) =>
+        tool is DiagnosticTool.RecoverySetFeatureFlag;
 }
