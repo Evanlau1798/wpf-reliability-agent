@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from app.correlation import (
     BindingCandidate,
@@ -7,6 +7,7 @@ from app.correlation import (
     match_exact_element_id,
     match_nearest_named_ancestor,
     match_normalized_binding_path,
+    match_time_window,
     match_unique_live_candidate,
 )
 from app.models import Confidence
@@ -85,3 +86,21 @@ def test_nearest_named_ancestor_match_is_medium_confidence() -> None:
 
     assert match_nearest_named_ancestor(left, same) is Confidence.MEDIUM
     assert match_nearest_named_ancestor(left, different) is None
+
+
+def test_time_window_is_only_a_same_session_bonus_signal() -> None:
+    left = _evidence("binding-1", None)
+    near = left.model_copy(
+        update={
+            "evidence_id": "ui-1",
+            "observed_at_utc": left.observed_at_utc + timedelta(seconds=9),
+        }
+    )
+    far = near.model_copy(
+        update={"observed_at_utc": left.observed_at_utc + timedelta(seconds=11)}
+    )
+    other_session = near.model_copy(update={"app_session_id": "session-2"})
+
+    assert match_time_window(left, near)
+    assert not match_time_window(left, far)
+    assert not match_time_window(left, other_session)

@@ -102,3 +102,14 @@ def match_nearest_named_ancestor(
     ):
         return Confidence.MEDIUM
     return None
+
+
+def match_time_window(
+    left: NormalizedEvidenceSummary,
+    right: NormalizedEvidenceSummary,
+    max_delta_seconds: float = 10.0,
+) -> bool:
+    if left.app_session_id != right.app_session_id or max_delta_seconds < 0:
+        return False
+    delta_seconds = abs((left.observed_at_utc - right.observed_at_utc).total_seconds())
+    return delta_seconds <= max_delta_seconds
