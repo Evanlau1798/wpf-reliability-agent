@@ -1,5 +1,5 @@
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -7,6 +7,7 @@ from app import commands
 from app.commands import (
     CommandStatus,
     expire_command_if_needed,
+    lease_next_command,
     pending_command_query,
     write_command,
     write_command_once,
@@ -135,3 +136,39 @@ def test_pending_command_query_uses_deterministic_order() -> None:
     session_query.order_by.assert_called_once_with("issued_at_utc")
     issued_query.order_by.assert_called_once_with("__name__")
     id_query.limit.assert_called_once_with(1)
+
+
+def test_pending_command_is_leased_transactionally(monkeypatch) -> None:
+    client = Mock()
+    transaction = Mock()
+    snapshot = Mock()
+    snapshot.reference = Mock()
+    payload = json.loads(
+        (FIXTURES / "diagnostic-command-valid-read.json").read_text(encoding="utf-8")
+    )
+    payload["expires_at_utc"] = "2026-08-07T00:10:00Z"
+    snapshot.to_dict.return_value = payload
+    client.transaction.return_value = transaction
+    transaction.get.return_value = iter([snapshot])
+    monkeypatch.setattr(commands.firestore, "transactional", lambda callback: callback)
+    now = datetime(2026, 8, 7, 0, 2, tzinfo=UTC)
+
+    leased = lease_next_command(
+        client,
+        app_session_id="session-1",
+        lease_owner="device-test",
+        now=now,
+        duration=timedelta(seconds=30),
+    )
+
+    assert leased is not None
+    assert leased.command_id == "command-read-1"
+    transaction.update.assert_called_once_with(
+        snapshot.reference,
+        {
+            "status": CommandStatus.LEASED.value,
+            "lease_owner": "device-test",
+            "lease_until": now + timedelta(seconds=30),
+            "updated_at": commands.firestore.SERVER_TIMESTAMP,
+        },
+    )

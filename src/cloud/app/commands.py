@@ -1,5 +1,5 @@
 from enum import StrEnum
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
@@ -84,6 +84,51 @@ def pending_command_query(client: firestore.Client, app_session_id: str):
     ).where(
         filter=FieldFilter("target_app_session_id", "==", app_session_id)
     ).order_by("issued_at_utc").order_by("__name__").limit(1)
+
+
+def lease_next_command(
+    client: firestore.Client,
+    *,
+    app_session_id: str,
+    lease_owner: str,
+    now: datetime,
+    duration: timedelta,
+) -> DiagnosticCommand | None:
+    if not lease_owner:
+        raise ValueError("Lease owner is required")
+    if duration <= timedelta(0):
+        raise ValueError("Lease duration must be positive")
+    query = pending_command_query(client, app_session_id)
+
+    @firestore.transactional
+    def lease(transaction: firestore.Transaction) -> DiagnosticCommand | None:
+        snapshot = next(transaction.get(query), None)
+        if snapshot is None:
+            return None
+        command = DiagnosticCommand.model_validate(snapshot.to_dict() or {})
+        if command.expires_at_utc <= now:
+            transaction.update(
+                snapshot.reference,
+                {
+                    "status": CommandStatus.EXPIRED.value,
+                    "lease_owner": None,
+                    "lease_until": None,
+                    "updated_at": firestore.SERVER_TIMESTAMP,
+                },
+            )
+            return None
+        transaction.update(
+            snapshot.reference,
+            {
+                "status": CommandStatus.LEASED.value,
+                "lease_owner": lease_owner,
+                "lease_until": now + duration,
+                "updated_at": firestore.SERVER_TIMESTAMP,
+            },
+        )
+        return command
+
+    return lease(client.transaction())
 
 
 def _command_document(command: DiagnosticCommand) -> dict[str, object]:
