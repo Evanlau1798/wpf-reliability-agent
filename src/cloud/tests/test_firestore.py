@@ -165,7 +165,7 @@ def test_incident_evidence_append_rejects_duplicate_id() -> None:
     evidence_document.create.assert_called_with(evidence)
 
 
-def test_incident_occurrence_update_increments_existing_evidence_count() -> None:
+def test_incident_occurrence_update_does_not_advance_evidence_revision() -> None:
     client = Mock()
     incident = Mock()
     evidence_document = Mock()
@@ -181,6 +181,12 @@ def test_incident_occurrence_update_increments_existing_evidence_count() -> None
     evidence_document.update.assert_called_once_with(
         {"payload.occurrence_count": firestore_client.firestore.Increment(3)}
     )
+    incident.update.assert_not_called()
+    assert firestore_client.next_evidence_revision(
+        7,
+        event_type="binding.aggregate",
+        observed_event_types=frozenset({"binding.aggregate"}),
+    ) == 7
 
 
 def test_incident_event_persist_is_atomic(monkeypatch) -> None:
