@@ -5,8 +5,14 @@ from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
+from pydantic import SecretStr
 
-from app.auth import authenticate_device_token, authenticate_operator_token
+from app.auth import (
+    OPERATOR_SESSION_COOKIE,
+    authenticate_device_token,
+    authenticate_operator_token,
+    create_operator_session_value,
+)
 from app.commands import (
     CommandLeaseRequest,
     complete_command_once,
@@ -42,8 +48,19 @@ def healthz() -> dict[str, str]:
 
 
 @app.post("/console/login", status_code=status.HTTP_204_NO_CONTENT)
-def operator_login(_: Annotated[None, Depends(authenticate_operator_token)]) -> Response:
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+def operator_login(
+    secret: Annotated[SecretStr, Depends(authenticate_operator_token)],
+) -> Response:
+    response = Response(status_code=status.HTTP_204_NO_CONTENT)
+    response.set_cookie(
+        key=OPERATOR_SESSION_COOKIE,
+        value=create_operator_session_value(secret),
+        httponly=True,
+        secure=True,
+        samesite="strict",
+        path="/",
+    )
+    return response
 
 
 @app.post(

@@ -1,5 +1,9 @@
+import hashlib
+import hmac
+
 from fastapi.testclient import TestClient
 
+from app import auth
 from app.main import app
 
 
@@ -18,6 +22,19 @@ def test_operator_login_validates_token_from_environment(monkeypatch) -> None:
 
     assert response.status_code == 204
     assert calls == [("operator-secret", "operator-secret")]
+    cookie = response.cookies.get(auth.OPERATOR_SESSION_COOKIE)
+    assert cookie is not None
+    payload, signature = cookie.rsplit(".", 1)
+    expected_signature = hmac.new(
+        b"operator-secret", payload.encode("utf-8"), hashlib.sha256
+    ).hexdigest()
+    assert hmac.compare_digest(signature, expected_signature)
+    assert "operator-secret" not in cookie
+    set_cookie = response.headers["set-cookie"]
+    assert "HttpOnly" in set_cookie
+    assert "Secure" in set_cookie
+    assert "SameSite=strict" in set_cookie
+    assert "Path=/" in set_cookie
 
 
 def test_operator_login_rejects_invalid_token(monkeypatch) -> None:
@@ -28,6 +45,7 @@ def test_operator_login_rejects_invalid_token(monkeypatch) -> None:
 
     assert response.status_code == 401
     assert response.json() == {"detail": "Invalid operator token"}
+    assert "set-cookie" not in response.headers
 
 
 def _set_api_environment(monkeypatch) -> None:

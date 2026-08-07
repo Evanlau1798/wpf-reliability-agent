@@ -1,3 +1,4 @@
+import hashlib
 import hmac
 from typing import Annotated
 
@@ -7,6 +8,8 @@ from pydantic import BaseModel, Field, SecretStr
 
 
 bearer_scheme = HTTPBearer(auto_error=False)
+OPERATOR_SESSION_COOKIE = "__Host-wpfra-operator-session"
+OPERATOR_SESSION_PAYLOAD = "operator-session-v1"
 
 
 class OperatorLoginRequest(BaseModel):
@@ -42,7 +45,7 @@ def authenticate_device_token(
     return settings.demo_device_id
 
 
-def authenticate_operator_token(request: Request, login: OperatorLoginRequest) -> None:
+def authenticate_operator_token(request: Request, login: OperatorLoginRequest) -> SecretStr:
     expected = request.app.state.settings.demo_operator_token
     if expected is None or not hmac.compare_digest(
         login.token.get_secret_value(), expected.get_secret_value()
@@ -51,3 +54,13 @@ def authenticate_operator_token(request: Request, login: OperatorLoginRequest) -
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid operator token",
         )
+    return expected
+
+
+def create_operator_session_value(secret: SecretStr) -> str:
+    signature = hmac.new(
+        secret.get_secret_value().encode("utf-8"),
+        OPERATOR_SESSION_PAYLOAD.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    return f"{OPERATOR_SESSION_PAYLOAD}.{signature}"
