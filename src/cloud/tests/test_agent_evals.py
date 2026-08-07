@@ -1,9 +1,11 @@
 import asyncio
 from datetime import UTC, datetime
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 
+from app import workflow_state
 from app.agent import READ_ONLY_DIAGNOSTIC_TOOLS, run_investigator_once
 from app.correlation import AgentCorrelationContext, CandidateClaim, NormalizedEvidenceSummary
 from app.models import Confidence, DecisionType, DiagnosticTool
@@ -271,3 +273,51 @@ def test_blocked_tool_output_eval_is_rejected_after_one_repair_attempt() -> None
         )
 
     assert runner.outputs == []
+
+
+def test_duplicate_tool_request_eval_is_stopped_by_loop_guard(monkeypatch) -> None:
+    arguments = {"element_id": "people-grid", "max_depth": 2}
+    runner = _Runner(
+        [
+            {
+                "schema_version": "1.0",
+                "decision": "REQUEST_EVIDENCE",
+                "hypotheses": [],
+                "next_command": {"tool": "ui.get_subtree", "arguments": arguments},
+                "missing_evidence": ["bounded UI subtree"],
+            }
+        ]
+    )
+    decision = asyncio.run(
+        run_investigator_once(
+            runner,
+            incident_id="incident-duplicate",
+            run_key="incident-duplicate:2:eval",
+            context=_context([]),
+        )
+    )
+    assert decision.next_command is not None
+    request_key = workflow_state.canonical_tool_request_key(
+        decision.next_command.tool.value,
+        decision.next_command.arguments,
+    )
+    client = Mock()
+    transaction = Mock()
+    document = Mock()
+    snapshot = Mock(exists=True)
+    client.transaction.return_value = transaction
+    client.collection.return_value.document.return_value = document
+    document.get.return_value = snapshot
+    snapshot.to_dict.return_value = {
+        "read_only_tool_call_count": 1,
+        "read_only_tool_request_keys": [request_key],
+    }
+    monkeypatch.setattr(workflow_state.firestore, "transactional", lambda callback: callback)
+
+    with pytest.raises(ValueError, match="Duplicate tool request"):
+        workflow_state.claim_read_only_tool_request(
+            client,
+            incident_id="incident-duplicate",
+            tool=decision.next_command.tool.value,
+            arguments=decision.next_command.arguments,
+        )
