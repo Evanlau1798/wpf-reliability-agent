@@ -76,22 +76,35 @@ def validate_pending_approval_decision(
     client: firestore.Client,
     *,
     approval_id: str,
+    now: datetime,
 ) -> ApprovalRecord:
     query = client.collection_group(APPROVALS_COLLECTION).where(
         filter=FieldFilter("approval_id", "==", approval_id)
     ).limit(2)
 
     @firestore.transactional
-    def validate(transaction: firestore.Transaction) -> ApprovalRecord:
+    def validate(transaction: firestore.Transaction) -> ApprovalRecord | None:
         snapshots = list(transaction.get(query))
         if len(snapshots) != 1:
             raise ValueError("Approval does not exist")
         approval = ApprovalRecord.model_validate(snapshots[0].to_dict() or {})
         if approval.status is not ApprovalStatus.PENDING:
             raise ValueError("Approval is not pending")
+        if approval.expires_at_utc <= now:
+            transaction.update(
+                snapshots[0].reference,
+                {
+                    "status": ApprovalStatus.EXPIRED.value,
+                    "updated_at": firestore.SERVER_TIMESTAMP,
+                },
+            )
+            return None
         return approval
 
-    return validate(client.transaction())
+    approval = validate(client.transaction())
+    if approval is None:
+        raise ValueError("Approval expired")
+    return approval
 
 
 def next_evidence_revision(

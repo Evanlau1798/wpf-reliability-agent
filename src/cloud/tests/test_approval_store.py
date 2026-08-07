@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from unittest.mock import Mock
 
 import pytest
@@ -6,12 +7,13 @@ from app import firestore_client
 
 
 def test_pending_approval_can_be_loaded_for_decision(monkeypatch) -> None:
-    client, transaction = _approval_client(_approval_document())
+    client, transaction, _ = _approval_client(_approval_document())
     monkeypatch.setattr(firestore_client.firestore, "transactional", lambda callback: callback)
 
     approval = firestore_client.validate_pending_approval_decision(
         client,
         approval_id="approval-1",
+        now=datetime(2026, 8, 8, 5, tzinfo=UTC),
     )
 
     assert approval.approval_id == "approval-1"
@@ -22,20 +24,43 @@ def test_pending_approval_can_be_loaded_for_decision(monkeypatch) -> None:
 
 
 def test_non_pending_approval_cannot_be_decided_again(monkeypatch) -> None:
-    client, transaction = _approval_client(_approval_document(status="REJECTED"))
+    client, transaction, _ = _approval_client(_approval_document(status="REJECTED"))
     monkeypatch.setattr(firestore_client.firestore, "transactional", lambda callback: callback)
 
     with pytest.raises(ValueError, match="Approval is not pending"):
         firestore_client.validate_pending_approval_decision(
             client,
             approval_id="approval-1",
+            now=datetime(2026, 8, 8, 5, tzinfo=UTC),
         )
 
     transaction.update.assert_not_called()
     transaction.create.assert_not_called()
 
 
-def _approval_client(document: dict[str, object]) -> tuple[Mock, Mock]:
+def test_expired_approval_is_marked_expired_without_command(monkeypatch) -> None:
+    client, transaction, snapshot = _approval_client(_approval_document())
+    monkeypatch.setattr(firestore_client.firestore, "transactional", lambda callback: callback)
+
+    with pytest.raises(ValueError, match="Approval expired"):
+        firestore_client.validate_pending_approval_decision(
+            client,
+            approval_id="approval-1",
+            now=datetime(2026, 8, 8, 6, tzinfo=UTC),
+        )
+
+    transaction.update.assert_called_once_with(
+        snapshot.reference,
+        {
+            "status": "EXPIRED",
+            "updated_at": firestore_client.firestore.SERVER_TIMESTAMP,
+        },
+    )
+    transaction.create.assert_not_called()
+    client.collection.assert_not_called()
+
+
+def _approval_client(document: dict[str, object]) -> tuple[Mock, Mock, Mock]:
     client = Mock()
     transaction = Mock()
     query = Mock()
@@ -43,7 +68,7 @@ def _approval_client(document: dict[str, object]) -> tuple[Mock, Mock]:
     client.transaction.return_value = transaction
     client.collection_group.return_value.where.return_value.limit.return_value = query
     transaction.get.return_value = iter([snapshot])
-    return client, transaction
+    return client, transaction, snapshot
 
 
 def _approval_document(*, status: str = "PENDING") -> dict[str, object]:
