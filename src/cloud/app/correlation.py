@@ -32,6 +32,7 @@ class NormalizedEvidenceSummary(BaseModel):
     nearest_named_ancestor: Identifier | None = None
     occurrence_count: int | None = Field(default=None, ge=0)
     window_seconds: float | None = Field(default=None, gt=0)
+    frame_p95_ms: float | None = Field(default=None, ge=0)
 
 
 class CandidateClaim(BaseModel):
@@ -121,3 +122,12 @@ def binding_errors_per_second(evidence: NormalizedEvidenceSummary) -> float | No
     if evidence.occurrence_count is None or evidence.window_seconds is None:
         return None
     return evidence.occurrence_count / evidence.window_seconds
+
+
+def same_session_frame_p95(
+    binding: NormalizedEvidenceSummary,
+    performance: NormalizedEvidenceSummary,
+) -> float | None:
+    if binding.app_session_id != performance.app_session_id:
+        return None
+    return performance.frame_p95_ms

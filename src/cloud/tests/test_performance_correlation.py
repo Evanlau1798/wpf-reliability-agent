@@ -1,6 +1,10 @@
 from datetime import datetime, timezone
 
-from app.correlation import NormalizedEvidenceSummary, binding_errors_per_second
+from app.correlation import (
+    NormalizedEvidenceSummary,
+    binding_errors_per_second,
+    same_session_frame_p95,
+)
 
 
 def _evidence(**updates: object) -> NormalizedEvidenceSummary:
@@ -19,3 +23,16 @@ def test_binding_errors_per_second_uses_occurrence_window() -> None:
     evidence = _evidence(occurrence_count=25, window_seconds=10.0)
 
     assert binding_errors_per_second(evidence) == 2.5
+
+
+def test_frame_p95_correlates_only_with_same_app_session() -> None:
+    binding = _evidence(evidence_id="binding-1")
+    same_session = _evidence(
+        evidence_id="perf-1",
+        kind="performance.sample",
+        frame_p95_ms=41.5,
+    )
+    other_session = same_session.model_copy(update={"app_session_id": "session-2"})
+
+    assert same_session_frame_p95(binding, same_session) == 41.5
+    assert same_session_frame_p95(binding, other_session) is None
