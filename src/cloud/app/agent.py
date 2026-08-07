@@ -77,6 +77,24 @@ def build_investigator_contents(context: AgentCorrelationContext) -> str:
     )
 
 
+def validate_decision_evidence_ids(
+    decision: AgentDecision,
+    context: AgentCorrelationContext,
+) -> AgentDecision:
+    available = {item.evidence_id for item in context.evidence}
+    referenced = {
+        evidence_id
+        for hypothesis in decision.hypotheses
+        for evidence_id in (*hypothesis.evidence_ids, *hypothesis.counter_evidence_ids)
+    }
+    if decision.proposed_action is not None:
+        referenced.update(decision.proposed_action.evidence_ids)
+    unknown = sorted(referenced - available)
+    if unknown:
+        raise ValueError(f"Unknown evidence ID: {unknown[0]}")
+    return decision
+
+
 async def run_investigator_once(
     runner: Any,
     *,
@@ -94,23 +112,25 @@ async def run_investigator_once(
         parts=[types.Part(text=build_investigator_contents(context))],
     )
     try:
-        return await _run_investigator_message(
+        decision = await _run_investigator_message(
             runner,
             incident_id=incident_id,
             run_key=run_key,
             message=message,
         )
+        return validate_decision_evidence_ids(decision, context)
     except ValueError:
         repair_message = types.Content(
             role="user",
             parts=[types.Part(text=SCHEMA_REPAIR_INSTRUCTION)],
         )
-        return await _run_investigator_message(
+        decision = await _run_investigator_message(
             runner,
             incident_id=incident_id,
             run_key=run_key,
             message=repair_message,
         )
+        return validate_decision_evidence_ids(decision, context)
 
 
 async def _run_investigator_message(

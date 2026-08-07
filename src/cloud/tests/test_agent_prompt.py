@@ -18,6 +18,7 @@ from app.agent import (
     decision_for_reporting,
     proposed_action_for_policy,
     run_investigator_once,
+    validate_decision_evidence_ids,
 )
 from app.correlation import AgentCorrelationContext, NormalizedEvidenceSummary
 from app.models import AgentDecision, DecisionType, DiagnosticTool
@@ -330,3 +331,39 @@ def test_finalize_and_no_action_route_to_reporting_without_action() -> None:
         assert reporting_decision is decision
         assert reporting_decision.proposed_action is None
         assert reporting_decision.next_command is None
+
+
+def test_hallucinated_decision_evidence_id_is_rejected() -> None:
+    context = AgentCorrelationContext(
+        evidence=[
+            NormalizedEvidenceSummary(
+                evidence_id="evidence-1",
+                kind="binding.aggregate",
+                app_session_id="session-1",
+                observed_at_utc=datetime(2026, 8, 8, tzinfo=UTC),
+                summary="Binding burst.",
+            )
+        ],
+        candidate_claims=[],
+        tool_calls_remaining=6,
+        max_context_bytes=65_536,
+        max_context_tokens=32_768,
+    )
+    decision = AgentDecision.model_validate(
+        {
+            "schema_version": "1.0",
+            "decision": "NO_ACTION",
+            "hypotheses": [
+                {
+                    "claim": "The binding is likely incorrect.",
+                    "confidence": "MEDIUM",
+                    "evidence_ids": ["evidence-1", "evidence-missing"],
+                    "counter_evidence_ids": [],
+                }
+            ],
+            "missing_evidence": [],
+        }
+    )
+
+    with pytest.raises(ValueError, match="Unknown evidence ID"):
+        validate_decision_evidence_ids(decision, context)
