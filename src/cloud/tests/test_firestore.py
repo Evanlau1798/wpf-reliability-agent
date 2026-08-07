@@ -51,6 +51,19 @@ def test_firestore_collection_names_match_model() -> None:
     )
 
 
+def test_processed_run_lookup_reports_existing_run() -> None:
+    client = Mock()
+    document = Mock()
+    client.collection.return_value.document.return_value = document
+    document.get.return_value = Mock(exists=True)
+
+    assert firestore_client.is_run_processed(client, "incident-1:2:binding.aggregate") is True
+    client.collection.assert_called_once_with(firestore_client.PROCESSED_RUNS_COLLECTION)
+    client.collection.return_value.document.assert_called_once_with(
+        "incident-1:2:binding.aggregate"
+    )
+
+
 def test_event_dedup_transaction_accepts_event_once(monkeypatch) -> None:
     client = Mock()
     transaction = Mock()

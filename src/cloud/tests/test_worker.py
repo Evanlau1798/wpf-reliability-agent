@@ -140,6 +140,30 @@ def test_malformed_pubsub_message_is_audited_and_acked(monkeypatch) -> None:
     assert "not-base64!" not in log
 
 
+def test_duplicate_work_delivery_checks_processed_run_and_noops(monkeypatch) -> None:
+    _set_environment(monkeypatch, "worker")
+    _allow_identity(monkeypatch)
+    firestore_client = object()
+    checked: list[tuple[object, str]] = []
+    monkeypatch.setattr(main, "get_firestore_client", lambda _project_id: firestore_client)
+
+    def is_processed(client, run_key):
+        checked.append((client, run_key))
+        return True
+
+    monkeypatch.setattr(main, "is_run_processed", is_processed, raising=False)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/work:push",
+            headers={"Authorization": "Bearer signed-token"},
+            json=_push_envelope(),
+        )
+
+    assert response.status_code == 204
+    assert checked == [(firestore_client, "incident-1:2:binding.aggregate")]
+
+
 def _set_environment(monkeypatch, role: str) -> None:
     monkeypatch.setenv("SERVICE_ROLE", role)
     monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "project-test")
@@ -159,3 +183,18 @@ def _allow_identity(monkeypatch) -> None:
             "email_verified": True,
         },
     )
+
+
+def _push_envelope() -> dict[str, object]:
+    work = {
+        "incident_id": "incident-1",
+        "evidence_revision": 2,
+        "trigger": "binding.aggregate",
+        "event_id": "event-1",
+    }
+    return {
+        "message": {
+            "messageId": "message-1",
+            "data": base64.b64encode(json.dumps(work).encode("utf-8")).decode("ascii"),
+        }
+    }

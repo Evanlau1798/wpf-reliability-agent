@@ -7,12 +7,12 @@ from fastapi import Depends, FastAPI, HTTPException, Request, status
 
 from app.auth import authenticate_device_token
 from app.config import Settings
-from app.firestore_client import claim_event_once, get_firestore_client
+from app.firestore_client import claim_event_once, get_firestore_client, is_run_processed
 from app.ingest import ingest_binding_event, ingest_performance_event, validate_telemetry_events
 from app.logging_config import configure_logging
 from app.models import EventType
 from app.pubsub import publish_work
-from app.worker import decode_pubsub_envelope, pubsub_message_id
+from app.worker import build_run_key, decode_pubsub_envelope, pubsub_message_id
 from app.worker_auth import authenticate_pubsub_push
 
 
@@ -42,12 +42,22 @@ async def worker_push(request: Request) -> None:
     envelope: object = None
     try:
         envelope = await request.json()
-        decode_pubsub_envelope(envelope)
+        work = decode_pubsub_envelope(envelope)
     except ValueError:
         request.app.state.logger.warning(
             "worker_message_rejected message_id=%s reason=malformed",
             pubsub_message_id(envelope),
         )
+        return
+
+    run_key = build_run_key(
+        work["incident_id"],
+        work["evidence_revision"],
+        work["trigger"],
+    )
+    client = get_firestore_client(request.app.state.settings.google_cloud_project)
+    if is_run_processed(client, run_key):
+        request.app.state.logger.info("worker_duplicate_run run_key=%s", run_key)
 
 
 async def enforce_telemetry_body_limit(request: Request) -> None:

@@ -34,6 +34,10 @@ def claim_event_once(client: firestore.Client, event_id: str) -> bool:
     return claim(client.transaction())
 
 
+def is_run_processed(client: firestore.Client, run_key: str) -> bool:
+    return client.collection(PROCESSED_RUNS_COLLECTION).document(run_key).get().exists
+
+
 def create_incident(
     client: firestore.Client,
     incident_id: str,
