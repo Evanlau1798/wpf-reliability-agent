@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 from app.correlation import (
     BindingCandidate,
+    EvidenceEdgeType,
     NormalizedEvidenceSummary,
     correlate_binding_incident,
 )
@@ -94,3 +95,29 @@ def test_ambiguous_two_live_candidates_do_not_produce_high_confidence() -> None:
     graph = correlate_binding_incident(binding, [ui], candidates)
 
     assert graph.candidate_claims[0].confidence is Confidence.MEDIUM
+
+
+def test_unrelated_performance_event_is_not_merged() -> None:
+    binding = _evidence(
+        "binding-1",
+        "binding.aggregate",
+        binding_path="DisplayNmae",
+        nearest_named_ancestor="ExperimentalPeopleGrid",
+        occurrence_count=30,
+        window_seconds=10.0,
+    )
+    unrelated = _evidence(
+        "perf-2",
+        "performance.sample",
+        app_session_id="session-2",
+        observed_at_utc=NOW + timedelta(seconds=2),
+        frame_p95_ms=55.0,
+    )
+
+    graph = correlate_binding_incident(binding, [unrelated], [])
+
+    assert graph.candidate_claims[0].supporting_evidence_ids == ["binding-1"]
+    assert all(
+        edge.edge_type is not EvidenceEdgeType.PERFORMANCE_AMPLIFIER
+        for edge in graph.edges
+    )
