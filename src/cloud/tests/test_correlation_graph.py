@@ -64,3 +64,33 @@ def test_main_demo_correlation_points_to_experimental_people_grid() -> None:
         "ui-1",
         "perf-1",
     }
+
+
+def test_ambiguous_two_live_candidates_do_not_produce_high_confidence() -> None:
+    binding = _evidence(
+        "binding-1",
+        "binding.aggregate",
+        binding_path="DisplayNmae",
+        nearest_named_ancestor="ExperimentalPeopleGrid",
+    )
+    ui = _evidence(
+        "ui-1",
+        "ui.snapshot",
+        observed_at_utc=NOW + timedelta(seconds=2),
+        binding_path="DisplayNmae",
+        nearest_named_ancestor="ExperimentalPeopleGrid",
+    )
+    candidates = [
+        BindingCandidate(
+            element_id=f"person-name-{index}",
+            binding_path="DisplayNmae",
+            target_property="Text",
+            element_type="TextBlock",
+            element_name="PersonName",
+        )
+        for index in (1, 2)
+    ]
+
+    graph = correlate_binding_incident(binding, [ui], candidates)
+
+    assert graph.candidate_claims[0].confidence is Confidence.MEDIUM
