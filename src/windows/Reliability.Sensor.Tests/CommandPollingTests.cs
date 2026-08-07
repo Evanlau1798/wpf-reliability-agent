@@ -41,6 +41,30 @@ public sealed class CommandPollingTests
         Assert.Equal(1, request.RootElement.GetProperty("max_commands").GetInt32());
     }
 
+    [Fact]
+    public async Task PollLoopCancellationAbortsInflightLeaseRequest()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var handler = new BlockingLeaseHandler();
+        using var client = new TelemetryApiClient(
+            new Uri("https://reliability.example.test"),
+            "test-token",
+            handler,
+            TimeSpan.FromSeconds(25));
+        var poller = ReliabilitySensor.RunCommandPollerAsync(
+            client,
+            "device-test",
+            "session-1",
+            (_, _) => Task.CompletedTask,
+            cancellation.Token);
+
+        await handler.Started.Task.WaitAsync(TimeSpan.FromSeconds(1));
+        cancellation.Cancel();
+        await poller.WaitAsync(TimeSpan.FromSeconds(1));
+
+        Assert.True(handler.WasCancelled);
+    }
+
     private sealed class LeaseHandler : HttpMessageHandler
     {
         public string? RequestPath { get; private set; }
@@ -65,6 +89,31 @@ public sealed class CommandPollingTests
             {
                 Content = content,
             };
+        }
+    }
+
+    private sealed class BlockingLeaseHandler : HttpMessageHandler
+    {
+        public TaskCompletionSource Started { get; } = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public bool WasCancelled { get; private set; }
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            Started.TrySetResult();
+            try
+            {
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+                throw new InvalidOperationException("Lease request unexpectedly completed.");
+            }
+            catch (OperationCanceledException)
+            {
+                WasCancelled = true;
+                throw;
+            }
         }
     }
 }
