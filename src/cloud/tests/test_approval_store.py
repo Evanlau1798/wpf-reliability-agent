@@ -150,24 +150,18 @@ def test_app_session_mismatch_rejects_approval(monkeypatch) -> None:
 
 
 def test_approved_decision_creates_exact_unique_mutation_command(monkeypatch) -> None:
-    client, transaction, snapshot = _approval_client(_approval_document())
+    approval_document = _approval_document()
+    client, transaction, snapshot = _approval_client(approval_document)
     monkeypatch.setattr(firestore_client.firestore, "transactional", lambda callback: callback)
     now = datetime(2026, 8, 8, 5, tzinfo=UTC)
-    arguments_hash = firestore_client.sha256_canonical(
-        {
-            "feature": "ExperimentalPeopleGrid",
-            "enabled": False,
-            "expected_current_value": True,
-        }
-    )
-    idempotency_key = firestore_client.sha256_canonical(
-        {
-            "incident_id": "incident-1",
-            "proposal_version": 3,
-            "tool": "recovery.set_feature_flag",
-            "arguments_hash": arguments_hash,
-        }
-    )
+    arguments_hash = approval_document["canonical_arguments_hash"]
+    command_identity_key = firestore_client.sha256_canonical({
+        "incident_id": "incident-1", "proposal_version": 3,
+        "tool": "recovery.set_feature_flag", "arguments_hash": arguments_hash,
+    })
+    mutation_execution_key = firestore_client.sha256_canonical({
+        "incident_id": "incident-1", "action_id": "action-1", "arguments_hash": arguments_hash,
+    })
 
     command_id = firestore_client.approve_pending_approval(
         client,
@@ -176,7 +170,7 @@ def test_approved_decision_creates_exact_unique_mutation_command(monkeypatch) ->
         now=now,
     )
 
-    assert command_id == f"cmd-{idempotency_key}"
+    assert command_id == f"cmd-{command_identity_key}"
     client.collection.assert_called_once_with(firestore_client.COMMANDS_COLLECTION)
     client.collection.return_value.document.assert_called_once_with(command_id)
     assert transaction.create.call_count == 2
@@ -185,38 +179,26 @@ def test_approved_decision_creates_exact_unique_mutation_command(monkeypatch) ->
         for call in transaction.create.call_args_list
         if call.args[1].get("tool") == "recovery.set_feature_flag"
     )
-    assert command_document["incident_id"] == "incident-1"
-    assert command_document["target_app_session_id"] == "session-1"
-    assert command_document["tool"] == "recovery.set_feature_flag"
-    assert command_document["arguments"] == {
-        "feature": "ExperimentalPeopleGrid",
-        "enabled": False,
-        "expected_current_value": True,
+    assert command_document == {
+        "schema_version": "1.0", "command_id": command_id,
+        "incident_id": "incident-1", "target_app_session_id": "session-1",
+        "tool": "recovery.set_feature_flag", "arguments": approval_document["canonical_arguments"],
+        "arguments_hash": arguments_hash, "risk_level": "HIGH",
+        "approval_id": "approval-1", "idempotency_key": mutation_execution_key,
+        "proposal_version": 3, "action_id": "action-1",
+        "issued_at_utc": "2026-08-08T05:00:00Z", "expires_at_utc": "2026-08-08T05:01:00Z",
+        "timeout_ms": 10_000, "status": "PENDING",
+        "created_at": firestore_client.firestore.SERVER_TIMESTAMP,
+        "updated_at": firestore_client.firestore.SERVER_TIMESTAMP,
     }
-    assert command_document["arguments_hash"] == arguments_hash
-    assert command_document["risk_level"] == "HIGH"
-    assert command_document["approval_id"] == "approval-1"
-    assert command_document["idempotency_key"] == idempotency_key
-    assert command_document["issued_at_utc"] == now.isoformat().replace("+00:00", "Z")
-    assert command_document["expires_at_utc"] == "2026-08-08T05:01:00Z"
-    assert command_document["timeout_ms"] == 10_000
-    assert command_document["status"] == "PENDING"
-    transaction.update.assert_any_call(
-        snapshot.reference,
-        {
-            "status": "APPROVED",
-            "approved_by": "demo-operator",
-            "approved_at_utc": "2026-08-08T05:00:00Z",
-            "updated_at": firestore_client.firestore.SERVER_TIMESTAMP,
-        },
-    )
-    transaction.update.assert_any_call(
-        snapshot.reference.parent.parent,
-        {
-            "audit_sequence": 9,
-            "updated_at": firestore_client.firestore.SERVER_TIMESTAMP,
-        },
-    )
+    transaction.update.assert_any_call(snapshot.reference, {
+        "status": "APPROVED", "approved_by": "demo-operator",
+        "approved_at_utc": "2026-08-08T05:00:00Z",
+        "updated_at": firestore_client.firestore.SERVER_TIMESTAMP,
+    })
+    transaction.update.assert_any_call(snapshot.reference.parent.parent, {
+        "audit_sequence": 9, "updated_at": firestore_client.firestore.SERVER_TIMESTAMP,
+    })
     audit_event = next(
         call.args[1]
         for call in transaction.create.call_args_list

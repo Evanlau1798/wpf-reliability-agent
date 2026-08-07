@@ -55,6 +55,17 @@ def test_high_risk_command_requires_approval() -> None:
         )
 
 
+@pytest.mark.parametrize("reference", ["proposal_version", "action_id"])
+def test_mutation_command_requires_binding_references(reference: str) -> None:
+    command = json.loads(
+        (FIXTURES / "diagnostic-command-valid-mutation.json").read_text(encoding="utf-8")
+    )
+    command.pop(reference, None)
+
+    with pytest.raises(ValueError, match="binding references"):
+        DiagnosticCommand.model_validate(command)
+
+
 @pytest.mark.parametrize(("argument", "value"), [("max_depth", 5), ("max_nodes", 301)])
 def test_ui_subtree_command_rejects_argument_budget_overflow(argument: str, value: int) -> None:
     command = json.loads((FIXTURES / "diagnostic-command-valid-read.json").read_text(encoding="utf-8"))

@@ -119,7 +119,9 @@ public sealed record DiagnosticCommand(
     string IdempotencyKey,
     [property: JsonConverter(typeof(UtcDateTimeOffsetJsonConverter))] DateTimeOffset IssuedAtUtc,
     [property: JsonConverter(typeof(UtcDateTimeOffsetJsonConverter))] DateTimeOffset ExpiresAtUtc,
-    int TimeoutMs);
+    int TimeoutMs,
+    int? ProposalVersion = null,
+    string? ActionId = null);
 
 public sealed record CommandError(string Code, string? Message);
 

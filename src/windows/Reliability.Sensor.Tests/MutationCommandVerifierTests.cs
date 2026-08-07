@@ -45,6 +45,62 @@ public sealed class MutationCommandVerifierTests
         Assert.True(MutationCommandVerifier.HasApprovalReference(command));
     }
 
+    [Fact]
+    public async Task ExactProposalActionAndArgumentsReferencesPassCheck()
+    {
+        var command = await ReadMutationCommandAsync();
+
+        Assert.True(MutationCommandVerifier.HasExactBindingReferences(command));
+    }
+
+    [Fact]
+    public async Task MissingProposalOrActionReferenceIsRejected()
+    {
+        var command = await ReadMutationCommandAsync();
+
+        Assert.False(MutationCommandVerifier.HasExactBindingReferences(command with
+        {
+            ProposalVersion = null,
+        }));
+        Assert.False(MutationCommandVerifier.HasExactBindingReferences(command with
+        {
+            ActionId = null,
+        }));
+    }
+
+    [Fact]
+    public async Task ProposalReferenceMismatchIsRejected()
+    {
+        var command = await ReadMutationCommandAsync();
+
+        Assert.False(MutationCommandVerifier.HasExactBindingReferences(command with
+        {
+            ProposalVersion = command.ProposalVersion + 1,
+        }));
+    }
+
+    [Fact]
+    public async Task ActionReferenceMismatchIsRejected()
+    {
+        var command = await ReadMutationCommandAsync();
+
+        Assert.False(MutationCommandVerifier.HasExactBindingReferences(command with
+        {
+            ActionId = "action-substituted",
+        }));
+    }
+
+    [Fact]
+    public async Task ArgumentsReferenceMismatchIsRejected()
+    {
+        var command = await ReadMutationCommandAsync();
+
+        Assert.False(MutationCommandVerifier.HasExactBindingReferences(command with
+        {
+            ArgumentsHash = new string('0', 64),
+        }));
+    }
+
     private static async Task<DiagnosticCommand> ReadMutationCommandAsync()
     {
         var json = await File.ReadAllTextAsync(Path.Combine(

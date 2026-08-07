@@ -139,6 +139,8 @@ class DiagnosticCommand(ContractModel):
     risk_level: RiskLevel
     approval_id: Identifier | None = None
     idempotency_key: Identifier
+    proposal_version: int | None = Field(default=None, ge=1)
+    action_id: Identifier | None = None
     issued_at_utc: UtcDateTime
     expires_at_utc: UtcDateTime
     timeout_ms: int = Field(ge=100, le=120_000)
@@ -150,6 +152,8 @@ class DiagnosticCommand(ContractModel):
         if self.risk_level is RiskLevel.HIGH and self.approval_id is None:
             raise ValueError("HIGH command requires approval")
         if self.tool is DiagnosticTool.RECOVERY_SET_FEATURE_FLAG:
+            if self.proposal_version is None or self.action_id is None:
+                raise ValueError("feature recovery command requires binding references")
             expected = {
                 "feature": "ExperimentalPeopleGrid",
                 "enabled": False,

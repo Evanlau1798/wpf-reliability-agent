@@ -208,7 +208,8 @@ public sealed partial class ReliabilitySensor
                     }
                     if (isMutation
                         && (!MutationCommandVerifier.HasRequiredRisk(command)
-                            || !MutationCommandVerifier.HasApprovalReference(command)))
+                            || !MutationCommandVerifier.HasApprovalReference(command)
+                            || !MutationCommandVerifier.HasExactBindingReferences(command)))
                     {
                         continue;
                     }

@@ -42,6 +42,13 @@
     "risk_level": { "enum": ["LOW", "MEDIUM", "HIGH", "BLOCKED"] },
     "approval_id": { "type": ["string", "null"], "minLength": 1, "maxLength": 256 },
     "idempotency_key": { "$ref": "#/$defs/id" },
+    "proposal_version": { "type": ["integer", "null"], "minimum": 1 },
+    "action_id": {
+      "anyOf": [
+        { "$ref": "#/$defs/id" },
+        { "type": "null" }
+      ]
+    },
     "issued_at_utc": { "$ref": "#/$defs/utcTimestamp" },
     "expires_at_utc": { "$ref": "#/$defs/utcTimestamp" },
     "timeout_ms": { "type": "integer", "minimum": 100, "maximum": 120000 }
@@ -69,8 +76,11 @@
     {
       "if": { "properties": { "tool": { "const": "recovery.set_feature_flag" } } },
       "then": {
+        "required": ["proposal_version", "action_id"],
         "properties": {
           "risk_level": { "const": "HIGH" },
+          "proposal_version": { "type": "integer", "minimum": 1 },
+          "action_id": { "$ref": "#/$defs/id" },
           "arguments": {
             "type": "object",
             "additionalProperties": false,

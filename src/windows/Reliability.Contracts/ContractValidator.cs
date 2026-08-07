@@ -61,6 +61,8 @@ public static partial class ContractValidator
         if (value.Tool is DiagnosticTool.RecoverySetFeatureFlag)
         {
             return value.RiskLevel is RiskLevel.HIGH
+                && value.ProposalVersion is >= 1
+                && !string.IsNullOrWhiteSpace(value.ActionId)
                 && ExactFeatureArguments(value.Arguments);
         }
 

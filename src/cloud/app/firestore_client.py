@@ -124,17 +124,17 @@ def approve_pending_approval(
         audit_sequence = incident.get("audit_sequence")
         if type(audit_sequence) is not int or audit_sequence < 0:
             raise ValueError("Incident audit sequence is invalid")
-        idempotency_key = sha256_canonical(
-            {
-                "incident_id": approval.incident_id,
-                "proposal_version": approval.proposal_version,
-                "tool": approval.tool.value,
-                "arguments_hash": approval.canonical_arguments_hash,
-            }
-        )
+        command_identity_key = sha256_canonical({
+            "incident_id": approval.incident_id, "proposal_version": approval.proposal_version,
+            "tool": approval.tool.value, "arguments_hash": approval.canonical_arguments_hash,
+        })
+        mutation_execution_key = sha256_canonical({
+            "incident_id": approval.incident_id, "action_id": approval.action_id,
+            "arguments_hash": approval.canonical_arguments_hash,
+        })
         command = DiagnosticCommand(
             schema_version="1.0",
-            command_id=f"cmd-{idempotency_key}",
+            command_id=f"cmd-{command_identity_key}",
             incident_id=approval.incident_id,
             target_app_session_id=approval.target_app_session_id,
             tool=approval.tool,
@@ -142,7 +142,9 @@ def approve_pending_approval(
             arguments_hash=approval.canonical_arguments_hash,
             risk_level=RiskLevel.HIGH,
             approval_id=approval.approval_id,
-            idempotency_key=idempotency_key,
+            idempotency_key=mutation_execution_key,
+            proposal_version=approval.proposal_version,
+            action_id=approval.action_id,
             issued_at_utc=now,
             expires_at_utc=now + timedelta(minutes=1),
             timeout_ms=10_000,
@@ -150,8 +152,7 @@ def approve_pending_approval(
         from app.commands import command_document
 
         transaction.create(
-            client.collection(COMMANDS_COLLECTION).document(command.command_id),
-            command_document(command),
+            client.collection(COMMANDS_COLLECTION).document(command.command_id), command_document(command)
         )
         transaction.update(
             approval_document,
