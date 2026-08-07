@@ -43,6 +43,44 @@ ALLOWED_TRANSITIONS = frozenset(
 )
 
 
+def transition_incident(
+    client: firestore.Client,
+    *,
+    incident_id: str,
+    expected_state: IncidentState,
+    expected_version: int,
+    target_state: IncidentState,
+) -> int:
+    if (expected_state, target_state) not in ALLOWED_TRANSITIONS:
+        raise ValueError("Illegal state transition")
+    incident_document = client.collection(INCIDENTS_COLLECTION).document(incident_id)
+
+    @firestore.transactional
+    def transition(transaction: firestore.Transaction) -> int:
+        snapshot = incident_document.get(transaction=transaction)
+        if not snapshot.exists:
+            raise ValueError("Incident does not exist")
+        incident = snapshot.to_dict() or {}
+        state_version = incident.get("state_version")
+        if incident.get("state") != expected_state.value:
+            raise ValueError("Incident state does not match")
+        if type(state_version) is not int or state_version != expected_version:
+            raise ValueError("Stale state version")
+
+        next_version = state_version + 1
+        transaction.update(
+            incident_document,
+            {
+                "state": target_state.value,
+                "state_version": next_version,
+                "updated_at": firestore.SERVER_TIMESTAMP,
+            },
+        )
+        return next_version
+
+    return transition(client.transaction())
+
+
 def commit_new_incident_run(
     client: firestore.Client,
     *,

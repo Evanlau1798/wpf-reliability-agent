@@ -52,6 +52,30 @@ def test_allowed_transition_table_covers_every_state_pair() -> None:
             )
 
 
+def test_state_transition_rejects_stale_version(monkeypatch) -> None:
+    client = Mock()
+    transaction = Mock()
+    incident_document = Mock()
+    client.transaction.return_value = transaction
+    client.collection.return_value.document.return_value = incident_document
+    incident_document.get.return_value = Mock(
+        exists=True,
+        to_dict=lambda: {"state": "NEW", "state_version": 2},
+    )
+    monkeypatch.setattr(workflow_state.firestore, "transactional", lambda callback: callback)
+
+    with pytest.raises(ValueError, match="Stale state version"):
+        workflow_state.transition_incident(
+            client,
+            incident_id="incident-1",
+            expected_state=workflow_state.IncidentState.NEW,
+            expected_version=1,
+            target_state=workflow_state.IncidentState.TRIAGING,
+        )
+
+    transaction.update.assert_not_called()
+
+
 def test_new_incident_run_commits_transition_and_processed_marker_together(monkeypatch) -> None:
     client = Mock()
     transaction = Mock()
