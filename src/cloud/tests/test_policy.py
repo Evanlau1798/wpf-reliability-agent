@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from app.models import AgentDecision, RiskLevel
 from app.policy import READ_ONLY_DIAGNOSTIC_TOOLS, risk_for_tool
 
@@ -41,3 +43,11 @@ def test_feature_recovery_is_high_risk_even_if_model_hints_low() -> None:
 
     assert decision.proposed_action is not None
     assert risk_for_tool(decision.proposed_action.tool) is RiskLevel.HIGH
+
+
+@pytest.mark.parametrize(
+    "tool",
+    ["shell.execute", "file.write", "process.kill", "dll.inject"],
+)
+def test_blocked_tool_families_are_blocked(tool: str) -> None:
+    assert risk_for_tool(tool) is RiskLevel.BLOCKED
