@@ -55,6 +55,15 @@ def test_high_risk_command_requires_approval() -> None:
         )
 
 
+@pytest.mark.parametrize(("argument", "value"), [("max_depth", 5), ("max_nodes", 301)])
+def test_ui_subtree_command_rejects_argument_budget_overflow(argument: str, value: int) -> None:
+    command = json.loads((FIXTURES / "diagnostic-command-valid-read.json").read_text(encoding="utf-8"))
+    command["arguments"][argument] = value
+
+    with pytest.raises(ValueError, match="exceeds local ceiling"):
+        DiagnosticCommand.model_validate(command)
+
+
 def test_temporary_mitigation_cannot_be_resolved() -> None:
     report = {
         "schema_version": "1.0",
