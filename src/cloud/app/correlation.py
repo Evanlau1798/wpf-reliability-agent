@@ -3,9 +3,9 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
-from app.models import Identifier, UtcDateTime
+from app.models import Confidence, Identifier, UtcDateTime
 
 
 class EvidenceEdgeType(StrEnum):
@@ -25,3 +25,13 @@ class NormalizedEvidenceSummary(BaseModel):
     app_session_id: Identifier
     observed_at_utc: UtcDateTime
     summary: Annotated[str, StringConstraints(min_length=1, max_length=4096)]
+
+
+class CandidateClaim(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    candidate: Identifier
+    summary: Annotated[str, StringConstraints(min_length=1, max_length=4096)]
+    supporting_evidence_ids: list[Identifier] = Field(min_length=1, max_length=20)
+    counter_evidence_ids: list[Identifier] = Field(default_factory=list, max_length=20)
+    confidence: Confidence
