@@ -282,6 +282,43 @@ def test_rejected_decision_enters_rejected_reporting_path_without_command(monkey
     assert client.collection.call_count == 0
 
 
+def test_double_approve_conflicts_without_second_mutation_command(monkeypatch) -> None:
+    approval_document = _approval_document()
+    client, transaction, snapshot = _approval_client(approval_document)
+    monkeypatch.setattr(firestore_client.firestore, "transactional", lambda callback: callback)
+
+    def apply_update(reference, changes):
+        if reference is snapshot.reference:
+            approval_document.update(
+                {key: value for key, value in changes.items() if key != "updated_at"}
+            )
+
+    transaction.update.side_effect = apply_update
+    now = datetime(2026, 8, 8, 5, tzinfo=UTC)
+
+    first_command_id = firestore_client.approve_pending_approval(
+        client,
+        approval_id="approval-1",
+        actor="demo-operator",
+        now=now,
+    )
+    with pytest.raises(ValueError, match="Approval is not pending"):
+        firestore_client.approve_pending_approval(
+            client,
+            approval_id="approval-1",
+            actor="demo-operator",
+            now=now,
+        )
+
+    command_creates = [
+        call
+        for call in transaction.create.call_args_list
+        if call.args[1].get("tool") == "recovery.set_feature_flag"
+    ]
+    assert first_command_id.startswith("cmd-")
+    assert len(command_creates) == 1
+
+
 def _approval_client(
     document: dict[str, object],
     *,
@@ -316,7 +353,14 @@ def _approval_client(
     )
     client.transaction.return_value = transaction
     client.collection_group.return_value.where.return_value.limit.return_value = query
-    transaction.get.side_effect = [iter([snapshot]), iter(evidence_snapshots)]
+    def transaction_get(target):
+        if target is query:
+            return iter([snapshot])
+        if target is evidence_query:
+            return iter(evidence_snapshots)
+        raise AssertionError("Unexpected transaction query")
+
+    transaction.get.side_effect = transaction_get
     return client, transaction, snapshot
 
 
