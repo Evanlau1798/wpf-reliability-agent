@@ -1,6 +1,11 @@
 from datetime import datetime, timezone
 
-from app.correlation import NormalizedEvidenceSummary, match_exact_element_id
+from app.correlation import (
+    BindingCandidate,
+    NormalizedEvidenceSummary,
+    match_exact_element_id,
+    match_unique_live_candidate,
+)
 from app.models import Confidence
 
 
@@ -25,3 +30,16 @@ def test_exact_element_id_match_is_high_confidence() -> None:
         _evidence("binding-1", "people-grid-row-42"),
         _evidence("ui-1", "people-grid-row-43"),
     ) is None
+
+
+def test_unique_live_candidate_is_high_confidence_only_when_unique() -> None:
+    candidate = BindingCandidate(
+        element_id="people-grid-row-42",
+        binding_path="DisplayNmae",
+        target_property="Text",
+        element_type="TextBlock",
+        element_name="PersonName",
+    )
+
+    assert match_unique_live_candidate([candidate]) == (candidate, Confidence.HIGH)
+    assert match_unique_live_candidate([candidate, candidate.model_copy()]) is None

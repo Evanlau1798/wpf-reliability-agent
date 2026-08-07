@@ -38,10 +38,28 @@ class CandidateClaim(BaseModel):
     confidence: Confidence
 
 
+class BindingCandidate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    element_id: Identifier
+    binding_path: Identifier
+    target_property: Identifier
+    element_type: Identifier
+    element_name: Identifier | None = None
+
+
 def match_exact_element_id(
     left: NormalizedEvidenceSummary,
     right: NormalizedEvidenceSummary,
 ) -> Confidence | None:
     if left.element_id and left.element_id == right.element_id:
         return Confidence.HIGH
+    return None
+
+
+def match_unique_live_candidate(
+    candidates: list[BindingCandidate],
+) -> tuple[BindingCandidate, Confidence] | None:
+    if len(candidates) == 1:
+        return candidates[0], Confidence.HIGH
     return None
