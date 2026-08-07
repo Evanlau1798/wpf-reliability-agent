@@ -1,6 +1,13 @@
+import base64
+import io
+import json
+
 from fastapi.testclient import TestClient
 
+from app import main
+from app import worker
 from app import worker_auth
+from app.logging_config import configure_logging
 from app.main import app
 
 
@@ -92,6 +99,40 @@ def test_worker_push_rejects_invalid_oidc_token(monkeypatch) -> None:
     assert response.status_code == 401
 
 
+def test_decode_pubsub_envelope_returns_minimal_work_message() -> None:
+    work = {
+        "incident_id": "incident-1",
+        "evidence_revision": 2,
+        "trigger": "binding.aggregate",
+        "event_id": "event-1",
+    }
+    data = base64.b64encode(json.dumps(work).encode("utf-8")).decode("ascii")
+
+    assert worker.decode_pubsub_envelope(
+        {"message": {"messageId": "message-1", "data": data}}
+    ) == work
+
+
+def test_malformed_pubsub_message_is_audited_and_acked(monkeypatch) -> None:
+    _set_environment(monkeypatch, "worker")
+    _allow_identity(monkeypatch)
+    output = io.StringIO()
+    monkeypatch.setattr(main, "configure_logging", lambda role: configure_logging(role, output))
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/work:push",
+            headers={"Authorization": "Bearer signed-token"},
+            json={"message": {"messageId": "message-bad", "data": "not-base64!"}},
+        )
+
+    assert response.status_code == 204
+    log = output.getvalue()
+    assert "worker_message_rejected" in log
+    assert "message-bad" in log
+    assert "not-base64!" not in log
+
+
 def _set_environment(monkeypatch, role: str) -> None:
     monkeypatch.setenv("SERVICE_ROLE", role)
     monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "project-test")
@@ -100,3 +141,14 @@ def _set_environment(monkeypatch, role: str) -> None:
     monkeypatch.setenv("PUBSUB_TOPIC", "incident-work")
     monkeypatch.setenv("PUBSUB_PUSH_AUDIENCE", "https://worker.example.test")
     monkeypatch.setenv("PUBSUB_INVOKER_EMAIL", "pubsub-invoker@example.test")
+
+
+def _allow_identity(monkeypatch) -> None:
+    monkeypatch.setattr(
+        worker_auth.id_token,
+        "verify_oauth2_token",
+        lambda *_args, **_kwargs: {
+            "email": "pubsub-invoker@example.test",
+            "email_verified": True,
+        },
+    )

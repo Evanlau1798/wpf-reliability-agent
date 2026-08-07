@@ -12,6 +12,7 @@ from app.ingest import ingest_binding_event, ingest_performance_event, validate_
 from app.logging_config import configure_logging
 from app.models import EventType
 from app.pubsub import publish_work
+from app.worker import decode_pubsub_envelope, pubsub_message_id
 from app.worker_auth import authenticate_pubsub_push
 
 
@@ -34,10 +35,19 @@ def healthz() -> dict[str, str]:
 
 
 @app.post("/v1/work:push", status_code=status.HTTP_204_NO_CONTENT)
-def worker_push(request: Request) -> None:
+async def worker_push(request: Request) -> None:
     if request.app.state.settings.service_role != "worker":
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     authenticate_pubsub_push(request)
+    envelope: object = None
+    try:
+        envelope = await request.json()
+        decode_pubsub_envelope(envelope)
+    except ValueError:
+        request.app.state.logger.warning(
+            "worker_message_rejected message_id=%s reason=malformed",
+            pubsub_message_id(envelope),
+        )
 
 
 async def enforce_telemetry_body_limit(request: Request) -> None:
