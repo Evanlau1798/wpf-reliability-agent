@@ -110,6 +110,17 @@ def validate_pending_approval_decision(
         incident = incident_snapshot.to_dict() or {}
         if incident.get("proposal_version") != approval.proposal_version:
             raise ValueError("Approval proposal version mismatch")
+        material_evidence: list[tuple[str, str]] = []
+        for evidence_snapshot in transaction.get(
+            incident_document.collection(EVIDENCE_COLLECTION)
+        ):
+            evidence = evidence_snapshot.to_dict() or {}
+            evidence_hash = evidence.get("evidence_hash")
+            if not isinstance(evidence_hash, str):
+                raise ValueError("Incident evidence hash is invalid")
+            material_evidence.append((evidence_snapshot.id, evidence_hash))
+        if evidence_snapshot_hash(material_evidence) != approval.evidence_snapshot_hash:
+            raise ValueError("Approval evidence snapshot mismatch")
         return approval
 
     approval = validate(client.transaction())

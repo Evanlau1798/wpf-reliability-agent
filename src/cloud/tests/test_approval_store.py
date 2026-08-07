@@ -93,24 +93,52 @@ def test_proposal_version_mismatch_rejects_approval(monkeypatch) -> None:
     transaction.create.assert_not_called()
 
 
+def test_evidence_snapshot_mismatch_rejects_approval(monkeypatch) -> None:
+    client, transaction, _ = _approval_client(
+        _approval_document(),
+        evidence=[("evidence-1", "b" * 64)],
+    )
+    monkeypatch.setattr(firestore_client.firestore, "transactional", lambda callback: callback)
+
+    with pytest.raises(ValueError, match="Approval evidence snapshot mismatch"):
+        firestore_client.validate_pending_approval_decision(
+            client,
+            approval_id="approval-1",
+            now=datetime(2026, 8, 8, 5, tzinfo=UTC),
+        )
+
+    transaction.update.assert_not_called()
+    transaction.create.assert_not_called()
+
+
 def _approval_client(
     document: dict[str, object],
     *,
     incident: dict[str, object] | None = None,
+    evidence: list[tuple[str, str]] | None = None,
 ) -> tuple[Mock, Mock, Mock]:
     client = Mock()
     transaction = Mock()
     query = Mock()
     snapshot = Mock(to_dict=lambda: document)
     incident_document = Mock()
+    evidence_query = Mock()
+    evidence_snapshots = [
+        Mock(
+            id=evidence_id,
+            to_dict=lambda evidence_hash=evidence_hash: {"evidence_hash": evidence_hash},
+        )
+        for evidence_id, evidence_hash in (evidence or [("evidence-1", "a" * 64)])
+    ]
     snapshot.reference.parent.parent = incident_document
+    incident_document.collection.return_value = evidence_query
     incident_document.get.return_value = Mock(
         exists=True,
         to_dict=lambda: incident or {"proposal_version": 3},
     )
     client.transaction.return_value = transaction
     client.collection_group.return_value.where.return_value.limit.return_value = query
-    transaction.get.return_value = iter([snapshot])
+    transaction.get.side_effect = [iter([snapshot]), iter(evidence_snapshots)]
     return client, transaction, snapshot
 
 
@@ -124,7 +152,9 @@ def _approval_document(
         "approval_id": "approval-1",
         "incident_id": "incident-1",
         "proposal_version": 3,
-        "evidence_snapshot_hash": "1" * 64,
+        "evidence_snapshot_hash": firestore_client.evidence_snapshot_hash(
+            [("evidence-1", "a" * 64)]
+        ),
         "action_id": "action-1",
         "tool": "recovery.set_feature_flag",
         "canonical_arguments": {
