@@ -92,6 +92,59 @@ def test_illegal_new_to_executing_transition_leaves_document_unchanged() -> None
     client.collection.assert_not_called()
 
 
+def test_investigating_incident_waits_for_approval_without_command(monkeypatch) -> None:
+    client = Mock()
+    transaction = Mock()
+    incident_document = Mock()
+    audit_document = Mock()
+    client.transaction.return_value = transaction
+    client.collection.return_value.document.return_value = incident_document
+    incident_document.collection.return_value.document.return_value = audit_document
+    incident_document.get.return_value = Mock(
+        exists=True,
+        to_dict=lambda: {
+            "state": "INVESTIGATING",
+            "state_version": 4,
+            "audit_sequence": 7,
+        },
+    )
+    monkeypatch.setattr(workflow_state.firestore, "transactional", lambda callback: callback)
+
+    next_version = workflow_state.transition_incident(
+        client,
+        incident_id="incident-1",
+        expected_state=workflow_state.IncidentState.INVESTIGATING,
+        expected_version=4,
+        target_state=workflow_state.IncidentState.AWAITING_APPROVAL,
+    )
+
+    assert next_version == 5
+    client.collection.assert_called_once_with(firestore_client.INCIDENTS_COLLECTION)
+    transaction.update.assert_called_once_with(
+        incident_document,
+        {
+            "state": "AWAITING_APPROVAL",
+            "state_version": 5,
+            "audit_sequence": 8,
+            "updated_at": firestore_client.firestore.SERVER_TIMESTAMP,
+        },
+    )
+    transaction.create.assert_called_once_with(
+        audit_document,
+        {
+            "sequence": 8,
+            "type": "state.transition",
+            "from_state": "INVESTIGATING",
+            "to_state": "AWAITING_APPROVAL",
+            "state_version": 5,
+            "created_at": firestore_client.firestore.SERVER_TIMESTAMP,
+        },
+    )
+    assert firestore_client.COMMANDS_COLLECTION not in [
+        call.args[0] for call in client.collection.call_args_list
+    ]
+
+
 def test_incident_lease_allows_only_one_active_owner(monkeypatch) -> None:
     client = Mock()
     transaction = Mock()
