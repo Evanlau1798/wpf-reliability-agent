@@ -53,6 +53,13 @@ public sealed record UiElementDetailsResult(
     UiElementDetails? Details,
     UiDiagnosticError? Error);
 
+internal sealed record BindingLiveCandidate(
+    string ElementId,
+    string BindingPath,
+    string TargetProperty,
+    string ElementType,
+    string? ElementName);
+
 internal static class UiTreeSnapshotter
 {
     public static UiTreeSnapshotResult Capture(
@@ -141,7 +148,7 @@ public sealed partial class ReliabilitySensor
         "type", "name", "visibility", "enabled", "layout", "binding_summary",
     };
     private readonly object _bindingErrorElementLock = new();
-    private readonly HashSet<string> _bindingErrorElementIds = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, BindingLiveCandidate> _bindingErrorElements = new(StringComparer.Ordinal);
 
     public bool ReportBindingFailure(
         DependencyObject element,
@@ -158,9 +165,14 @@ public sealed partial class ReliabilitySensor
         var elementId = GetElementId(element);
         lock (_bindingErrorElementLock)
         {
-            if (_bindingErrorElementIds.Count < 500)
+            if (_bindingErrorElements.ContainsKey(elementId) || _bindingErrorElements.Count < 500)
             {
-                _bindingErrorElementIds.Add(elementId);
+                _bindingErrorElements[elementId] = new BindingLiveCandidate(
+                    elementId,
+                    bindingPath,
+                    targetProperty,
+                    element.GetType().Name,
+                    elementName);
             }
         }
 
@@ -209,6 +221,45 @@ public sealed partial class ReliabilitySensor
         return result;
     }
 
+    internal async Task<IReadOnlyList<BindingLiveCandidate>> GetBindingLiveCandidatesAsync(
+        string? rootElementId,
+        CancellationToken cancellationToken = default)
+    {
+        BindingLiveCandidate[] known;
+        lock (_bindingErrorElementLock)
+        {
+            known = _bindingErrorElements.Values.ToArray();
+        }
+
+        if (rootElementId is null)
+        {
+            return known;
+        }
+
+        if (!_elementIds.TryResolve<DependencyObject>(rootElementId, out var root))
+        {
+            return [];
+        }
+
+        IReadOnlyList<BindingLiveCandidate> Filter()
+        {
+            var matches = new List<BindingLiveCandidate>(known.Length);
+            foreach (var candidate in known)
+            {
+                if (_elementIds.TryResolve<DependencyObject>(candidate.ElementId, out var element)
+                    && IsWithinSubtree(root!, element!))
+                {
+                    matches.Add(candidate);
+                }
+            }
+            return matches;
+        }
+
+        return root!.Dispatcher.CheckAccess()
+            ? Filter()
+            : await root.Dispatcher.InvokeAsync(Filter).Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<UiElementDetailsResult> GetUiElementDetailsAsync(
         string elementId,
         IReadOnlyCollection<string>? requestedFields = null,
@@ -239,7 +290,7 @@ public sealed partial class ReliabilitySensor
     {
         lock (_bindingErrorElementLock)
         {
-            return _bindingErrorElementIds.Contains(elementId);
+            return _bindingErrorElements.ContainsKey(elementId);
         }
     }
 
@@ -256,8 +307,33 @@ public sealed partial class ReliabilitySensor
                 uiElement?.IsVisible ?? false,
                 uiElement?.IsEnabled ?? false,
                 new UiLayoutDetails(frameworkElement?.ActualWidth ?? 0, frameworkElement?.ActualHeight ?? 0),
-                new UiBindingSummary(HasBindingError(elementId), null)),
+                new UiBindingSummary(HasBindingError(elementId), GetBindingErrorPath(elementId))),
             null);
+    }
+
+    private string? GetBindingErrorPath(string elementId)
+    {
+        lock (_bindingErrorElementLock)
+        {
+            return _bindingErrorElements.GetValueOrDefault(elementId)?.BindingPath;
+        }
+    }
+
+    private static bool IsWithinSubtree(DependencyObject root, DependencyObject element)
+    {
+        for (DependencyObject? current = element; current is not null;)
+        {
+            if (ReferenceEquals(current, root))
+            {
+                return true;
+            }
+
+            current = current is FrameworkElement frameworkElement && frameworkElement.Parent is not null
+                ? frameworkElement.Parent
+                : current is Visual ? VisualTreeHelper.GetParent(current) : null;
+        }
+
+        return false;
     }
 
     private static UiElementDetailsResult DetailsError(string code, string message) =>

@@ -1,4 +1,6 @@
 using System.Text.Json;
+using System.Windows.Controls;
+using System.Windows.Threading;
 using Reliability.Contracts;
 
 namespace Reliability.Sensor.Tests;
@@ -78,6 +80,51 @@ public sealed class ReadOnlyCommandExecutorTests
     }
 
     [Fact]
+    public async Task BindingGetLiveCandidatesReturnsKnownErrorsInsideRequestedSubtree()
+    {
+        await using var sensor = ReliabilitySensor.Start(TestOptions());
+        var ready = new TaskCompletionSource<(StackPanel Root, TextBlock Broken, TextBlock Outside)>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var thread = new Thread(() =>
+        {
+            var root = new StackPanel { Name = "PeopleGrid" };
+            var broken = new TextBlock { Name = "PersonName" };
+            var outside = new TextBlock { Name = "OtherName" };
+            root.Children.Add(broken);
+            ready.SetResult((root, broken, outside));
+            Dispatcher.Run();
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        var (root, broken, outside) = await ready.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        try
+        {
+            Assert.True(sensor.ReportBindingFailure(broken, "DisplayNmae", "Text", "PersonName"));
+            Assert.True(sensor.ReportBindingFailure(outside, "OtherTypo", "Text", "OtherName"));
+            var command = (await ReadCommandAsync()) with
+            {
+                Tool = DiagnosticTool.BindingGetLiveCandidates,
+                Arguments = JsonSerializer.SerializeToElement(new { element_id = sensor.GetElementId(root) }),
+            };
+            var executor = new ReadOnlyCommandExecutor(sensor);
+
+            var result = await executor.ExecuteAsync(command, CancellationToken.None);
+
+            var candidates = result.GetProperty("candidates");
+            Assert.Equal(1, candidates.GetArrayLength());
+            Assert.Equal(sensor.GetElementId(broken), candidates[0].GetProperty("element_id").GetString());
+            Assert.Equal("DisplayNmae", candidates[0].GetProperty("binding_path").GetString());
+            Assert.Equal("Text", candidates[0].GetProperty("target_property").GetString());
+        }
+        finally
+        {
+            root.Dispatcher.InvokeShutdown();
+            Assert.True(thread.Join(TimeSpan.FromSeconds(5)));
+        }
+    }
+
+    [Fact]
     public async Task MutationToolIsRejectedBySwitchDispatcher()
     {
         await using var sensor = ReliabilitySensor.Start(null);
@@ -101,4 +148,14 @@ public sealed class ReadOnlyCommandExecutorTests
             json,
             ContractJsonContext.Default.DiagnosticCommand)!;
     }
+
+    private static ReliabilitySensorOptions TestOptions() => new()
+    {
+        ApiBaseUri = new Uri("https://reliability.example.test"),
+        DeviceId = "device-test",
+        DeviceToken = "test-token",
+        ApplicationId = "demo-app",
+        ApplicationVersion = "1.2.3",
+        DisableBackgroundPersistence = true,
+    };
 }
