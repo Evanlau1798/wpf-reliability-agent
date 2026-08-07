@@ -177,6 +177,7 @@ def commit_new_incident_run(
     incident_id: str,
     evidence_revision: int,
     trigger: str,
+    model_id: str,
 ) -> bool:
     incident_document = client.collection(INCIDENTS_COLLECTION).document(incident_id)
     processed_document = client.collection(PROCESSED_RUNS_COLLECTION).document(run_key)
@@ -233,6 +234,7 @@ def commit_new_incident_run(
                 "incident_id": incident_id,
                 "evidence_revision": evidence_revision,
                 "trigger": trigger,
+                "model_id": model_id,
                 "processed_at": firestore.SERVER_TIMESTAMP,
             },
         )

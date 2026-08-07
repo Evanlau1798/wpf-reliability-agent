@@ -305,6 +305,7 @@ def test_new_incident_run_commits_transition_and_processed_marker_together(monke
         incident_id="incident-1",
         evidence_revision=2,
         trigger="binding.aggregate",
+        model_id="gemini-test",
     )
 
     assert committed is True
@@ -326,6 +327,7 @@ def test_new_incident_run_commits_transition_and_processed_marker_together(monke
             "incident_id": "incident-1",
             "evidence_revision": 2,
             "trigger": "binding.aggregate",
+            "model_id": "gemini-test",
             "processed_at": firestore_client.firestore.SERVER_TIMESTAMP,
         },
     )
@@ -355,6 +357,7 @@ def test_duplicate_new_incident_run_does_not_repeat_transition(monkeypatch) -> N
         incident_id="incident-1",
         evidence_revision=2,
         trigger="binding.aggregate",
+        model_id="gemini-test",
     )
 
     assert committed is False
@@ -398,6 +401,7 @@ def test_failed_transition_does_not_mark_run_processed(monkeypatch) -> None:
             incident_id="incident-1",
             evidence_revision=2,
             trigger="binding.aggregate",
+            model_id="gemini-test",
         )
 
     transaction.create.assert_not_called()

@@ -168,12 +168,12 @@ def test_new_work_commits_durable_step_before_ack(monkeypatch) -> None:
     _set_environment(monkeypatch, "worker")
     _allow_identity(monkeypatch)
     firestore_client = object()
-    committed: list[tuple[object, str, str, int, str]] = []
+    committed: list[tuple[object, str, str, int, str, str]] = []
     monkeypatch.setattr(main, "get_firestore_client", lambda _project_id: firestore_client)
     monkeypatch.setattr(main, "is_run_processed", lambda *_args: False)
 
-    def commit(client, *, run_key, incident_id, evidence_revision, trigger):
-        committed.append((client, run_key, incident_id, evidence_revision, trigger))
+    def commit(client, *, run_key, incident_id, evidence_revision, trigger, model_id):
+        committed.append((client, run_key, incident_id, evidence_revision, trigger, model_id))
         return True
 
     monkeypatch.setattr(main, "commit_new_incident_run", commit, raising=False)
@@ -193,6 +193,7 @@ def test_new_work_commits_durable_step_before_ack(monkeypatch) -> None:
             "incident-1",
             2,
             "binding.aggregate",
+            "gemini-3.5-flash-lite",
         )
     ]
 

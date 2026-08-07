@@ -132,6 +132,7 @@ async def worker_push(request: Request) -> None:
         incident_id=work["incident_id"],
         evidence_revision=work["evidence_revision"],
         trigger=work["trigger"],
+        model_id=request.app.state.settings.gemini_model,
     )
     if not committed:
         request.app.state.logger.info("worker_duplicate_run run_key=%s", run_key)
