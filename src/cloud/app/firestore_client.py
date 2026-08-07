@@ -123,6 +123,8 @@ def validate_pending_approval_decision(
             raise ValueError("Approval evidence snapshot mismatch")
         if sha256_canonical(approval.canonical_arguments) != approval.canonical_arguments_hash:
             raise ValueError("Approval arguments hash mismatch")
+        if incident.get("app_session_id") != approval.target_app_session_id:
+            raise ValueError("Approval app session mismatch")
         return approval
 
     approval = validate(client.transaction())
