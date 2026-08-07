@@ -21,8 +21,10 @@ def test_settings_model_contains_only_runtime_values() -> None:
         "pubsub_topic",
         "pubsub_push_audience",
         "pubsub_invoker_email",
+        "gemini_model",
     }
     assert settings.service_role == "api"
+    assert settings.gemini_model == "gemini-3.5-flash-lite"
     assert isinstance(settings.demo_device_token, SecretStr)
     assert "secret-token" not in repr(settings)
 
@@ -45,6 +47,21 @@ def test_settings_load_from_environment_names() -> None:
     assert settings.pubsub_topic == "incident-work"
     assert settings.pubsub_push_audience == "https://worker.example.test"
     assert settings.pubsub_invoker_email == "pubsub-invoker@example.test"
+
+
+def test_gemini_model_can_override_the_documented_default() -> None:
+    settings = Settings.from_environment(
+        {
+            "SERVICE_ROLE": "api",
+            "GOOGLE_CLOUD_PROJECT": "project-test",
+            "DEMO_DEVICE_ID": "device-test",
+            "DEMO_DEVICE_TOKEN": "secret-token",
+            "PUBSUB_TOPIC": "incident-work",
+            "GEMINI_MODEL": "gemini-region-smoke-test",
+        }
+    )
+
+    assert settings.gemini_model == "gemini-region-smoke-test"
 
 
 def test_missing_settings_report_environment_variable_names() -> None:

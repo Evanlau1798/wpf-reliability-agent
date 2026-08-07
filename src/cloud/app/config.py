@@ -16,6 +16,7 @@ WORKER_ENVIRONMENT_FIELDS = (
     ("PUBSUB_PUSH_AUDIENCE", "pubsub_push_audience"),
     ("PUBSUB_INVOKER_EMAIL", "pubsub_invoker_email"),
 )
+DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite"
 
 
 class Settings(BaseModel):
@@ -28,6 +29,7 @@ class Settings(BaseModel):
     pubsub_topic: str = Field(min_length=1, max_length=255)
     pubsub_push_audience: str | None = Field(default=None, min_length=1, max_length=2048)
     pubsub_invoker_email: str | None = Field(default=None, min_length=3, max_length=320)
+    gemini_model: str = Field(default=DEFAULT_GEMINI_MODEL, min_length=1, max_length=128)
 
     @classmethod
     def from_environment(cls, environment: Mapping[str, str] | None = None) -> "Settings":
@@ -39,4 +41,7 @@ class Settings(BaseModel):
         if missing:
             raise ValueError(f"Missing required cloud settings: {', '.join(missing)}")
 
-        return cls.model_validate({field: source[name] for name, field in fields})
+        values = {field: source[name] for name, field in fields}
+        if source.get("GEMINI_MODEL", "").strip():
+            values["gemini_model"] = source["GEMINI_MODEL"]
+        return cls.model_validate(values)
