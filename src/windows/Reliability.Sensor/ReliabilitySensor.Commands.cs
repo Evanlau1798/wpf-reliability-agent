@@ -25,7 +25,8 @@ public sealed partial class ReliabilitySensor
                     && string.Equals(
                         command.TargetAppSessionId,
                         appSessionId,
-                        StringComparison.Ordinal))
+                        StringComparison.Ordinal)
+                    && command.ExpiresAtUtc > DateTimeOffset.UtcNow)
                 {
                     await handleCommand(command, cancellationToken).ConfigureAwait(false);
                 }

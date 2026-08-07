@@ -39,6 +39,37 @@ public sealed class CommandPollingSecurityTests
         Assert.Equal(0, handled);
     }
 
+    [Fact]
+    public async Task ExpiredCommandIsRejectedBeforeDispatch()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var handler = new SingleCommandThenBlockHandler(json => json
+            .Replace("2026-08-07T00:00:00Z", "2000-01-01T00:00:00Z")
+            .Replace("2026-08-07T00:01:00Z", "2000-01-01T00:01:00Z"));
+        using var client = new TelemetryApiClient(
+            new Uri("https://reliability.example.test"),
+            "test-token",
+            handler,
+            TimeSpan.FromSeconds(25));
+        var handled = 0;
+        var poller = ReliabilitySensor.RunCommandPollerAsync(
+            client,
+            "device-test",
+            "session-1",
+            (_, _) =>
+            {
+                handled++;
+                return Task.CompletedTask;
+            },
+            cancellation.Token);
+
+        await handler.SecondRequestStarted.Task.WaitAsync(TimeSpan.FromSeconds(1));
+        cancellation.Cancel();
+        await poller.WaitAsync(TimeSpan.FromSeconds(1));
+
+        Assert.Equal(0, handled);
+    }
+
     private sealed class SingleCommandThenBlockHandler(Func<string, string> mutate) : HttpMessageHandler
     {
         private int _requests;
