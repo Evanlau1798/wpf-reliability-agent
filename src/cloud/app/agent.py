@@ -20,6 +20,18 @@ from app.models import (
 from app.workflow_state import MAX_INVESTIGATION_ROUNDS, MAX_READ_ONLY_TOOL_CALLS
 
 
+READ_ONLY_DIAGNOSTIC_TOOLS = frozenset(
+    {
+        DiagnosticTool.HEALTH_GET_SNAPSHOT,
+        DiagnosticTool.BINDING_GET_ERRORS,
+        DiagnosticTool.BINDING_GET_LIVE_CANDIDATES,
+        DiagnosticTool.EXCEPTION_GET_RECENT,
+        DiagnosticTool.UI_GET_SUBTREE,
+        DiagnosticTool.UI_GET_ELEMENT_DETAILS,
+        DiagnosticTool.PERFORMANCE_SAMPLE,
+        DiagnosticTool.STATE_COMPARE_SNAPSHOTS,
+    }
+)
 TOOL_DESCRIPTIONS = {
     DiagnosticTool.HEALTH_GET_SNAPSHOT.value: "Current app, session, and sensor health.",
     DiagnosticTool.BINDING_GET_ERRORS.value: "Aggregated binding error evidence.",
@@ -95,6 +107,15 @@ def validate_decision_evidence_ids(
     return decision
 
 
+def validate_decision_next_tool(decision: AgentDecision) -> AgentDecision:
+    if (
+        decision.next_command is not None
+        and decision.next_command.tool not in READ_ONLY_DIAGNOSTIC_TOOLS
+    ):
+        raise ValueError("Next evidence tool is not in the read-only allowlist")
+    return decision
+
+
 async def run_investigator_once(
     runner: Any,
     *,
@@ -118,7 +139,8 @@ async def run_investigator_once(
             run_key=run_key,
             message=message,
         )
-        return validate_decision_evidence_ids(decision, context)
+        validate_decision_evidence_ids(decision, context)
+        return validate_decision_next_tool(decision)
     except ValueError:
         repair_message = types.Content(
             role="user",
@@ -130,7 +152,8 @@ async def run_investigator_once(
             run_key=run_key,
             message=repair_message,
         )
-        return validate_decision_evidence_ids(decision, context)
+        validate_decision_evidence_ids(decision, context)
+        return validate_decision_next_tool(decision)
 
 
 async def _run_investigator_message(
@@ -167,8 +190,8 @@ def create_evidence_command(
 ) -> str:
     if decision.decision is not DecisionType.REQUEST_EVIDENCE or decision.next_command is None:
         raise ValueError("REQUEST_EVIDENCE decision required")
-    if decision.next_command.tool is DiagnosticTool.RECOVERY_SET_FEATURE_FLAG:
-        raise ValueError("Mutation tool cannot be requested as evidence")
+    if decision.next_command.tool not in READ_ONLY_DIAGNOSTIC_TOOLS:
+        raise ValueError("Evidence tool is not in the read-only allowlist")
 
     arguments = decision.next_command.arguments
     arguments_hash = sha256_canonical(arguments)

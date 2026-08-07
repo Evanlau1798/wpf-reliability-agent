@@ -12,6 +12,7 @@ from app.agent import (
     INVESTIGATOR_INSTRUCTION,
     MAX_INVESTIGATION_ROUNDS,
     MAX_READ_ONLY_TOOL_CALLS,
+    READ_ONLY_DIAGNOSTIC_TOOLS,
     build_root_agent,
     build_investigator_contents,
     create_evidence_command,
@@ -19,6 +20,7 @@ from app.agent import (
     proposed_action_for_policy,
     run_investigator_once,
     validate_decision_evidence_ids,
+    validate_decision_next_tool,
 )
 from app.correlation import AgentCorrelationContext, NormalizedEvidenceSummary
 from app.models import AgentDecision, DecisionType, DiagnosticTool
@@ -367,3 +369,50 @@ def test_hallucinated_decision_evidence_id_is_rejected() -> None:
 
     with pytest.raises(ValueError, match="Unknown evidence ID"):
         validate_decision_evidence_ids(decision, context)
+
+
+def test_request_evidence_tool_must_be_read_only_allowlisted() -> None:
+    allowed = AgentDecision.model_validate(
+        {
+            "schema_version": "1.0",
+            "decision": "REQUEST_EVIDENCE",
+            "hypotheses": [],
+            "next_command": {
+                "tool": "ui.get_subtree",
+                "arguments": {"element_id": "element-1"},
+            },
+            "missing_evidence": ["bounded UI subtree"],
+        }
+    )
+    mutation = AgentDecision.model_validate(
+        {
+            "schema_version": "1.0",
+            "decision": "REQUEST_EVIDENCE",
+            "hypotheses": [],
+            "next_command": {
+                "tool": "recovery.set_feature_flag",
+                "arguments": {
+                    "feature": "ExperimentalPeopleGrid",
+                    "enabled": False,
+                    "expected_current_value": True,
+                },
+            },
+            "missing_evidence": [],
+        }
+    )
+
+    assert DiagnosticTool.UI_GET_SUBTREE in READ_ONLY_DIAGNOSTIC_TOOLS
+    assert validate_decision_next_tool(allowed) is allowed
+    with pytest.raises(ValueError, match="allowlist"):
+        validate_decision_next_tool(mutation)
+
+    with pytest.raises(ValueError):
+        AgentDecision.model_validate(
+            {
+                "schema_version": "1.0",
+                "decision": "REQUEST_EVIDENCE",
+                "hypotheses": [],
+                "next_command": {"tool": "shell.execute", "arguments": {}},
+                "missing_evidence": [],
+            }
+        )
