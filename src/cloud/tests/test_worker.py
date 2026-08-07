@@ -205,6 +205,7 @@ def _set_environment(monkeypatch, role: str) -> None:
     monkeypatch.setenv("PUBSUB_TOPIC", "incident-work")
     monkeypatch.setenv("PUBSUB_PUSH_AUDIENCE", "https://worker.example.test")
     monkeypatch.setenv("PUBSUB_INVOKER_EMAIL", "pubsub-invoker@example.test")
+    monkeypatch.setenv("GOOGLE_CLOUD_LOCATION", "asia-east1")
 
 
 def _allow_identity(monkeypatch) -> None:

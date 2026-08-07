@@ -22,6 +22,7 @@ def test_settings_model_contains_only_runtime_values() -> None:
         "pubsub_push_audience",
         "pubsub_invoker_email",
         "gemini_model",
+        "google_cloud_location",
     }
     assert settings.service_role == "api"
     assert settings.gemini_model == "gemini-3.5-flash-lite"
@@ -39,6 +40,7 @@ def test_settings_load_from_environment_names() -> None:
             "PUBSUB_TOPIC": "incident-work",
             "PUBSUB_PUSH_AUDIENCE": "https://worker.example.test",
             "PUBSUB_INVOKER_EMAIL": "pubsub-invoker@example.test",
+            "GOOGLE_CLOUD_LOCATION": "asia-east1",
         }
     )
 
@@ -47,6 +49,7 @@ def test_settings_load_from_environment_names() -> None:
     assert settings.pubsub_topic == "incident-work"
     assert settings.pubsub_push_audience == "https://worker.example.test"
     assert settings.pubsub_invoker_email == "pubsub-invoker@example.test"
+    assert settings.google_cloud_location == "asia-east1"
 
 
 def test_gemini_model_can_override_the_documented_default() -> None:
@@ -75,7 +78,7 @@ def test_missing_settings_report_environment_variable_names() -> None:
 def test_worker_settings_require_pubsub_identity_values() -> None:
     with pytest.raises(
         ValueError,
-        match="PUBSUB_PUSH_AUDIENCE, PUBSUB_INVOKER_EMAIL",
+        match="PUBSUB_PUSH_AUDIENCE, PUBSUB_INVOKER_EMAIL, GOOGLE_CLOUD_LOCATION",
     ):
         Settings.from_environment(
             {

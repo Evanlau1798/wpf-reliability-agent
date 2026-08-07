@@ -15,6 +15,7 @@ ENVIRONMENT_FIELDS = (
 WORKER_ENVIRONMENT_FIELDS = (
     ("PUBSUB_PUSH_AUDIENCE", "pubsub_push_audience"),
     ("PUBSUB_INVOKER_EMAIL", "pubsub_invoker_email"),
+    ("GOOGLE_CLOUD_LOCATION", "google_cloud_location"),
 )
 DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite"
 
@@ -30,6 +31,7 @@ class Settings(BaseModel):
     pubsub_push_audience: str | None = Field(default=None, min_length=1, max_length=2048)
     pubsub_invoker_email: str | None = Field(default=None, min_length=3, max_length=320)
     gemini_model: str = Field(default=DEFAULT_GEMINI_MODEL, min_length=1, max_length=128)
+    google_cloud_location: str | None = Field(default=None, min_length=1, max_length=128)
 
     @classmethod
     def from_environment(cls, environment: Mapping[str, str] | None = None) -> "Settings":
