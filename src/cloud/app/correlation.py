@@ -26,6 +26,7 @@ class NormalizedEvidenceSummary(BaseModel):
     observed_at_utc: UtcDateTime
     summary: Annotated[str, StringConstraints(min_length=1, max_length=4096)]
     element_id: Identifier | None = None
+    binding_path: Identifier | None = None
 
 
 class CandidateClaim(BaseModel):
@@ -63,3 +64,14 @@ def match_unique_live_candidate(
     if len(candidates) == 1:
         return candidates[0], Confidence.HIGH
     return None
+
+
+def match_normalized_binding_path(
+    left: NormalizedEvidenceSummary,
+    right: NormalizedEvidenceSummary,
+) -> bool:
+    if left.binding_path is None or right.binding_path is None:
+        return False
+    left_path = left.binding_path.strip()
+    right_path = right.binding_path.strip()
+    return bool(left_path) and left_path == right_path

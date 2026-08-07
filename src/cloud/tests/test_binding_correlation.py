@@ -4,6 +4,7 @@ from app.correlation import (
     BindingCandidate,
     NormalizedEvidenceSummary,
     match_exact_element_id,
+    match_normalized_binding_path,
     match_unique_live_candidate,
 )
 from app.models import Confidence
@@ -43,3 +44,12 @@ def test_unique_live_candidate_is_high_confidence_only_when_unique() -> None:
 
     assert match_unique_live_candidate([candidate]) == (candidate, Confidence.HIGH)
     assert match_unique_live_candidate([candidate, candidate.model_copy()]) is None
+
+
+def test_normalized_binding_path_trims_but_preserves_case() -> None:
+    left = _evidence("binding-1", None).model_copy(update={"binding_path": " DisplayName "})
+    same = _evidence("binding-2", None).model_copy(update={"binding_path": "DisplayName"})
+    different_case = _evidence("binding-3", None).model_copy(update={"binding_path": "displayName"})
+
+    assert match_normalized_binding_path(left, same)
+    assert not match_normalized_binding_path(left, different_case)
