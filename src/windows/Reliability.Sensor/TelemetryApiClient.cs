@@ -4,6 +4,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Reliability.Contracts;
 
 namespace Reliability.Sensor;
 
@@ -118,6 +119,29 @@ internal sealed class TelemetryApiClient : IDisposable
         }
     }
 
+    public async Task<DiagnosticCommand?> LeaseCommandAsync(
+        string deviceId,
+        string appSessionId,
+        CancellationToken cancellationToken = default)
+    {
+        using var content = JsonContent.Create(
+            new CommandLeaseRequest(appSessionId, 20, 1),
+            options: JsonOptions);
+        using var response = await _httpClient.PostAsync(
+            $"v1/devices/{Uri.EscapeDataString(deviceId)}/commands:lease",
+            content,
+            cancellationToken).ConfigureAwait(false);
+        if (response.StatusCode is HttpStatusCode.NoContent)
+        {
+            return null;
+        }
+
+        response.EnsureSuccessStatusCode();
+        var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        return JsonSerializer.Deserialize(json, ContractJsonContext.Default.DiagnosticCommand)
+            ?? throw new JsonException("Command lease response is empty.");
+    }
+
     public void Dispose() => _httpClient.Dispose();
 
     private static (IReadOnlyList<OutboxEvent> Events, byte[] Body) SelectBatch(IReadOnlyList<OutboxEvent> events)
@@ -157,6 +181,11 @@ internal sealed class TelemetryApiClient : IDisposable
 
     private sealed record TelemetryBatchRequest(
         [property: JsonPropertyName("events")] IReadOnlyList<Reliability.Contracts.DiagnosticEnvelope> Events);
+
+    private sealed record CommandLeaseRequest(
+        string AppSessionId,
+        int WaitSeconds,
+        int MaxCommands);
 
     private sealed record RejectedEvent(
         [property: JsonPropertyName("event_id")] string EventId,
