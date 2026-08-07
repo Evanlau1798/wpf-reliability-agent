@@ -30,6 +30,8 @@ class NormalizedEvidenceSummary(BaseModel):
     element_name: Identifier | None = None
     element_type: Identifier | None = None
     nearest_named_ancestor: Identifier | None = None
+    occurrence_count: int | None = Field(default=None, ge=0)
+    window_seconds: float | None = Field(default=None, gt=0)
 
 
 class CandidateClaim(BaseModel):
@@ -113,3 +115,9 @@ def match_time_window(
         return False
     delta_seconds = abs((left.observed_at_utc - right.observed_at_utc).total_seconds())
     return delta_seconds <= max_delta_seconds
+
+
+def binding_errors_per_second(evidence: NormalizedEvidenceSummary) -> float | None:
+    if evidence.occurrence_count is None or evidence.window_seconds is None:
+        return None
+    return evidence.occurrence_count / evidence.window_seconds
