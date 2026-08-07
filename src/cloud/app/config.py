@@ -27,6 +27,7 @@ class Settings(BaseModel):
     google_cloud_project: str = Field(min_length=1, max_length=256)
     demo_device_id: str = Field(min_length=1, max_length=256)
     demo_device_token: SecretStr = Field(min_length=1)
+    demo_operator_token: SecretStr | None = Field(default=None, min_length=1)
     pubsub_topic: str = Field(min_length=1, max_length=255)
     pubsub_push_audience: str | None = Field(default=None, min_length=1, max_length=2048)
     pubsub_invoker_email: str | None = Field(default=None, min_length=3, max_length=320)
@@ -44,6 +45,8 @@ class Settings(BaseModel):
             raise ValueError(f"Missing required cloud settings: {', '.join(missing)}")
 
         values = {field: source[name] for name, field in fields}
+        if source.get("DEMO_OPERATOR_TOKEN", "").strip():
+            values["demo_operator_token"] = source["DEMO_OPERATOR_TOKEN"]
         if source.get("GEMINI_MODEL", "").strip():
             values["gemini_model"] = source["GEMINI_MODEL"]
         return cls.model_validate(values)

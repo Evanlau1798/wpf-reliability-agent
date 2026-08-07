@@ -6,7 +6,7 @@ from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 
-from app.auth import authenticate_device_token
+from app.auth import authenticate_device_token, authenticate_operator_token
 from app.commands import (
     CommandLeaseRequest,
     complete_command_once,
@@ -39,6 +39,11 @@ app = FastAPI(title="WPF Reliability Agent", lifespan=lifespan)
 @app.get("/healthz", include_in_schema=False)
 def healthz() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.post("/console/login", status_code=status.HTTP_204_NO_CONTENT)
+def operator_login(_: Annotated[None, Depends(authenticate_operator_token)]) -> Response:
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @app.post(

@@ -3,9 +3,14 @@ from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import BaseModel, Field, SecretStr
 
 
 bearer_scheme = HTTPBearer(auto_error=False)
+
+
+class OperatorLoginRequest(BaseModel):
+    token: SecretStr = Field(min_length=1, max_length=4096)
 
 
 def parse_bearer_token(
@@ -35,3 +40,14 @@ def authenticate_device_token(
         )
 
     return settings.demo_device_id
+
+
+def authenticate_operator_token(request: Request, login: OperatorLoginRequest) -> None:
+    expected = request.app.state.settings.demo_operator_token
+    if expected is None or not hmac.compare_digest(
+        login.token.get_secret_value(), expected.get_secret_value()
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid operator token",
+        )

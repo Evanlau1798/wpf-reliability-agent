@@ -10,6 +10,7 @@ def test_settings_model_contains_only_runtime_values() -> None:
         google_cloud_project="project-test",
         demo_device_id="device-test",
         demo_device_token="secret-token",
+        demo_operator_token="operator-secret",
         pubsub_topic="incident-work",
     )
 
@@ -18,6 +19,7 @@ def test_settings_model_contains_only_runtime_values() -> None:
         "google_cloud_project",
         "demo_device_id",
         "demo_device_token",
+        "demo_operator_token",
         "pubsub_topic",
         "pubsub_push_audience",
         "pubsub_invoker_email",
@@ -27,7 +29,9 @@ def test_settings_model_contains_only_runtime_values() -> None:
     assert settings.service_role == "api"
     assert settings.gemini_model == "gemini-3.5-flash-lite"
     assert isinstance(settings.demo_device_token, SecretStr)
+    assert isinstance(settings.demo_operator_token, SecretStr)
     assert "secret-token" not in repr(settings)
+    assert "operator-secret" not in repr(settings)
 
 
 def test_settings_load_from_environment_names() -> None:
@@ -59,6 +63,7 @@ def test_gemini_model_can_override_the_documented_default() -> None:
             "GOOGLE_CLOUD_PROJECT": "project-test",
             "DEMO_DEVICE_ID": "device-test",
             "DEMO_DEVICE_TOKEN": "secret-token",
+            "DEMO_OPERATOR_TOKEN": "operator-secret",
             "PUBSUB_TOPIC": "incident-work",
             "GEMINI_MODEL": "gemini-region-smoke-test",
         }
