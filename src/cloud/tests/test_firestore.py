@@ -51,6 +51,27 @@ def test_firestore_collection_names_match_model() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("event_type", "observed_event_types", "material_metric_delta"),
+    [
+        ("tool.result", frozenset({"tool.result"}), False),
+        ("performance.sample", frozenset({"binding.aggregate"}), False),
+        ("performance.sample", frozenset({"performance.sample"}), True),
+    ],
+)
+def test_material_evidence_advances_revision(
+    event_type: str,
+    observed_event_types: frozenset[str],
+    material_metric_delta: bool,
+) -> None:
+    assert firestore_client.next_evidence_revision(
+        7,
+        event_type=event_type,
+        observed_event_types=observed_event_types,
+        material_metric_delta=material_metric_delta,
+    ) == 8
+
+
 def test_processed_run_lookup_reports_existing_run() -> None:
     client = Mock()
     document = Mock()

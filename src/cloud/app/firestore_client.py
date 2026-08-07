@@ -1,3 +1,4 @@
+from collections.abc import Collection
 from functools import cache
 
 from google.cloud import firestore
@@ -13,6 +14,25 @@ REPORTS_COLLECTION = "reports"
 COMMANDS_COLLECTION = "commands"
 EVENT_DEDUP_COLLECTION = "event_dedup"
 PROCESSED_RUNS_COLLECTION = "processed_runs"
+
+
+def next_evidence_revision(
+    current_revision: int,
+    *,
+    event_type: str,
+    observed_event_types: Collection[str],
+    material_metric_delta: bool = False,
+) -> int:
+    if type(current_revision) is not int or current_revision < 0:
+        raise ValueError("Incident evidence revision is invalid")
+    if not event_type:
+        raise ValueError("Evidence event type is required")
+    is_material = (
+        event_type == "tool.result"
+        or event_type not in observed_event_types
+        or material_metric_delta
+    )
+    return current_revision + int(is_material)
 
 
 @cache
