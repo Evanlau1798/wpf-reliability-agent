@@ -1,4 +1,5 @@
 import json
+import secrets
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
@@ -8,6 +9,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from pydantic import SecretStr
 
 from app.auth import (
+    OPERATOR_CSRF_COOKIE,
     OPERATOR_SESSION_COOKIE,
     authenticate_device_token,
     authenticate_operator_token,
@@ -56,6 +58,14 @@ def operator_login(
         key=OPERATOR_SESSION_COOKIE,
         value=create_operator_session_value(secret),
         httponly=True,
+        secure=True,
+        samesite="strict",
+        path="/",
+    )
+    response.set_cookie(
+        key=OPERATOR_CSRF_COOKIE,
+        value=secrets.token_urlsafe(32),
+        httponly=False,
         secure=True,
         samesite="strict",
         path="/",

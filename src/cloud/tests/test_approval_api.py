@@ -1,6 +1,8 @@
 import hashlib
 import hmac
+from typing import Annotated
 
+from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
 from app import auth
@@ -35,6 +37,18 @@ def test_operator_login_validates_token_from_environment(monkeypatch) -> None:
     assert "Secure" in set_cookie
     assert "SameSite=strict" in set_cookie
     assert "Path=/" in set_cookie
+    csrf_cookie = response.cookies.get(auth.OPERATOR_CSRF_COOKIE)
+    assert csrf_cookie is not None
+    assert len(csrf_cookie) >= 32
+    csrf_set_cookie = next(
+        value
+        for value in response.headers.get_list("set-cookie")
+        if value.startswith(f"{auth.OPERATOR_CSRF_COOKIE}=")
+    )
+    assert "HttpOnly" not in csrf_set_cookie
+    assert "Secure" in csrf_set_cookie
+    assert "SameSite=strict" in csrf_set_cookie
+    assert "Path=/" in csrf_set_cookie
 
 
 def test_operator_login_rejects_invalid_token(monkeypatch) -> None:
@@ -46,6 +60,35 @@ def test_operator_login_rejects_invalid_token(monkeypatch) -> None:
     assert response.status_code == 401
     assert response.json() == {"detail": "Invalid operator token"}
     assert "set-cookie" not in response.headers
+
+
+def test_approval_post_requires_matching_csrf_token() -> None:
+    csrf_dependency = getattr(auth, "validate_operator_csrf", None)
+    assert csrf_dependency is not None
+    approval_app = FastAPI()
+
+    @approval_app.post("/v1/approvals/{approval_id}:decide")
+    def decide(
+        approval_id: str,
+        _: Annotated[None, Depends(csrf_dependency)],
+    ) -> dict[str, str]:
+        return {"approval_id": approval_id}
+
+    with TestClient(approval_app, base_url="https://testserver") as client:
+        client.cookies.set(auth.OPERATOR_CSRF_COOKIE, "csrf-token")
+        missing = client.post("/v1/approvals/approval-1:decide")
+        wrong = client.post(
+            "/v1/approvals/approval-1:decide",
+            headers={auth.OPERATOR_CSRF_HEADER: "wrong-token"},
+        )
+        valid = client.post(
+            "/v1/approvals/approval-1:decide",
+            headers={auth.OPERATOR_CSRF_HEADER: "csrf-token"},
+        )
+
+    assert missing.status_code == 403
+    assert wrong.status_code == 403
+    assert valid.status_code == 200
 
 
 def _set_api_environment(monkeypatch) -> None:

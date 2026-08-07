@@ -10,6 +10,8 @@ from pydantic import BaseModel, Field, SecretStr
 bearer_scheme = HTTPBearer(auto_error=False)
 OPERATOR_SESSION_COOKIE = "__Host-wpfra-operator-session"
 OPERATOR_SESSION_PAYLOAD = "operator-session-v1"
+OPERATOR_CSRF_COOKIE = "__Host-wpfra-csrf"
+OPERATOR_CSRF_HEADER = "X-CSRF-Token"
 
 
 class OperatorLoginRequest(BaseModel):
@@ -64,3 +66,13 @@ def create_operator_session_value(secret: SecretStr) -> str:
         hashlib.sha256,
     ).hexdigest()
     return f"{OPERATOR_SESSION_PAYLOAD}.{signature}"
+
+
+def validate_operator_csrf(request: Request) -> None:
+    cookie = request.cookies.get(OPERATOR_CSRF_COOKIE)
+    header = request.headers.get(OPERATOR_CSRF_HEADER)
+    if not cookie or not header or not hmac.compare_digest(cookie, header):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="CSRF token required",
+        )
