@@ -32,6 +32,12 @@ def healthz() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.post("/v1/work:push", status_code=status.HTTP_204_NO_CONTENT)
+def worker_push(request: Request) -> None:
+    if request.app.state.settings.service_role != "worker":
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+
+
 async def enforce_telemetry_body_limit(request: Request) -> None:
     content_length = request.headers.get("content-length")
     if (
