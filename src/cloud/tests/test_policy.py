@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from app.models import AgentDecision, RiskLevel
-from app.policy import READ_ONLY_DIAGNOSTIC_TOOLS, risk_for_tool
+from app.policy import POLICY_VERSION, READ_ONLY_DIAGNOSTIC_TOOLS, risk_for_tool
 
 
 def test_risk_levels_match_diagnostic_command_contract() -> None:
@@ -55,3 +55,10 @@ def test_blocked_tool_families_are_blocked(tool: str) -> None:
 
 def test_unknown_tool_defaults_to_blocked() -> None:
     assert risk_for_tool("future.unreviewed_tool") is RiskLevel.BLOCKED
+
+
+def test_policy_version_matches_approval_contract_fixture() -> None:
+    fixture_path = Path(__file__).parents[3] / "contracts" / "fixtures" / "approval-pending.json"
+    approval = json.loads(fixture_path.read_text(encoding="utf-8"))
+
+    assert POLICY_VERSION == approval["policy_version"]

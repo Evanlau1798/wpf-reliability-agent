@@ -1,6 +1,7 @@
 from app.models import DiagnosticTool, RiskLevel
 
 
+POLICY_VERSION = "1"
 READ_ONLY_DIAGNOSTIC_TOOLS = frozenset(
     {
         DiagnosticTool.HEALTH_GET_SNAPSHOT,
