@@ -364,6 +364,25 @@ def test_occurrence_only_evidence_update_does_not_stale_approval(monkeypatch) ->
     assert len(command_creates) == 1
 
 
+def test_material_evidence_update_stales_approval_before_command(monkeypatch) -> None:
+    client, transaction, _ = _approval_client(
+        _approval_document(),
+        evidence=[("evidence-1", "a" * 64), ("evidence-2", "b" * 64)],
+    )
+    monkeypatch.setattr(firestore_client.firestore, "transactional", lambda callback: callback)
+
+    with pytest.raises(ValueError, match="Approval evidence snapshot mismatch"):
+        firestore_client.approve_pending_approval(
+            client,
+            approval_id="approval-1",
+            actor="demo-operator",
+            now=datetime(2026, 8, 8, 5, tzinfo=UTC),
+        )
+
+    client.collection.assert_not_called()
+    transaction.create.assert_not_called()
+
+
 def _approval_client(
     document: dict[str, object],
     *,
