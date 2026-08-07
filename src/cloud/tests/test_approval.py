@@ -1,4 +1,8 @@
+import json
+from pathlib import Path
+
 from app.approval import next_proposal_version
+from app.contracts import sha256_canonical
 from app.firestore_client import evidence_snapshot_hash
 from app.models import DiagnosticTool, ProposedAction
 
@@ -36,3 +40,10 @@ def test_proposal_evidence_snapshot_hash_binds_material_evidence() -> None:
 
     assert evidence_snapshot_hash(first) != evidence_snapshot_hash(second)
     assert evidence_snapshot_hash(second) == evidence_snapshot_hash(reversed(second))
+
+
+def test_proposal_arguments_hash_matches_cross_language_fixture() -> None:
+    fixture_path = Path(__file__).parents[3] / "contracts" / "fixtures" / "hash-ascii.json"
+    fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+
+    assert sha256_canonical(fixture["input"]) == fixture["sha256"]
