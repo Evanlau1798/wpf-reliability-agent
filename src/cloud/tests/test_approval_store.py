@@ -1,7 +1,10 @@
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
+from threading import Barrier, Lock
 from unittest.mock import Mock
 
 import pytest
+from google.api_core.exceptions import AlreadyExists
 
 from app import firestore_client
 
@@ -381,6 +384,48 @@ def test_material_evidence_update_stales_approval_before_command(monkeypatch) ->
 
     client.collection.assert_not_called()
     transaction.create.assert_not_called()
+
+
+def test_concurrent_approve_attempts_create_one_mutation_command(monkeypatch) -> None:
+    monkeypatch.setattr(firestore_client.firestore, "transactional", lambda callback: callback)
+    command_barrier = Barrier(2)
+    command_lock = Lock()
+    created_command_ids: set[str] = set()
+
+    def approve() -> str:
+        client, transaction, _ = _approval_client(_approval_document())
+
+        def create_once(_document, payload):
+            command_id = payload.get("command_id")
+            if not isinstance(command_id, str):
+                return
+            command_barrier.wait(timeout=2)
+            with command_lock:
+                if command_id in created_command_ids:
+                    raise AlreadyExists("mutation command already exists")
+                created_command_ids.add(command_id)
+
+        transaction.create.side_effect = create_once
+        return firestore_client.approve_pending_approval(
+            client,
+            approval_id="approval-1",
+            actor="demo-operator",
+            now=datetime(2026, 8, 8, 5, tzinfo=UTC),
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [executor.submit(approve) for _ in range(2)]
+        successes: list[str] = []
+        conflicts = 0
+        for future in futures:
+            try:
+                successes.append(future.result())
+            except AlreadyExists:
+                conflicts += 1
+
+    assert len(successes) == 1
+    assert conflicts == 1
+    assert created_command_ids == {successes[0]}
 
 
 def _approval_client(
