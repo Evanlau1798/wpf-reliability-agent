@@ -77,6 +77,13 @@ class AgentCorrelationContext(BaseModel):
     max_context_tokens: int = Field(gt=0, le=32_768)
 
 
+class CorrelationGraph(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    candidate_claims: list[CandidateClaim] = Field(max_length=20)
+    edges: list[EvidenceEdge] = Field(max_length=50)
+
+
 def match_exact_element_id(
     left: NormalizedEvidenceSummary,
     right: NormalizedEvidenceSummary,
@@ -263,3 +270,83 @@ def _context_fits_budget(context: AgentCorrelationContext) -> bool:
         len(encoded) <= context.max_context_bytes
         and token_upper_bound <= context.max_context_tokens
     )
+
+
+def correlate_binding_incident(
+    binding: NormalizedEvidenceSummary,
+    related_evidence: list[NormalizedEvidenceSummary],
+    live_candidates: list[BindingCandidate],
+) -> CorrelationGraph:
+    edges: list[EvidenceEdge] = []
+    supporting_ids = [binding.evidence_id]
+    exact_element = False
+    binding_path = False
+    named_ancestor = False
+    time_window = False
+    independent_matches = 0
+
+    for item in related_evidence:
+        item_matches = False
+        if match_exact_element_id(binding, item) is Confidence.HIGH:
+            exact_element = True
+            item_matches = True
+            edges.append(
+                EvidenceEdge(
+                    source_evidence_id=binding.evidence_id,
+                    target_evidence_id=item.evidence_id,
+                    edge_type=EvidenceEdgeType.SAME_ELEMENT,
+                )
+            )
+        if match_normalized_binding_path(binding, item):
+            binding_path = True
+            item_matches = True
+            edges.append(
+                EvidenceEdge(
+                    source_evidence_id=binding.evidence_id,
+                    target_evidence_id=item.evidence_id,
+                    edge_type=EvidenceEdgeType.SAME_BINDING_PATH,
+                )
+            )
+        if match_nearest_named_ancestor(binding, item) is Confidence.MEDIUM:
+            named_ancestor = True
+            item_matches = True
+        item_in_window = match_time_window(binding, item)
+        time_window = time_window or item_in_window
+        amplifier = build_performance_amplifier_edge(binding, item)
+        if amplifier is not None:
+            item_matches = True
+            edges.append(amplifier)
+        if item_matches:
+            independent_matches += 1
+            supporting_ids.append(item.evidence_id)
+            if item_in_window:
+                edges.append(
+                    EvidenceEdge(
+                        source_evidence_id=binding.evidence_id,
+                        target_evidence_id=item.evidence_id,
+                        edge_type=EvidenceEdgeType.SAME_TIME_WINDOW,
+                    )
+                )
+
+    unique_candidate = match_unique_live_candidate(live_candidates)
+    candidate = binding.nearest_named_ancestor
+    if candidate is None and unique_candidate is not None:
+        candidate = unique_candidate[0].element_name or unique_candidate[0].element_id
+    if candidate is None:
+        return CorrelationGraph(candidate_claims=[], edges=edges)
+
+    confidence = map_correlation_confidence(
+        exact_element=exact_element,
+        unique_live_candidate=unique_candidate is not None,
+        independent_evidence_matches=independent_matches,
+        binding_path=binding_path,
+        named_ancestor=named_ancestor,
+        time_window=time_window,
+    )
+    claim = CandidateClaim(
+        candidate=candidate,
+        summary=f"Deterministic evidence points to {candidate}.",
+        supporting_evidence_ids=supporting_ids,
+        confidence=confidence,
+    )
+    return CorrelationGraph(candidate_claims=[claim], edges=edges)
