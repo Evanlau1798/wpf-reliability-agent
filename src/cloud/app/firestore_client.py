@@ -121,6 +121,8 @@ def validate_pending_approval_decision(
             material_evidence.append((evidence_snapshot.id, evidence_hash))
         if evidence_snapshot_hash(material_evidence) != approval.evidence_snapshot_hash:
             raise ValueError("Approval evidence snapshot mismatch")
+        if sha256_canonical(approval.canonical_arguments) != approval.canonical_arguments_hash:
+            raise ValueError("Approval arguments hash mismatch")
         return approval
 
     approval = validate(client.transaction())

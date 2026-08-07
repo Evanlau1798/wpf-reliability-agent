@@ -111,6 +111,23 @@ def test_evidence_snapshot_mismatch_rejects_approval(monkeypatch) -> None:
     transaction.create.assert_not_called()
 
 
+def test_arguments_hash_mismatch_rejects_approval(monkeypatch) -> None:
+    client, transaction, _ = _approval_client(
+        _approval_document(canonical_arguments_hash="0" * 64)
+    )
+    monkeypatch.setattr(firestore_client.firestore, "transactional", lambda callback: callback)
+
+    with pytest.raises(ValueError, match="Approval arguments hash mismatch"):
+        firestore_client.validate_pending_approval_decision(
+            client,
+            approval_id="approval-1",
+            now=datetime(2026, 8, 8, 5, tzinfo=UTC),
+        )
+
+    transaction.update.assert_not_called()
+    transaction.create.assert_not_called()
+
+
 def _approval_client(
     document: dict[str, object],
     *,
@@ -146,7 +163,13 @@ def _approval_document(
     *,
     status: str = "PENDING",
     policy_version: str = "1",
+    canonical_arguments_hash: str | None = None,
 ) -> dict[str, object]:
+    canonical_arguments = {
+        "feature": "ExperimentalPeopleGrid",
+        "enabled": False,
+        "expected_current_value": True,
+    }
     return {
         "schema_version": "1.0",
         "approval_id": "approval-1",
@@ -157,12 +180,9 @@ def _approval_document(
         ),
         "action_id": "action-1",
         "tool": "recovery.set_feature_flag",
-        "canonical_arguments": {
-            "feature": "ExperimentalPeopleGrid",
-            "enabled": False,
-            "expected_current_value": True,
-        },
-        "canonical_arguments_hash": "2" * 64,
+        "canonical_arguments": canonical_arguments,
+        "canonical_arguments_hash": canonical_arguments_hash
+        or firestore_client.sha256_canonical(canonical_arguments),
         "target_app_session_id": "session-1",
         "policy_version": policy_version,
         "risk_level": "HIGH",
