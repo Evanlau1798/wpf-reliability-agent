@@ -7,6 +7,7 @@ from app.firestore_client import AUDIT_COLLECTION, INCIDENTS_COLLECTION, PROCESS
 
 
 MAX_INVESTIGATION_ROUNDS = 4
+MAX_READ_ONLY_TOOL_CALLS = 6
 
 
 class IncidentState(StrEnum):
@@ -69,6 +70,32 @@ def advance_investigation_round(client: firestore.Client, *, incident_id: str) -
             },
         )
         return next_round
+
+    return advance(client.transaction())
+
+
+def advance_read_only_tool_call(client: firestore.Client, *, incident_id: str) -> int:
+    incident_document = client.collection(INCIDENTS_COLLECTION).document(incident_id)
+
+    @firestore.transactional
+    def advance(transaction: firestore.Transaction) -> int:
+        snapshot = incident_document.get(transaction=transaction)
+        if not snapshot.exists:
+            raise ValueError("Incident does not exist")
+        current = (snapshot.to_dict() or {}).get("read_only_tool_call_count")
+        if type(current) is not int or current < 0:
+            raise ValueError("Read-only tool call count is invalid")
+        if current >= MAX_READ_ONLY_TOOL_CALLS:
+            raise ValueError("Read-only tool call limit reached")
+        next_count = current + 1
+        transaction.update(
+            incident_document,
+            {
+                "read_only_tool_call_count": next_count,
+                "updated_at": firestore.SERVER_TIMESTAMP,
+            },
+        )
+        return next_count
 
     return advance(client.transaction())
 

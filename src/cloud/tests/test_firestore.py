@@ -156,6 +156,7 @@ def test_incident_create_writes_complete_initial_state() -> None:
             "evidence_revision": 0,
             "proposal_version": 0,
             "investigation_round_count": 0,
+            "read_only_tool_call_count": 0,
             "application_id": "app-1",
             "app_session_id": "session-1",
             "severity": "ERROR",

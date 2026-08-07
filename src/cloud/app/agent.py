@@ -17,10 +17,9 @@ from app.models import (
     ProposedAction,
     RiskLevel,
 )
-from app.workflow_state import MAX_INVESTIGATION_ROUNDS
+from app.workflow_state import MAX_INVESTIGATION_ROUNDS, MAX_READ_ONLY_TOOL_CALLS
 
 
-MAX_READ_ONLY_TOOL_CALLS = 6
 TOOL_DESCRIPTIONS = {
     DiagnosticTool.HEALTH_GET_SNAPSHOT.value: "Current app, session, and sensor health.",
     DiagnosticTool.BINDING_GET_ERRORS.value: "Aggregated binding error evidence.",

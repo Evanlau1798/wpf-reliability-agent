@@ -127,6 +127,7 @@ def build_incident_document(
         "evidence_revision": evidence_revision,
         "proposal_version": 0,
         "investigation_round_count": 0,
+        "read_only_tool_call_count": 0,
         "application_id": application_id,
         "app_session_id": app_session_id,
         "severity": severity,
