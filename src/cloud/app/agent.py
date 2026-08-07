@@ -1,3 +1,5 @@
+from google.adk.agents import Agent
+
 from app.correlation import AgentCorrelationContext
 
 
@@ -15,6 +17,14 @@ Max read-only tool calls: {MAX_READ_ONLY_TOOL_CALLS}.
 Action risk is decided by deterministic policy; provide risk hints only.
 A temporary mitigation is not a permanent fix and must never be called RESOLVED.
 """
+
+
+def build_root_agent(model_id: str) -> Agent:
+    return Agent(
+        name="reliability_investigator",
+        model=model_id,
+        instruction=INVESTIGATOR_INSTRUCTION,
+    )
 
 
 def build_investigator_contents(context: AgentCorrelationContext) -> str:

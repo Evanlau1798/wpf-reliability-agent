@@ -1,9 +1,12 @@
 from datetime import UTC, datetime
 
+from google.adk.agents import Agent
+
 from app.agent import (
     INVESTIGATOR_INSTRUCTION,
     MAX_INVESTIGATION_ROUNDS,
     MAX_READ_ONLY_TOOL_CALLS,
+    build_root_agent,
     build_investigator_contents,
 )
 from app.correlation import AgentCorrelationContext, NormalizedEvidenceSummary
@@ -66,3 +69,13 @@ def test_investigator_instruction_distinguishes_temporary_mitigation() -> None:
     assert "temporary mitigation" in instruction
     assert "permanent fix" in instruction
     assert "resolved" in instruction
+
+
+def test_build_root_agent_creates_one_adk_root_workflow() -> None:
+    root = build_root_agent("gemini-test")
+
+    assert isinstance(root, Agent)
+    assert root.name == "reliability_investigator"
+    assert root.model == "gemini-test"
+    assert root.instruction == INVESTIGATOR_INSTRUCTION
+    assert root.sub_agents == []
