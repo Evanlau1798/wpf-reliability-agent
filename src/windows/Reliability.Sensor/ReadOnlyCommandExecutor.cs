@@ -54,8 +54,10 @@ internal sealed class ReadOnlyCommandExecutor
             DiagnosticTool.UiGetSubtree => await ExecuteUiGetSubtreeAsync(
                 command.Arguments,
                 cancellationToken).ConfigureAwait(false),
-            DiagnosticTool.UiGetElementDetails
-                or DiagnosticTool.PerformanceSample
+            DiagnosticTool.UiGetElementDetails => await ExecuteUiGetElementDetailsAsync(
+                command.Arguments,
+                cancellationToken).ConfigureAwait(false),
+            DiagnosticTool.PerformanceSample
                 or DiagnosticTool.StateCompareSnapshots => throw new NotSupportedException(
                     "Read-only diagnostic tool is not implemented yet."),
             _ => throw new InvalidOperationException(
@@ -118,5 +120,52 @@ internal sealed class ReadOnlyCommandExecutor
             throw new InvalidOperationException("Command arguments are invalid.");
         }
         return Math.Min(requested, ceiling);
+    }
+
+    private async Task<JsonElement> ExecuteUiGetElementDetailsAsync(
+        JsonElement arguments,
+        CancellationToken cancellationToken)
+    {
+        var result = await _sensor.GetUiElementDetailsAsync(
+            RequiredString(arguments, "element_id"),
+            OptionalStringArray(arguments, "fields"),
+            cancellationToken).ConfigureAwait(false);
+        return JsonSerializer.SerializeToElement(new
+        {
+            succeeded = result.Succeeded,
+            details = result.Details is null ? null : new
+            {
+                element_id = result.Details.ElementId,
+                type = result.Details.Type,
+                name = result.Details.Name,
+                is_visible = result.Details.IsVisible,
+                is_enabled = result.Details.IsEnabled,
+                layout = new
+                {
+                    actual_width = result.Details.Layout.ActualWidth,
+                    actual_height = result.Details.Layout.ActualHeight,
+                },
+                binding_summary = new
+                {
+                    has_known_error = result.Details.BindingSummary.HasKnownError,
+                    error_path = result.Details.BindingSummary.ErrorPath,
+                },
+            },
+            error = result.Error is null ? null : new { code = result.Error.Code, message = result.Error.Message },
+        });
+    }
+
+    private static IReadOnlyCollection<string>? OptionalStringArray(JsonElement arguments, string name)
+    {
+        if (!arguments.TryGetProperty(name, out var value))
+        {
+            return null;
+        }
+        if (value.ValueKind is not JsonValueKind.Array
+            || value.EnumerateArray().Any(item => item.ValueKind is not JsonValueKind.String))
+        {
+            throw new InvalidOperationException("Command arguments are invalid.");
+        }
+        return value.EnumerateArray().Select(item => item.GetString()!).ToArray();
     }
 }

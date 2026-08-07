@@ -209,6 +209,52 @@ public sealed class ReadOnlyCommandExecutorTests
     }
 
     [Fact]
+    public async Task UiGetElementDetailsReturnsOnlyAllowlistedMetadata()
+    {
+        await using var sensor = ReliabilitySensor.Start(TestOptions());
+        var ready = new TaskCompletionSource<Border>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var thread = new Thread(() =>
+        {
+            var element = new Border { Name = "SafePanel", Width = 40, Height = 20 };
+            ready.SetResult(element);
+            Dispatcher.Run();
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        var element = await ready.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        try
+        {
+            Assert.True(sensor.ReportBindingFailure(element, "DisplayNmae", "DataContext", "SafePanel"));
+            var command = (await ReadCommandAsync()) with
+            {
+                Tool = DiagnosticTool.UiGetElementDetails,
+                Arguments = JsonSerializer.SerializeToElement(new
+                {
+                    element_id = sensor.GetElementId(element),
+                    fields = new[] { "type", "name", "layout", "binding_summary" },
+                }),
+            };
+            var executor = new ReadOnlyCommandExecutor(sensor);
+
+            var result = await executor.ExecuteAsync(command, CancellationToken.None);
+
+            Assert.True(result.GetProperty("succeeded").GetBoolean());
+            var details = result.GetProperty("details");
+            Assert.Equal("Border", details.GetProperty("type").GetString());
+            Assert.Equal("SafePanel", details.GetProperty("name").GetString());
+            Assert.Equal("DisplayNmae", details.GetProperty("binding_summary").GetProperty("error_path").GetString());
+            Assert.False(details.TryGetProperty("text", out _));
+            Assert.False(details.TryGetProperty("data_context", out _));
+        }
+        finally
+        {
+            element.Dispatcher.InvokeShutdown();
+            Assert.True(thread.Join(TimeSpan.FromSeconds(5)));
+        }
+    }
+
+    [Fact]
     public async Task MutationToolIsRejectedBySwitchDispatcher()
     {
         await using var sensor = ReliabilitySensor.Start(null);
