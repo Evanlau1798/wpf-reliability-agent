@@ -33,6 +33,8 @@ class NormalizedEvidenceSummary(BaseModel):
     occurrence_count: int | None = Field(default=None, ge=0)
     window_seconds: float | None = Field(default=None, gt=0)
     frame_p95_ms: float | None = Field(default=None, ge=0)
+    visual_count: int | None = Field(default=None, ge=0)
+    subtree_node_count: int | None = Field(default=None, ge=0)
 
 
 class CandidateClaim(BaseModel):
@@ -131,3 +133,12 @@ def same_session_frame_p95(
     if binding.app_session_id != performance.app_session_id:
         return None
     return performance.frame_p95_ms
+
+
+def same_session_visual_metrics(
+    binding: NormalizedEvidenceSummary,
+    ui: NormalizedEvidenceSummary,
+) -> tuple[int | None, int | None] | None:
+    if binding.app_session_id != ui.app_session_id:
+        return None
+    return ui.visual_count, ui.subtree_node_count

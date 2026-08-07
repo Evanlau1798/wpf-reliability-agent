@@ -4,6 +4,7 @@ from app.correlation import (
     NormalizedEvidenceSummary,
     binding_errors_per_second,
     same_session_frame_p95,
+    same_session_visual_metrics,
 )
 
 
@@ -36,3 +37,14 @@ def test_frame_p95_correlates_only_with_same_app_session() -> None:
 
     assert same_session_frame_p95(binding, same_session) == 41.5
     assert same_session_frame_p95(binding, other_session) is None
+
+
+def test_visual_metrics_preserve_missing_values_without_guessing() -> None:
+    binding = _evidence(evidence_id="binding-1")
+    ui = _evidence(
+        evidence_id="ui-1",
+        kind="ui.snapshot",
+        visual_count=1_500,
+    )
+
+    assert same_session_visual_metrics(binding, ui) == (1_500, None)
