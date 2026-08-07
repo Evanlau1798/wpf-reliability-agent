@@ -91,6 +91,57 @@ def test_approval_post_requires_matching_csrf_token() -> None:
     assert valid.status_code == 200
 
 
+def test_approval_decide_route_accepts_only_approve_or_reject(monkeypatch) -> None:
+    _set_api_environment(monkeypatch)
+
+    with TestClient(app, base_url="https://testserver") as client:
+        login = client.post("/console/login", json={"token": "operator-secret"})
+        csrf = login.cookies.get(auth.OPERATOR_CSRF_COOKIE)
+        assert csrf is not None
+        approve = client.post(
+            "/v1/approvals/approval-1:decide",
+            headers={auth.OPERATOR_CSRF_HEADER: csrf},
+            json={"decision": "approve"},
+        )
+        reject = client.post(
+            "/v1/approvals/approval-1:decide",
+            headers={auth.OPERATOR_CSRF_HEADER: csrf},
+            json={"decision": "reject"},
+        )
+        invalid = client.post(
+            "/v1/approvals/approval-1:decide",
+            headers={auth.OPERATOR_CSRF_HEADER: csrf},
+            json={"decision": "delete"},
+        )
+
+    assert approve.status_code == 200
+    assert approve.json() == {"approval_id": "approval-1", "decision": "approve"}
+    assert reject.status_code == 200
+    assert reject.json() == {"approval_id": "approval-1", "decision": "reject"}
+    assert invalid.status_code == 422
+
+
+def test_approval_decide_route_requires_valid_operator_session(monkeypatch) -> None:
+    _set_api_environment(monkeypatch)
+
+    with TestClient(app, base_url="https://testserver") as client:
+        client.cookies.set(auth.OPERATOR_CSRF_COOKIE, "csrf-token")
+        missing = client.post(
+            "/v1/approvals/approval-1:decide",
+            headers={auth.OPERATOR_CSRF_HEADER: "csrf-token"},
+            json={"decision": "approve"},
+        )
+        client.cookies.set(auth.OPERATOR_SESSION_COOKIE, "tampered.session")
+        tampered = client.post(
+            "/v1/approvals/approval-1:decide",
+            headers={auth.OPERATOR_CSRF_HEADER: "csrf-token"},
+            json={"decision": "approve"},
+        )
+
+    assert missing.status_code == 401
+    assert tampered.status_code == 401
+
+
 def _set_api_environment(monkeypatch) -> None:
     monkeypatch.setenv("SERVICE_ROLE", "api")
     monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "project-test")

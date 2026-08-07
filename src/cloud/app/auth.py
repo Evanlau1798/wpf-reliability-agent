@@ -68,6 +68,19 @@ def create_operator_session_value(secret: SecretStr) -> str:
     return f"{OPERATOR_SESSION_PAYLOAD}.{signature}"
 
 
+def authenticate_operator_session(request: Request) -> str:
+    secret = request.app.state.settings.demo_operator_token
+    cookie = request.cookies.get(OPERATOR_SESSION_COOKIE)
+    if secret is None or cookie is None or not hmac.compare_digest(
+        cookie, create_operator_session_value(secret)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid operator session",
+        )
+    return "demo-operator"
+
+
 def validate_operator_csrf(request: Request) -> None:
     cookie = request.cookies.get(OPERATOR_CSRF_COOKIE)
     header = request.headers.get(OPERATOR_CSRF_HEADER)

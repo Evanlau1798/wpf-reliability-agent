@@ -12,9 +12,12 @@ from app.auth import (
     OPERATOR_CSRF_COOKIE,
     OPERATOR_SESSION_COOKIE,
     authenticate_device_token,
+    authenticate_operator_session,
     authenticate_operator_token,
     create_operator_session_value,
+    validate_operator_csrf,
 )
+from app.approval import ApprovalDecisionRequest
 from app.commands import (
     CommandLeaseRequest,
     complete_command_once,
@@ -71,6 +74,16 @@ def operator_login(
         path="/",
     )
     return response
+
+
+@app.post("/v1/approvals/{approval_id}:decide")
+def decide_approval(
+    approval_id: str,
+    decision: ApprovalDecisionRequest,
+    _: Annotated[str, Depends(authenticate_operator_session)],
+    _csrf: Annotated[None, Depends(validate_operator_csrf)],
+) -> dict[str, str]:
+    return {"approval_id": approval_id, "decision": decision.decision}
 
 
 @app.post(

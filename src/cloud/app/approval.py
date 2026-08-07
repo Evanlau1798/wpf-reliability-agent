@@ -1,4 +1,12 @@
+from typing import Literal
+
+from pydantic import BaseModel
+
 from app.models import ProposedAction
+
+
+class ApprovalDecisionRequest(BaseModel):
+    decision: Literal["approve", "reject"]
 
 
 def next_proposal_version(current: int) -> int:
