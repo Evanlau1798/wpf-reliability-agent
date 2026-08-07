@@ -35,6 +35,18 @@ def healthz() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.post(
+    "/v1/devices/{device_id}/commands:lease",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def lease_command(
+    device_id: str,
+    authenticated_device_id: Annotated[str, Depends(authenticate_device_token)],
+) -> None:
+    if device_id != authenticated_device_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+
+
 @app.post("/v1/work:push", status_code=status.HTTP_204_NO_CONTENT)
 async def worker_push(request: Request) -> None:
     if request.app.state.settings.service_role != "worker":
