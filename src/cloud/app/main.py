@@ -14,6 +14,7 @@ from app.models import EventType
 from app.pubsub import publish_work
 from app.worker import build_run_key, decode_pubsub_envelope, pubsub_message_id
 from app.worker_auth import authenticate_pubsub_push
+from app.workflow_state import commit_new_incident_run
 
 
 MAX_TELEMETRY_BATCH_BYTES = 512 * 1024
@@ -57,6 +58,16 @@ async def worker_push(request: Request) -> None:
     )
     client = get_firestore_client(request.app.state.settings.google_cloud_project)
     if is_run_processed(client, run_key):
+        request.app.state.logger.info("worker_duplicate_run run_key=%s", run_key)
+        return
+    committed = commit_new_incident_run(
+        client,
+        run_key=run_key,
+        incident_id=work["incident_id"],
+        evidence_revision=work["evidence_revision"],
+        trigger=work["trigger"],
+    )
+    if not committed:
         request.app.state.logger.info("worker_duplicate_run run_key=%s", run_key)
 
 

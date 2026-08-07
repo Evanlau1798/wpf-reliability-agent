@@ -164,6 +164,39 @@ def test_duplicate_work_delivery_checks_processed_run_and_noops(monkeypatch) -> 
     assert checked == [(firestore_client, "incident-1:2:binding.aggregate")]
 
 
+def test_new_work_commits_durable_step_before_ack(monkeypatch) -> None:
+    _set_environment(monkeypatch, "worker")
+    _allow_identity(monkeypatch)
+    firestore_client = object()
+    committed: list[tuple[object, str, str, int, str]] = []
+    monkeypatch.setattr(main, "get_firestore_client", lambda _project_id: firestore_client)
+    monkeypatch.setattr(main, "is_run_processed", lambda *_args: False)
+
+    def commit(client, *, run_key, incident_id, evidence_revision, trigger):
+        committed.append((client, run_key, incident_id, evidence_revision, trigger))
+        return True
+
+    monkeypatch.setattr(main, "commit_new_incident_run", commit, raising=False)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/work:push",
+            headers={"Authorization": "Bearer signed-token"},
+            json=_push_envelope(),
+        )
+
+    assert response.status_code == 204
+    assert committed == [
+        (
+            firestore_client,
+            "incident-1:2:binding.aggregate",
+            "incident-1",
+            2,
+            "binding.aggregate",
+        )
+    ]
+
+
 def _set_environment(monkeypatch, role: str) -> None:
     monkeypatch.setenv("SERVICE_ROLE", role)
     monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "project-test")
