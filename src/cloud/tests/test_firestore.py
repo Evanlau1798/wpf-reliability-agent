@@ -83,6 +83,22 @@ def test_evidence_snapshot_hash_changes_with_material_evidence() -> None:
     assert after_hash == firestore_client.evidence_snapshot_hash(reversed(after))
 
 
+def test_occurrence_only_update_preserves_approval_evidence_binding() -> None:
+    material_evidence = [("evidence-1", "1" * 64)]
+    approval_binding = (7, firestore_client.evidence_snapshot_hash(material_evidence))
+
+    current_binding = (
+        firestore_client.next_evidence_revision(
+            7,
+            event_type="binding.aggregate",
+            observed_event_types=frozenset({"binding.aggregate"}),
+        ),
+        firestore_client.evidence_snapshot_hash(material_evidence),
+    )
+
+    assert current_binding == approval_binding
+
+
 def test_processed_run_lookup_reports_existing_run() -> None:
     client = Mock()
     document = Mock()
