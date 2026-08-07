@@ -3,6 +3,7 @@ from enum import StrEnum
 
 from google.cloud import firestore
 
+from app.contracts import sha256_canonical
 from app.firestore_client import AUDIT_COLLECTION, INCIDENTS_COLLECTION, PROCESSED_RUNS_COLLECTION
 
 
@@ -74,17 +75,38 @@ def advance_investigation_round(client: firestore.Client, *, incident_id: str) -
     return advance(client.transaction())
 
 
-def advance_read_only_tool_call(client: firestore.Client, *, incident_id: str) -> int:
+def canonical_tool_request_key(tool: str, arguments: dict[str, object]) -> str:
+    if not tool:
+        raise ValueError("Tool is required")
+    return sha256_canonical({"tool": tool, "arguments": arguments})
+
+
+def claim_read_only_tool_request(
+    client: firestore.Client,
+    *,
+    incident_id: str,
+    tool: str,
+    arguments: dict[str, object],
+) -> str:
+    request_key = canonical_tool_request_key(tool, arguments)
     incident_document = client.collection(INCIDENTS_COLLECTION).document(incident_id)
 
     @firestore.transactional
-    def advance(transaction: firestore.Transaction) -> int:
+    def claim(transaction: firestore.Transaction) -> str:
         snapshot = incident_document.get(transaction=transaction)
         if not snapshot.exists:
             raise ValueError("Incident does not exist")
-        current = (snapshot.to_dict() or {}).get("read_only_tool_call_count")
+        incident = snapshot.to_dict() or {}
+        current = incident.get("read_only_tool_call_count")
+        request_keys = incident.get("read_only_tool_request_keys")
         if type(current) is not int or current < 0:
             raise ValueError("Read-only tool call count is invalid")
+        if not isinstance(request_keys, list) or not all(
+            isinstance(key, str) and key for key in request_keys
+        ):
+            raise ValueError("Read-only tool request keys are invalid")
+        if request_key in request_keys:
+            raise ValueError("Duplicate tool request")
         if current >= MAX_READ_ONLY_TOOL_CALLS:
             raise ValueError("Read-only tool call limit reached")
         next_count = current + 1
@@ -92,12 +114,13 @@ def advance_read_only_tool_call(client: firestore.Client, *, incident_id: str) -
             incident_document,
             {
                 "read_only_tool_call_count": next_count,
+                "read_only_tool_request_keys": [*request_keys, request_key],
                 "updated_at": firestore.SERVER_TIMESTAMP,
             },
         )
-        return next_count
+        return request_key
 
-    return advance(client.transaction())
+    return claim(client.transaction())
 
 
 def transition_incident(
