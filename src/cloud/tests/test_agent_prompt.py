@@ -1,6 +1,11 @@
 from datetime import UTC, datetime
 
-from app.agent import INVESTIGATOR_INSTRUCTION, build_investigator_contents
+from app.agent import (
+    INVESTIGATOR_INSTRUCTION,
+    MAX_INVESTIGATION_ROUNDS,
+    MAX_READ_ONLY_TOOL_CALLS,
+    build_investigator_contents,
+)
 from app.correlation import AgentCorrelationContext, NormalizedEvidenceSummary
 
 
@@ -39,3 +44,10 @@ def test_investigator_evidence_is_wrapped_as_untrusted_data() -> None:
     assert contents.endswith("\nEND_UNTRUSTED_EVIDENCE_JSON")
     assert injected_text in contents
     assert injected_text not in INVESTIGATOR_INSTRUCTION
+
+
+def test_investigator_instruction_uses_shared_loop_budgets() -> None:
+    instruction = INVESTIGATOR_INSTRUCTION.lower()
+
+    assert f"max investigation rounds: {MAX_INVESTIGATION_ROUNDS}" in instruction
+    assert f"max read-only tool calls: {MAX_READ_ONLY_TOOL_CALLS}" in instruction
