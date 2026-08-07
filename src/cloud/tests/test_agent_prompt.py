@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+import json
 
 from google.adk.agents import Agent
 
@@ -10,7 +11,7 @@ from app.agent import (
     build_investigator_contents,
 )
 from app.correlation import AgentCorrelationContext, NormalizedEvidenceSummary
-from app.models import AgentDecision, DecisionType
+from app.models import AgentDecision, DecisionType, DiagnosticTool
 
 
 def test_investigator_instruction_enforces_core_safety_rules() -> None:
@@ -44,7 +45,7 @@ def test_investigator_evidence_is_wrapped_as_untrusted_data() -> None:
 
     contents = build_investigator_contents(context)
 
-    assert contents.startswith("BEGIN_UNTRUSTED_EVIDENCE_JSON\n")
+    assert "BEGIN_UNTRUSTED_EVIDENCE_JSON\n" in contents
     assert contents.endswith("\nEND_UNTRUSTED_EVIDENCE_JSON")
     assert injected_text in contents
     assert injected_text not in INVESTIGATOR_INSTRUCTION
@@ -95,3 +96,20 @@ def test_root_agent_uses_agent_decision_output_schema() -> None:
 
     assert root.output_schema is AgentDecision
     assert parsed.decision is DecisionType.NO_ACTION
+
+
+def test_investigator_exposes_only_server_tool_enum_descriptions() -> None:
+    context = AgentCorrelationContext(
+        evidence=[],
+        candidate_claims=[],
+        tool_calls_remaining=6,
+        max_context_bytes=65_536,
+        max_context_tokens=32_768,
+    )
+    contents = build_investigator_contents(context)
+    exposed = f"{INVESTIGATOR_INSTRUCTION}\n{contents}\n{json.dumps(AgentDecision.model_json_schema())}"
+
+    for tool in DiagnosticTool:
+        assert tool.value in contents
+    for blocked in ("shell.execute", "powershell.execute", "file.write", "process.kill"):
+        assert blocked not in exposed
