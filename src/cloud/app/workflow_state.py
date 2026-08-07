@@ -6,6 +6,9 @@ from google.cloud import firestore
 from app.firestore_client import AUDIT_COLLECTION, INCIDENTS_COLLECTION, PROCESSED_RUNS_COLLECTION
 
 
+MAX_INVESTIGATION_ROUNDS = 4
+
+
 class IncidentState(StrEnum):
     NEW = "NEW"
     TRIAGING = "TRIAGING"
@@ -42,6 +45,32 @@ ALLOWED_TRANSITIONS = frozenset(
         (IncidentState.FAILED_SAFE, IncidentState.REPORTING),
     }
 )
+
+
+def advance_investigation_round(client: firestore.Client, *, incident_id: str) -> int:
+    incident_document = client.collection(INCIDENTS_COLLECTION).document(incident_id)
+
+    @firestore.transactional
+    def advance(transaction: firestore.Transaction) -> int:
+        snapshot = incident_document.get(transaction=transaction)
+        if not snapshot.exists:
+            raise ValueError("Incident does not exist")
+        current = (snapshot.to_dict() or {}).get("investigation_round_count")
+        if type(current) is not int or current < 0:
+            raise ValueError("Investigation round count is invalid")
+        if current >= MAX_INVESTIGATION_ROUNDS:
+            raise ValueError("Investigation round limit reached")
+        next_round = current + 1
+        transaction.update(
+            incident_document,
+            {
+                "investigation_round_count": next_round,
+                "updated_at": firestore.SERVER_TIMESTAMP,
+            },
+        )
+        return next_round
+
+    return advance(client.transaction())
 
 
 def transition_incident(
