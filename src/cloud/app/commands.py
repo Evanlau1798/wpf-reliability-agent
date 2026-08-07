@@ -1,8 +1,10 @@
 from enum import StrEnum
 from datetime import datetime, timedelta
+from typing import Literal
 
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
+from pydantic import BaseModel, Field
 
 from app.firestore_client import COMMANDS_COLLECTION
 from app.models import DiagnosticCommand
@@ -14,6 +16,12 @@ class CommandStatus(StrEnum):
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
     EXPIRED = "EXPIRED"
+
+
+class CommandLeaseRequest(BaseModel):
+    app_session_id: str = Field(min_length=1, max_length=256)
+    wait_seconds: int = Field(ge=0, le=25)
+    max_commands: Literal[1]
 
 
 def write_command(client: firestore.Client, command: DiagnosticCommand) -> None:

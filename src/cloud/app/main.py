@@ -1,11 +1,13 @@
 import json
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 
 from app.auth import authenticate_device_token
+from app.commands import CommandLeaseRequest, lease_next_command
 from app.config import Settings
 from app.firestore_client import claim_event_once, get_firestore_client, is_run_processed
 from app.ingest import ingest_binding_event, ingest_performance_event, validate_telemetry_events
@@ -37,14 +39,27 @@ def healthz() -> dict[str, str]:
 
 @app.post(
     "/v1/devices/{device_id}/commands:lease",
-    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
 )
 def lease_command(
+    request: Request,
     device_id: str,
+    lease_request: CommandLeaseRequest,
     authenticated_device_id: Annotated[str, Depends(authenticate_device_token)],
-) -> None:
+) -> object:
     if device_id != authenticated_device_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    client = get_firestore_client(request.app.state.settings.google_cloud_project)
+    command = lease_next_command(
+        client,
+        app_session_id=lease_request.app_session_id,
+        lease_owner=authenticated_device_id,
+        now=datetime.now(UTC),
+        duration=timedelta(seconds=30),
+    )
+    if command is None:
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+    return command
 
 
 @app.post("/v1/work:push", status_code=status.HTTP_204_NO_CONTENT)

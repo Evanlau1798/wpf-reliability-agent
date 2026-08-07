@@ -1,5 +1,6 @@
 from fastapi.testclient import TestClient
 
+from app import main
 from app.main import app
 
 
@@ -14,6 +15,29 @@ def test_command_lease_requires_device_auth(monkeypatch) -> None:
 
     assert response.status_code == 401
     assert response.headers["www-authenticate"] == "Bearer"
+
+
+def test_command_lease_returns_204_when_no_pending_command(monkeypatch) -> None:
+    _set_environment(monkeypatch)
+    firestore_client = object()
+    leased: list[tuple[object, str, str]] = []
+    monkeypatch.setattr(main, "get_firestore_client", lambda _project_id: firestore_client)
+
+    def lease(client, *, app_session_id, lease_owner, now, duration):
+        leased.append((client, app_session_id, lease_owner))
+        return None
+
+    monkeypatch.setattr(main, "lease_next_command", lease, raising=False)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/devices/device-test/commands:lease",
+            headers={"Authorization": "Bearer secret-token"},
+            json={"app_session_id": "session-1", "wait_seconds": 20, "max_commands": 1},
+        )
+
+    assert response.status_code == 204
+    assert leased == [(firestore_client, "session-1", "device-test")]
 
 
 def _set_environment(monkeypatch) -> None:
