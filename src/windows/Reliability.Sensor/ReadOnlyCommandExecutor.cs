@@ -47,8 +47,11 @@ internal sealed class ReadOnlyCommandExecutor
                         element_name = candidate.ElementName,
                     }),
             }),
-            DiagnosticTool.ExceptionGetRecent
-                or DiagnosticTool.UiGetSubtree
+            DiagnosticTool.ExceptionGetRecent => JsonSerializer.SerializeToElement(new
+            {
+                summaries = _sensor.GetRecentExceptionSummaries(),
+            }),
+            DiagnosticTool.UiGetSubtree
                 or DiagnosticTool.UiGetElementDetails
                 or DiagnosticTool.PerformanceSample
                 or DiagnosticTool.StateCompareSnapshots => throw new NotSupportedException(

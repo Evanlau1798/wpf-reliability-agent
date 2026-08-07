@@ -149,10 +149,9 @@ internal sealed class ExceptionDiagnosticCollector(ReliabilitySensor sensor) : I
         {
             var diagnostic = ExceptionDiagnosticFactory.Create(exception, isTerminating, isUnhandled);
             var fingerprint = ExceptionDiagnosticFactory.Fingerprint(diagnostic);
-            sensor.TryEnqueue(
-                EventType.ExceptionSummary,
+            sensor.RecordExceptionSummary(
                 isTerminating ? Severity.CRITICAL : Severity.ERROR,
-                JsonSerializer.SerializeToElement(new { exception_fingerprint = fingerprint }),
+                fingerprint,
                 JsonSerializer.SerializeToElement(new
                 {
                     fingerprint,
@@ -161,12 +160,32 @@ internal sealed class ExceptionDiagnosticCollector(ReliabilitySensor sensor) : I
                     app_frames = diagnostic.AppFrames,
                     is_terminating = diagnostic.IsTerminating,
                     is_unhandled = diagnostic.IsUnhandled,
-                }),
-                out _);
+                }));
         }
         catch (Exception)
         {
             // Exception diagnostics must never alter the host application's exception policy.
+        }
+    }
+}
+
+public sealed partial class ReliabilitySensor
+{
+    private readonly FixedCircularBuffer<JsonElement> _recentExceptionSummaries = new(100);
+
+    internal IReadOnlyList<JsonElement> GetRecentExceptionSummaries() =>
+        _recentExceptionSummaries.Snapshot();
+
+    internal void RecordExceptionSummary(Severity severity, string fingerprint, JsonElement payload)
+    {
+        if (TryEnqueue(
+            EventType.ExceptionSummary,
+            severity,
+            JsonSerializer.SerializeToElement(new { exception_fingerprint = fingerprint }),
+            payload,
+            out _))
+        {
+            _recentExceptionSummaries.Add(payload.Clone());
         }
     }
 }

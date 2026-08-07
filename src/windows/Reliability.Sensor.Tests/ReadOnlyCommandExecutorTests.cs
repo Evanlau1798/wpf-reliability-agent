@@ -125,6 +125,33 @@ public sealed class ReadOnlyCommandExecutorTests
     }
 
     [Fact]
+    public async Task ExceptionGetRecentReturnsOnlyRedactedSummaries()
+    {
+        await using var sensor = ReliabilitySensor.Start(TestOptions());
+        var collector = new ExceptionDiagnosticCollector(sensor);
+        collector.OnUnhandledException(
+            null,
+            new UnhandledExceptionEventArgs(
+                new InvalidOperationException("Failed at C:\\Users\\Alice\\data.txt token=secret-value"),
+                isTerminating: false));
+        var command = (await ReadCommandAsync()) with
+        {
+            Tool = DiagnosticTool.ExceptionGetRecent,
+            Arguments = JsonSerializer.SerializeToElement(new { }),
+        };
+        var executor = new ReadOnlyCommandExecutor(sensor);
+
+        var result = await executor.ExecuteAsync(command, CancellationToken.None);
+
+        var summaries = result.GetProperty("summaries");
+        Assert.Equal(1, summaries.GetArrayLength());
+        var serialized = summaries[0].GetRawText();
+        Assert.Contains("[REDACTED]", serialized, StringComparison.Ordinal);
+        Assert.DoesNotContain("Alice", serialized, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("secret-value", serialized, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task MutationToolIsRejectedBySwitchDispatcher()
     {
         await using var sensor = ReliabilitySensor.Start(null);
