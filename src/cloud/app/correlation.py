@@ -27,6 +27,8 @@ class NormalizedEvidenceSummary(BaseModel):
     summary: Annotated[str, StringConstraints(min_length=1, max_length=4096)]
     element_id: Identifier | None = None
     binding_path: Identifier | None = None
+    element_name: Identifier | None = None
+    element_type: Identifier | None = None
 
 
 class CandidateClaim(BaseModel):
@@ -75,3 +77,15 @@ def match_normalized_binding_path(
     left_path = left.binding_path.strip()
     right_path = right.binding_path.strip()
     return bool(left_path) and left_path == right_path
+
+
+def match_element_name_and_type(
+    left: NormalizedEvidenceSummary,
+    right: NormalizedEvidenceSummary,
+) -> bool:
+    return bool(
+        left.element_name
+        and left.element_type
+        and left.element_name == right.element_name
+        and left.element_type == right.element_type
+    )

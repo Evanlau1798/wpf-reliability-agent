@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from app.correlation import (
     BindingCandidate,
     NormalizedEvidenceSummary,
+    match_element_name_and_type,
     match_exact_element_id,
     match_normalized_binding_path,
     match_unique_live_candidate,
@@ -53,3 +54,18 @@ def test_normalized_binding_path_trims_but_preserves_case() -> None:
 
     assert match_normalized_binding_path(left, same)
     assert not match_normalized_binding_path(left, different_case)
+
+
+def test_element_name_match_requires_same_element_type() -> None:
+    left = _evidence("binding-1", None).model_copy(
+        update={"element_name": "PersonName", "element_type": "TextBlock"}
+    )
+    same = _evidence("ui-1", None).model_copy(
+        update={"element_name": "PersonName", "element_type": "TextBlock"}
+    )
+    different_type = _evidence("ui-2", None).model_copy(
+        update={"element_name": "PersonName", "element_type": "TextBox"}
+    )
+
+    assert match_element_name_and_type(left, same)
+    assert not match_element_name_and_type(left, different_type)
