@@ -7,7 +7,11 @@ from typing import Annotated
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 
 from app.auth import authenticate_device_token
-from app.commands import CommandLeaseRequest, lease_next_command
+from app.commands import (
+    CommandLeaseRequest,
+    lease_next_command,
+    validate_command_completion_binding,
+)
 from app.config import Settings
 from app.firestore_client import claim_event_once, get_firestore_client, is_run_processed
 from app.ingest import ingest_binding_event, ingest_performance_event, validate_telemetry_events
@@ -67,11 +71,24 @@ def lease_command(
     response_model=None,
 )
 def complete_command(
+    request: Request,
     command_id: str,
     result: CommandResult,
-    _authenticated_device_id: Annotated[str, Depends(authenticate_device_token)],
+    authenticated_device_id: Annotated[str, Depends(authenticate_device_token)],
 ) -> object:
-    del command_id, result
+    client = get_firestore_client(request.app.state.settings.google_cloud_project)
+    try:
+        validate_command_completion_binding(
+            client,
+            command_id=command_id,
+            lease_owner=authenticated_device_id,
+            result=result,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Command completion rejected",
+        ) from exc
     raise HTTPException(
         status_code=status.HTTP_501_NOT_IMPLEMENTED,
         detail="Command completion is not available yet",

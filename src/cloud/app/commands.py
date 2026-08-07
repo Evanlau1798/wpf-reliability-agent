@@ -7,7 +7,7 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 from pydantic import BaseModel, Field
 
 from app.firestore_client import COMMANDS_COLLECTION
-from app.models import DiagnosticCommand
+from app.models import CommandResult, DiagnosticCommand
 
 
 class CommandStatus(StrEnum):
@@ -137,6 +137,39 @@ def lease_next_command(
         return command
 
     return lease(client.transaction())
+
+
+def validate_command_completion_binding(
+    client: firestore.Client,
+    *,
+    command_id: str,
+    lease_owner: str,
+    result: CommandResult,
+) -> DiagnosticCommand:
+    document = client.collection(COMMANDS_COLLECTION).document(command_id)
+
+    @firestore.transactional
+    def validate(transaction: firestore.Transaction) -> DiagnosticCommand:
+        snapshot = document.get(transaction=transaction)
+        if not snapshot.exists:
+            raise ValueError("Command does not exist")
+        data = snapshot.to_dict() or {}
+        if data.get("status") != CommandStatus.LEASED.value:
+            raise ValueError("Command is not leased")
+        if data.get("lease_owner") != lease_owner:
+            raise ValueError("Lease owner mismatch")
+        command = DiagnosticCommand.model_validate(data)
+        if result.app_session_id != command.target_app_session_id:
+            raise ValueError("App session mismatch")
+        if (
+            result.command_id != command_id
+            or result.command_id != command.command_id
+            or result.incident_id != command.incident_id
+        ):
+            raise ValueError("Command completion binding mismatch")
+        return command
+
+    return validate(client.transaction())
 
 
 def _command_document(command: DiagnosticCommand) -> dict[str, object]:

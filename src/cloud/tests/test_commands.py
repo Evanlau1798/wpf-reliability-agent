@@ -3,16 +3,19 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import Mock
 
+import pytest
+
 from app import commands
 from app.commands import (
     CommandStatus,
     expire_command_if_needed,
     lease_next_command,
     pending_command_query,
+    validate_command_completion_binding,
     write_command,
     write_command_once,
 )
-from app.models import DiagnosticCommand
+from app.models import CommandResult, DiagnosticCommand
 
 
 FIXTURES = Path(__file__).parents[3] / "contracts" / "fixtures"
@@ -207,3 +210,39 @@ def test_lease_conflict_returns_command_to_only_one_caller(monkeypatch) -> None:
     assert first is not None
     assert second is None
     transaction.update.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    ("lease_owner", "app_session_id", "error"),
+    [
+        ("device-b", "session-1", "Lease owner mismatch"),
+        ("device-a", "session-2", "App session mismatch"),
+    ],
+)
+def test_command_completion_rejects_wrong_lease_owner_or_session(
+    monkeypatch,
+    lease_owner: str,
+    app_session_id: str,
+    error: str,
+) -> None:
+    client = Mock()
+    transaction = Mock()
+    document = client.collection.return_value.document.return_value
+    client.transaction.return_value = transaction
+    payload = json.loads(
+        (FIXTURES / "diagnostic-command-valid-read.json").read_text(encoding="utf-8")
+    )
+    payload.update({"status": CommandStatus.LEASED.value, "lease_owner": "device-a"})
+    document.get.return_value = Mock(exists=True, to_dict=lambda: payload)
+    monkeypatch.setattr(commands.firestore, "transactional", lambda callback: callback)
+    result = CommandResult.model_validate_json(
+        (FIXTURES / "command-result-success.json").read_text(encoding="utf-8")
+    ).model_copy(update={"app_session_id": app_session_id})
+
+    with pytest.raises(ValueError, match=error):
+        validate_command_completion_binding(
+            client,
+            command_id="command-read-1",
+            lease_owner=lease_owner,
+            result=result,
+        )
