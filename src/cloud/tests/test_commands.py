@@ -7,6 +7,7 @@ from app import commands
 from app.commands import (
     CommandStatus,
     expire_command_if_needed,
+    pending_command_query,
     write_command,
     write_command_once,
 )
@@ -95,4 +96,27 @@ def test_expired_pending_command_transitions_to_expired(monkeypatch) -> None:
             "lease_until": None,
             "updated_at": commands.firestore.SERVER_TIMESTAMP,
         },
+    )
+
+
+def test_pending_command_query_binds_target_app_session() -> None:
+    client = Mock()
+    collection = client.collection.return_value
+    status_query = collection.where.return_value
+    session_query = status_query.where.return_value
+
+    query = pending_command_query(client, "session-1")
+
+    assert query is session_query
+    status_filter = collection.where.call_args.kwargs["filter"]
+    session_filter = status_query.where.call_args.kwargs["filter"]
+    assert (status_filter.field_path, status_filter.op_string, status_filter.value) == (
+        "status",
+        "==",
+        CommandStatus.PENDING.value,
+    )
+    assert (session_filter.field_path, session_filter.op_string, session_filter.value) == (
+        "target_app_session_id",
+        "==",
+        "session-1",
     )

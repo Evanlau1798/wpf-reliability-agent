@@ -78,6 +78,14 @@ def expire_command_if_needed(
     return expire(client.transaction())
 
 
+def pending_command_query(client: firestore.Client, app_session_id: str):
+    return client.collection(COMMANDS_COLLECTION).where(
+        filter=FieldFilter("status", "==", CommandStatus.PENDING.value)
+    ).where(
+        filter=FieldFilter("target_app_session_id", "==", app_session_id)
+    )
+
+
 def _command_document(command: DiagnosticCommand) -> dict[str, object]:
     document = command.model_dump(mode="json")
     document.update(
