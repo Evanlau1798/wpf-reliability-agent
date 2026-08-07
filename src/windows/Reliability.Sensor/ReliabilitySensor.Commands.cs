@@ -232,6 +232,15 @@ public sealed partial class ReliabilitySensor
 
                     if (isMutation)
                     {
+                        if (commandJournal is null
+                            || await commandJournal.BeginCommandAsync(
+                                command.CommandId,
+                                command.ArgumentsHash,
+                                DateTimeOffset.UtcNow,
+                                cancellationToken).ConfigureAwait(false) is not CommandClaimStatus.CLAIMED)
+                        {
+                            continue;
+                        }
                         await handleMutationCommand!(command, cancellationToken).ConfigureAwait(false);
                     }
                     else

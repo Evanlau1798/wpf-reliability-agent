@@ -2,6 +2,8 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
+using System.Text.Json;
+using Reliability.Contracts;
 
 namespace Reliability.Sensor.Tests;
 
@@ -222,39 +224,109 @@ public sealed class CommandPollingSecurityTests
     [Fact]
     public async Task MutationToolUsesSeparateDispatchPath()
     {
-        using var cancellation = new CancellationTokenSource();
-        var handler = new SingleCommandThenBlockHandler(
-            json => json
-                .Replace("2026-08-07T00:00:00Z", "2099-01-01T00:00:00Z")
-                .Replace("2026-08-07T00:01:00Z", "2099-01-01T00:01:00Z"),
-            "diagnostic-command-valid-mutation.json");
-        using var client = new TelemetryApiClient(
-            new Uri("https://reliability.example.test"),
-            "test-token",
-            handler,
-            TimeSpan.FromSeconds(25));
-        var readOnlyHandled = 0;
-        var mutationHandled = 0;
+        var databasePath = TestDatabasePath();
+        var outbox = await SqliteOutbox.OpenAsync(databasePath);
+        try
+        {
+            using var cancellation = new CancellationTokenSource();
+            var handler = MutationHandler();
+            using var client = CreateClient(handler);
+            var readOnlyHandled = 0;
+            var mutationHandled = 0;
 
-        await ReliabilitySensor.RunCommandPollerAsync(
+            await ReliabilitySensor.RunCommandPollerAsync(
+                client,
+                "device-test",
+                "session-1",
+                (_, _) =>
+                {
+                    readOnlyHandled++;
+                    return Task.CompletedTask;
+                },
+                cancellation.Token,
+                outbox,
+                handleMutationCommand: (_, _) =>
+                {
+                    mutationHandled++;
+                    cancellation.Cancel();
+                    return Task.CompletedTask;
+                });
+
+            Assert.Equal(0, readOnlyHandled);
+            Assert.Equal(1, mutationHandled);
+        }
+        finally
+        {
+            await outbox.DisposeAsync();
+            DeleteDatabase(databasePath);
+        }
+    }
+
+    [Fact]
+    public async Task ValidMutationWithoutJournalIsRejectedBeforeDispatch()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var handler = MutationHandler();
+        using var client = CreateClient(handler);
+        var mutationHandled = 0;
+        var poller = ReliabilitySensor.RunCommandPollerAsync(
             client,
             "device-test",
             "session-1",
-            (_, _) =>
-            {
-                readOnlyHandled++;
-                return Task.CompletedTask;
-            },
+            (_, _) => Task.CompletedTask,
             cancellation.Token,
             handleMutationCommand: (_, _) =>
             {
                 mutationHandled++;
-                cancellation.Cancel();
                 return Task.CompletedTask;
             });
 
-        Assert.Equal(0, readOnlyHandled);
-        Assert.Equal(1, mutationHandled);
+        await handler.SecondRequestStarted.Task.WaitAsync(TimeSpan.FromSeconds(1));
+        cancellation.Cancel();
+        await poller.WaitAsync(TimeSpan.FromSeconds(1));
+
+        Assert.Equal(0, mutationHandled);
+    }
+
+    [Fact]
+    public async Task ExistingMutationJournalClaimPreventsDispatch()
+    {
+        var databasePath = TestDatabasePath();
+        var outbox = await SqliteOutbox.OpenAsync(databasePath);
+        try
+        {
+            var command = await ReadMutationCommandAsync();
+            Assert.Equal(
+                CommandClaimStatus.CLAIMED,
+                await outbox.BeginCommandAsync(command.CommandId, command.ArgumentsHash, DateTimeOffset.UtcNow));
+            using var cancellation = new CancellationTokenSource();
+            var handler = MutationHandler();
+            using var client = CreateClient(handler);
+            var mutationHandled = 0;
+            var poller = ReliabilitySensor.RunCommandPollerAsync(
+                client,
+                "device-test",
+                "session-1",
+                (_, _) => Task.CompletedTask,
+                cancellation.Token,
+                outbox,
+                handleMutationCommand: (_, _) =>
+                {
+                    mutationHandled++;
+                    return Task.CompletedTask;
+                });
+
+            await handler.SecondRequestStarted.Task.WaitAsync(TimeSpan.FromSeconds(1));
+            cancellation.Cancel();
+            await poller.WaitAsync(TimeSpan.FromSeconds(1));
+
+            Assert.Equal(0, mutationHandled);
+        }
+        finally
+        {
+            await outbox.DisposeAsync();
+            DeleteDatabase(databasePath);
+        }
     }
 
     [Theory]
@@ -356,6 +428,42 @@ public sealed class CommandPollingSecurityTests
             SecondRequestStarted.TrySetResult();
             await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
             throw new InvalidOperationException("Lease request unexpectedly completed.");
+        }
+    }
+
+    private static SingleCommandThenBlockHandler MutationHandler() => new(
+        json => json
+            .Replace("2026-08-07T00:00:00Z", "2099-01-01T00:00:00Z")
+            .Replace("2026-08-07T00:01:00Z", "2099-01-01T00:01:00Z"),
+        "diagnostic-command-valid-mutation.json");
+
+    private static TelemetryApiClient CreateClient(HttpMessageHandler handler) => new(
+        new Uri("https://reliability.example.test"),
+        "test-token",
+        handler,
+        TimeSpan.FromSeconds(25));
+
+    private static async Task<DiagnosticCommand> ReadMutationCommandAsync()
+    {
+        var json = await File.ReadAllTextAsync(Path.Combine(
+            AppContext.BaseDirectory,
+            "fixtures",
+            "diagnostic-command-valid-mutation.json"));
+        return JsonSerializer.Deserialize(
+            json,
+            Reliability.Contracts.ContractJsonContext.Default.DiagnosticCommand)!;
+    }
+
+    private static string TestDatabasePath() => Path.Combine(
+        Path.GetTempPath(),
+        "wpf-reliability-agent-tests",
+        $"mutation-{Guid.NewGuid():N}.db");
+
+    private static void DeleteDatabase(string path)
+    {
+        foreach (var suffix in new[] { string.Empty, "-wal", "-shm" })
+        {
+            File.Delete(path + suffix);
         }
     }
 }
