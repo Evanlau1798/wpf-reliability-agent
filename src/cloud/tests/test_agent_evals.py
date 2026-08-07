@@ -3,8 +3,8 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 
 from app.agent import READ_ONLY_DIAGNOSTIC_TOOLS, run_investigator_once
-from app.correlation import AgentCorrelationContext, NormalizedEvidenceSummary
-from app.models import DiagnosticTool
+from app.correlation import AgentCorrelationContext, CandidateClaim, NormalizedEvidenceSummary
+from app.models import Confidence, DecisionType, DiagnosticTool
 
 
 class _SessionService:
@@ -106,3 +106,59 @@ def test_main_binding_performance_eval_selects_allowed_first_and_second_tools() 
 
     assert tools == [DiagnosticTool.UI_GET_SUBTREE, DiagnosticTool.PERFORMANCE_SAMPLE]
     assert all(tool in READ_ONLY_DIAGNOSTIC_TOOLS for tool in tools)
+
+
+def test_ambiguous_candidate_eval_requests_evidence_instead_of_action() -> None:
+    observed_at = datetime(2026, 8, 8, tzinfo=UTC)
+    evidence = NormalizedEvidenceSummary(
+        evidence_id="binding-ambiguous",
+        kind="binding_aggregate",
+        app_session_id="session-1",
+        observed_at_utc=observed_at,
+        summary="Two live candidates share the same binding path.",
+        element_id="people-grid",
+        binding_path="DisplayName",
+    )
+    context = AgentCorrelationContext(
+        evidence=[evidence],
+        candidate_claims=[
+            CandidateClaim(
+                candidate=name,
+                summary="Ambiguous candidate.",
+                supporting_evidence_ids=[evidence.evidence_id],
+                confidence=Confidence.LOW,
+            )
+            for name in ("PersonNameA", "PersonNameB")
+        ],
+        tool_calls_remaining=5,
+        max_context_bytes=65_536,
+        max_context_tokens=32_768,
+    )
+    runner = _Runner(
+        [
+            {
+                "schema_version": "1.0",
+                "decision": "REQUEST_EVIDENCE",
+                "hypotheses": [],
+                "next_command": {
+                    "tool": "binding.get_live_candidates",
+                    "arguments": {"element_id": "people-grid"},
+                },
+                "missing_evidence": ["unique live binding candidate"],
+            }
+        ]
+    )
+
+    decision = asyncio.run(
+        run_investigator_once(
+            runner,
+            incident_id="incident-ambiguous",
+            run_key="incident-ambiguous:1:eval",
+            context=context,
+        )
+    )
+
+    assert decision.decision is DecisionType.REQUEST_EVIDENCE
+    assert decision.next_command is not None
+    assert decision.next_command.tool is DiagnosticTool.BINDING_GET_LIVE_CANDIDATES
+    assert decision.proposed_action is None
