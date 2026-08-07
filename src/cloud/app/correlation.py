@@ -25,6 +25,7 @@ class NormalizedEvidenceSummary(BaseModel):
     app_session_id: Identifier
     observed_at_utc: UtcDateTime
     summary: Annotated[str, StringConstraints(min_length=1, max_length=4096)]
+    element_id: Identifier | None = None
 
 
 class CandidateClaim(BaseModel):
@@ -35,3 +36,12 @@ class CandidateClaim(BaseModel):
     supporting_evidence_ids: list[Identifier] = Field(min_length=1, max_length=20)
     counter_evidence_ids: list[Identifier] = Field(default_factory=list, max_length=20)
     confidence: Confidence
+
+
+def match_exact_element_id(
+    left: NormalizedEvidenceSummary,
+    right: NormalizedEvidenceSummary,
+) -> Confidence | None:
+    if left.element_id and left.element_id == right.element_id:
+        return Confidence.HIGH
+    return None
