@@ -60,6 +60,21 @@ def test_expired_approval_is_marked_expired_without_command(monkeypatch) -> None
     client.collection.assert_not_called()
 
 
+def test_policy_version_mismatch_rejects_approval(monkeypatch) -> None:
+    client, transaction, _ = _approval_client(_approval_document(policy_version="old-policy"))
+    monkeypatch.setattr(firestore_client.firestore, "transactional", lambda callback: callback)
+
+    with pytest.raises(ValueError, match="Approval policy version mismatch"):
+        firestore_client.validate_pending_approval_decision(
+            client,
+            approval_id="approval-1",
+            now=datetime(2026, 8, 8, 5, tzinfo=UTC),
+        )
+
+    transaction.update.assert_not_called()
+    transaction.create.assert_not_called()
+
+
 def _approval_client(document: dict[str, object]) -> tuple[Mock, Mock, Mock]:
     client = Mock()
     transaction = Mock()
@@ -71,7 +86,11 @@ def _approval_client(document: dict[str, object]) -> tuple[Mock, Mock, Mock]:
     return client, transaction, snapshot
 
 
-def _approval_document(*, status: str = "PENDING") -> dict[str, object]:
+def _approval_document(
+    *,
+    status: str = "PENDING",
+    policy_version: str = "1",
+) -> dict[str, object]:
     return {
         "schema_version": "1.0",
         "approval_id": "approval-1",
@@ -87,7 +106,7 @@ def _approval_document(*, status: str = "PENDING") -> dict[str, object]:
         },
         "canonical_arguments_hash": "2" * 64,
         "target_app_session_id": "session-1",
-        "policy_version": "1",
+        "policy_version": policy_version,
         "risk_level": "HIGH",
         "expected_effect": "Reduce UI load.",
         "rollback_plan": "Re-enable the feature.",

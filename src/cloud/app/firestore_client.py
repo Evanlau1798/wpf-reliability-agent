@@ -99,6 +99,8 @@ def validate_pending_approval_decision(
                 },
             )
             return None
+        if approval.policy_version != POLICY_VERSION:
+            raise ValueError("Approval policy version mismatch")
         return approval
 
     approval = validate(client.transaction())
