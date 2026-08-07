@@ -14,6 +14,7 @@ from app.agent import (
     build_root_agent,
     build_investigator_contents,
     create_evidence_command,
+    proposed_action_for_policy,
     run_investigator_once,
 )
 from app.correlation import AgentCorrelationContext, NormalizedEvidenceSummary
@@ -214,3 +215,37 @@ def test_request_evidence_creates_deterministic_idempotent_server_command(monkey
     assert written[0].idempotency_key == written[1].idempotency_key
     assert written[0].risk_level.value == "LOW"
     assert written[0].approval_id is None
+
+
+def test_propose_action_routes_to_policy_without_creating_command(monkeypatch) -> None:
+    monkeypatch.setattr(
+        agent,
+        "write_command_once",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("policy path must not create a mutation command")
+        ),
+    )
+    decision = AgentDecision.model_validate(
+        {
+            "schema_version": "1.0",
+            "decision": "PROPOSE_ACTION",
+            "hypotheses": [],
+            "proposed_action": {
+                "tool": "recovery.set_feature_flag",
+                "arguments": {
+                    "feature": "ExperimentalPeopleGrid",
+                    "enabled": False,
+                    "expected_current_value": True,
+                },
+                "evidence_ids": ["evidence-1"],
+                "expected_effect": "Reduce UI load.",
+                "rollback_plan": "Re-enable the feature.",
+            },
+            "missing_evidence": [],
+        }
+    )
+
+    proposal = proposed_action_for_policy(decision)
+
+    assert proposal.tool is DiagnosticTool.RECOVERY_SET_FEATURE_FLAG
+    assert proposal.evidence_ids == ["evidence-1"]

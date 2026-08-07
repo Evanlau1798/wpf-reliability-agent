@@ -14,6 +14,7 @@ from app.models import (
     DecisionType,
     DiagnosticCommand,
     DiagnosticTool,
+    ProposedAction,
     RiskLevel,
 )
 
@@ -145,3 +146,9 @@ def create_evidence_command(
         timeout_ms=10_000,
     )
     return write_command_once(client, command)
+
+
+def proposed_action_for_policy(decision: AgentDecision) -> ProposedAction:
+    if decision.decision is not DecisionType.PROPOSE_ACTION or decision.proposed_action is None:
+        raise ValueError("PROPOSE_ACTION decision required")
+    return decision.proposed_action
