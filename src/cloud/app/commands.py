@@ -179,13 +179,13 @@ def complete_command_once(
     command_id: str,
     lease_owner: str,
     result: CommandResult,
-) -> bool:
+) -> tuple[bool, int]:
     document = client.collection(COMMANDS_COLLECTION).document(command_id)
     incident_document = client.collection(INCIDENTS_COLLECTION).document(result.incident_id)
     evidence_document = incident_document.collection(EVIDENCE_COLLECTION).document(command_id)
 
     @firestore.transactional
-    def complete(transaction: firestore.Transaction) -> bool:
+    def complete(transaction: firestore.Transaction) -> tuple[bool, int]:
         snapshot = document.get(transaction=transaction)
         if not snapshot.exists:
             raise ValueError("Command does not exist")
@@ -202,7 +202,10 @@ def complete_command_once(
                 result=result,
             )
             if data["result_hash"] == result.result_hash:
-                return True
+                evidence_revision = data.get("completion_evidence_revision")
+                if type(evidence_revision) is not int or evidence_revision < 1:
+                    raise ValueError("Command completion revision is invalid")
+                return True, evidence_revision
             raise ValueError("Command result conflict")
 
         command = _validate_completion_data(
@@ -240,6 +243,7 @@ def complete_command_once(
                 "status": status_value,
                 "completion_result": result.model_dump(mode="json"),
                 "result_hash": result.result_hash,
+                "completion_evidence_revision": evidence_revision,
                 "lease_until": None,
                 "completed_at": firestore.SERVER_TIMESTAMP,
                 "updated_at": firestore.SERVER_TIMESTAMP,
@@ -265,7 +269,7 @@ def complete_command_once(
                 "created_at": firestore.SERVER_TIMESTAMP,
             },
         )
-        return False
+        return False, evidence_revision
 
     return complete(client.transaction())
 

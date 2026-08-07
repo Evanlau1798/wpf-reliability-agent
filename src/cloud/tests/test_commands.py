@@ -312,6 +312,7 @@ def test_same_command_result_resubmission_is_idempotent(monkeypatch) -> None:
         **command,
         "status": CommandStatus.COMPLETED.value,
         "result_hash": result.result_hash,
+        "completion_evidence_revision": 6,
     }
     document.get.side_effect = [
         Mock(exists=True, to_dict=lambda: command),
@@ -340,8 +341,8 @@ def test_same_command_result_resubmission_is_idempotent(monkeypatch) -> None:
         result=result,
     )
 
-    assert first is False
-    assert replay is True
+    assert first == (False, 6)
+    assert replay == (True, 6)
     assert transaction.update.call_count == 2
 
 
@@ -420,7 +421,7 @@ def test_first_completion_persists_material_tool_result_evidence(monkeypatch) ->
         result=result,
     )
 
-    assert replay is False
+    assert replay == (False, 6)
     assert transaction.update.call_count == 2
     assert transaction.update.call_args_list[1].args == (
         incident_document,

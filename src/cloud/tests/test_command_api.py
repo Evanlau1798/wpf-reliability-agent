@@ -67,9 +67,15 @@ def test_command_complete_reports_idempotent_replay(monkeypatch) -> None:
 
     def complete(client, *, command_id, lease_owner, result):
         completed.append((client, command_id, lease_owner))
-        return True
+        return True, 6
 
     monkeypatch.setattr(main, "complete_command_once", complete, raising=False)
+    published: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        main,
+        "_publish_after_commit",
+        lambda _request, payload: published.append(payload),
+    )
     result = (FIXTURES / "command-result-success.json").read_text(encoding="utf-8")
 
     with TestClient(app) as client:
@@ -85,6 +91,47 @@ def test_command_complete_reports_idempotent_replay(monkeypatch) -> None:
     assert response.status_code == 200
     assert response.json() == {"accepted": True, "idempotent": True}
     assert completed == [(firestore_client, "command-read-1", "device-test")]
+    assert published == [
+        {
+            "incident_id": "incident-1",
+            "evidence_revision": 6,
+            "trigger": "TOOL_RESULT_RECEIVED",
+            "event_id": "command-read-1",
+        }
+    ]
+
+
+def test_command_result_publish_occurs_after_completion_transaction(monkeypatch) -> None:
+    _set_environment(monkeypatch)
+    firestore_client = object()
+    monkeypatch.setattr(main, "get_firestore_client", lambda _project_id: firestore_client)
+    order: list[str] = []
+
+    def complete(_client, *, command_id, lease_owner, result):
+        order.append("commit")
+        return False, 7
+
+    def publish(_request, payload):
+        order.append("publish")
+        assert payload["evidence_revision"] == 7
+        assert payload["trigger"] == "TOOL_RESULT_RECEIVED"
+
+    monkeypatch.setattr(main, "complete_command_once", complete, raising=False)
+    monkeypatch.setattr(main, "_publish_after_commit", publish)
+    result = (FIXTURES / "command-result-success.json").read_text(encoding="utf-8")
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/commands/command-read-1:complete",
+            content=result,
+            headers={
+                "Authorization": "Bearer secret-token",
+                "Content-Type": "application/json",
+            },
+        )
+
+    assert response.status_code == 200
+    assert order == ["commit", "publish"]
 
 
 def _set_environment(monkeypatch) -> None:

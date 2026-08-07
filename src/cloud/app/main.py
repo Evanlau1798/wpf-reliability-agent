@@ -78,7 +78,7 @@ def complete_command(
 ) -> object:
     client = get_firestore_client(request.app.state.settings.google_cloud_project)
     try:
-        idempotent = complete_command_once(
+        idempotent, evidence_revision = complete_command_once(
             client,
             command_id=command_id,
             lease_owner=authenticated_device_id,
@@ -89,6 +89,15 @@ def complete_command(
             status_code=status.HTTP_409_CONFLICT,
             detail="Command completion rejected",
         ) from exc
+    _publish_after_commit(
+        request,
+        {
+            "incident_id": result.incident_id,
+            "evidence_revision": evidence_revision,
+            "trigger": "TOOL_RESULT_RECEIVED",
+            "event_id": command_id,
+        },
+    )
     return {"accepted": True, "idempotent": idempotent}
 
 
