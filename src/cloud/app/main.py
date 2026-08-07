@@ -11,6 +11,7 @@ from app.firestore_client import claim_event_once, get_firestore_client
 from app.ingest import ingest_binding_event, ingest_performance_event, validate_telemetry_events
 from app.logging_config import configure_logging
 from app.models import EventType
+from app.pubsub import publish_work
 
 
 MAX_TELEMETRY_BATCH_BYTES = 512 * 1024
@@ -100,6 +101,8 @@ def telemetry_batch(
                 except ValueError:
                     rejected.append({"event_id": event.event_id, "code": "INVALID_EVENT"})
                     continue
+                if _publish_payload is not None:
+                    _publish_after_commit(request, _publish_payload)
                 key = (event.application_id, event.app_session_id)
                 binding_candidates.setdefault(key, set()).add(incident_id)
             elif event.event_type is EventType.PERFORMANCE_SAMPLE:
@@ -123,6 +126,8 @@ def telemetry_batch(
                 except ValueError:
                     rejected.append({"event_id": event.event_id, "code": "INVALID_EVENT"})
                     continue
+                if _publish_payload is not None:
+                    _publish_after_commit(request, _publish_payload)
             else:
                 is_new = claim_event_once(client, event.event_id)
             target = accepted_event_ids if is_new else duplicate_event_ids
@@ -132,3 +137,16 @@ def telemetry_batch(
         "duplicate_event_ids": duplicate_event_ids,
         "rejected": rejected,
     }
+
+
+def _publish_after_commit(request: Request, payload: dict[str, object]) -> None:
+    settings = request.app.state.settings
+    try:
+        publish_work(settings.google_cloud_project, settings.pubsub_topic, payload)
+    except Exception:
+        request.app.state.logger.error(
+            "pubsub_publish_failed incident_id=%s evidence_revision=%s event_id=%s",
+            payload.get("incident_id"),
+            payload.get("evidence_revision"),
+            payload.get("event_id"),
+        )

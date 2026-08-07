@@ -380,6 +380,7 @@ async def _startup_role() -> str:
 
 
 def _set_required_environment(monkeypatch, role: str) -> None:
+    monkeypatch.setattr("app.main.publish_work", lambda *_args: None)
     monkeypatch.setenv("SERVICE_ROLE", role)
     monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "project-test")
     monkeypatch.setenv("DEMO_DEVICE_ID", "device-test")
