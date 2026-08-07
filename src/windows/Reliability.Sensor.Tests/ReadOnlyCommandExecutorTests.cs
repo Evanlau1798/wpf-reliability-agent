@@ -337,6 +337,32 @@ public sealed class ReadOnlyCommandExecutorTests
         }
     }
 
+    [Theory]
+    [MemberData(nameof(InvalidReadOnlyArguments))]
+    public async Task InvalidTargetOrBudgetFailsClosed(
+        DiagnosticTool tool,
+        JsonElement arguments)
+    {
+        await using var sensor = ReliabilitySensor.Start(TestOptions());
+        var command = (await ReadCommandAsync()) with
+        {
+            Tool = tool,
+            Arguments = arguments,
+        };
+        var executor = new ReadOnlyCommandExecutor(sensor);
+
+        try
+        {
+            var result = await executor.ExecuteAsync(command, CancellationToken.None);
+            Assert.True(result.TryGetProperty("succeeded", out var succeeded));
+            Assert.False(succeeded.GetBoolean());
+        }
+        catch (InvalidOperationException exception)
+        {
+            Assert.Equal("Command arguments are invalid.", exception.Message);
+        }
+    }
+
     [Fact]
     public async Task MutationToolIsRejectedBySwitchDispatcher()
     {
@@ -360,6 +386,42 @@ public sealed class ReadOnlyCommandExecutorTests
         return JsonSerializer.Deserialize(
             json,
             ContractJsonContext.Default.DiagnosticCommand)!;
+    }
+
+    public static IEnumerable<object[]> InvalidReadOnlyArguments()
+    {
+        yield return [
+            DiagnosticTool.HealthGetSnapshot,
+            JsonSerializer.SerializeToElement(new { unexpected = true }),
+        ];
+        yield return [
+            DiagnosticTool.BindingGetErrors,
+            JsonSerializer.SerializeToElement(new { unexpected = true }),
+        ];
+        yield return [
+            DiagnosticTool.BindingGetLiveCandidates,
+            JsonSerializer.SerializeToElement(new { unexpected = true }),
+        ];
+        yield return [
+            DiagnosticTool.ExceptionGetRecent,
+            JsonSerializer.SerializeToElement(new { unexpected = true }),
+        ];
+        yield return [
+            DiagnosticTool.UiGetSubtree,
+            JsonSerializer.SerializeToElement(new { element_id = "missing", max_nodes = 0 }),
+        ];
+        yield return [
+            DiagnosticTool.UiGetElementDetails,
+            JsonSerializer.SerializeToElement(new { element_id = "missing", fields = new[] { "Text" } }),
+        ];
+        yield return [
+            DiagnosticTool.PerformanceSample,
+            JsonSerializer.SerializeToElement(new { element_id = "missing" }),
+        ];
+        yield return [
+            DiagnosticTool.StateCompareSnapshots,
+            JsonSerializer.SerializeToElement(new { before = new { value = 1 } }),
+        ];
     }
 
     private static ReliabilitySensorOptions TestOptions() => new()

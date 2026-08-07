@@ -17,6 +17,7 @@ internal sealed class ReadOnlyCommandExecutor
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        ValidateArguments(command.Tool, command.Arguments);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeSpan.FromMilliseconds(command.TimeoutMs));
         try
@@ -97,6 +98,27 @@ internal sealed class ReadOnlyCommandExecutor
         arguments.TryGetProperty(name, out var value) && value.ValueKind is JsonValueKind.String
             ? value.GetString()
             : null;
+
+    private static void ValidateArguments(DiagnosticTool tool, JsonElement arguments)
+    {
+        IReadOnlyCollection<string> allowed = tool switch
+        {
+            DiagnosticTool.HealthGetSnapshot => [],
+            DiagnosticTool.BindingGetErrors => [],
+            DiagnosticTool.BindingGetLiveCandidates => ["element_id"],
+            DiagnosticTool.ExceptionGetRecent => [],
+            DiagnosticTool.UiGetSubtree => ["element_id", "max_depth", "max_nodes", "max_children_per_node"],
+            DiagnosticTool.UiGetElementDetails => ["element_id", "fields"],
+            DiagnosticTool.PerformanceSample => ["element_id"],
+            DiagnosticTool.StateCompareSnapshots => ["before", "after"],
+            _ => throw new InvalidOperationException(
+                "Command tool is not available to the read-only executor."),
+        };
+        if (arguments.EnumerateObject().Any(property => !allowed.Contains(property.Name, StringComparer.Ordinal)))
+        {
+            throw new InvalidOperationException("Command arguments are invalid.");
+        }
+    }
 
     private async Task<JsonElement> ExecuteUiGetSubtreeAsync(
         JsonElement arguments,
