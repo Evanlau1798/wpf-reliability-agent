@@ -221,6 +221,25 @@ public sealed partial class ReliabilitySensor
         return result;
     }
 
+    internal Task<UiTreeSnapshotResult> CaptureUiTreeByIdAsync(
+        string elementId,
+        UiTreeOptions options,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(elementId)
+            || !_elementIds.TryResolve<DependencyObject>(elementId, out var root))
+        {
+            return Task.FromResult(new UiTreeSnapshotResult(
+                false,
+                [],
+                false,
+                0,
+                new UiDiagnosticError("ELEMENT_NOT_FOUND", "The element does not exist in the current application session.")));
+        }
+
+        return CaptureUiTreeAsync(root, options, cancellationToken);
+    }
+
     internal async Task<IReadOnlyList<BindingLiveCandidate>> GetBindingLiveCandidatesAsync(
         string? rootElementId,
         CancellationToken cancellationToken = default)

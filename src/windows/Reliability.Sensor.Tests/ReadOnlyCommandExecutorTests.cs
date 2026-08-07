@@ -152,6 +152,63 @@ public sealed class ReadOnlyCommandExecutorTests
     }
 
     [Fact]
+    public async Task UiGetSubtreeHonorsRequestedBudgetsAndLocalCeilings()
+    {
+        await using var sensor = ReliabilitySensor.Start(TestOptions());
+        var ready = new TaskCompletionSource<StackPanel>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var thread = new Thread(() =>
+        {
+            var root = new StackPanel { Name = "Root" };
+            for (var index = 0; index < 60; index++)
+            {
+                root.Children.Add(new TextBlock { Name = $"Child{index}" });
+            }
+            ready.SetResult(root);
+            Dispatcher.Run();
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        var root = await ready.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        try
+        {
+            var rootId = sensor.GetElementId(root);
+            var baseCommand = (await ReadCommandAsync()) with { Tool = DiagnosticTool.UiGetSubtree };
+            var executor = new ReadOnlyCommandExecutor(sensor);
+
+            var requested = await executor.ExecuteAsync(baseCommand with
+            {
+                Arguments = JsonSerializer.SerializeToElement(new
+                {
+                    element_id = rootId,
+                    max_depth = 4,
+                    max_nodes = 2,
+                    max_children_per_node = 1000,
+                }),
+            }, CancellationToken.None);
+            var ceiling = await executor.ExecuteAsync(baseCommand with
+            {
+                Arguments = JsonSerializer.SerializeToElement(new
+                {
+                    element_id = rootId,
+                    max_depth = 100,
+                    max_nodes = 1000,
+                    max_children_per_node = 1000,
+                }),
+            }, CancellationToken.None);
+
+            Assert.Equal(2, requested.GetProperty("nodes").GetArrayLength());
+            Assert.Equal(51, ceiling.GetProperty("nodes").GetArrayLength());
+            Assert.True(ceiling.GetProperty("truncated").GetBoolean());
+        }
+        finally
+        {
+            root.Dispatcher.InvokeShutdown();
+            Assert.True(thread.Join(TimeSpan.FromSeconds(5)));
+        }
+    }
+
+    [Fact]
     public async Task MutationToolIsRejectedBySwitchDispatcher()
     {
         await using var sensor = ReliabilitySensor.Start(null);
