@@ -113,6 +113,13 @@ def test_decode_pubsub_envelope_returns_minimal_work_message() -> None:
     ) == work
 
 
+def test_run_key_is_stable_for_incident_revision_and_trigger() -> None:
+    first = worker.build_run_key("incident-1", 2, "binding.aggregate")
+    second = worker.build_run_key("incident-1", 2, "binding.aggregate")
+
+    assert first == second == "incident-1:2:binding.aggregate"
+
+
 def test_malformed_pubsub_message_is_audited_and_acked(monkeypatch) -> None:
     _set_environment(monkeypatch, "worker")
     _allow_identity(monkeypatch)

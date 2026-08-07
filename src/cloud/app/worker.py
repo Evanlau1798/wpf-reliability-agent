@@ -4,6 +4,10 @@ import json
 from app.pubsub import WORK_MESSAGE_FIELDS
 
 
+def build_run_key(incident_id: str, evidence_revision: int, trigger: str) -> str:
+    return f"{incident_id}:{evidence_revision}:{trigger}"
+
+
 def decode_pubsub_envelope(envelope: object) -> dict[str, object]:
     if not isinstance(envelope, dict):
         raise ValueError("Invalid Pub/Sub envelope")
