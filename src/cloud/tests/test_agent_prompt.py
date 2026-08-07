@@ -35,6 +35,8 @@ def test_investigator_instruction_enforces_core_safety_rules() -> None:
     assert "only existing evidence ids" in instruction
     assert "never invent" in instruction
     assert "post-action verification" in instruction
+    assert "never repeat the same tool with the same arguments" in instruction
+    assert "tool result is already available" in instruction
 
 
 def test_investigator_evidence_is_wrapped_as_untrusted_data() -> None:
