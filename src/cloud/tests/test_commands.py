@@ -103,11 +103,9 @@ def test_pending_command_query_binds_target_app_session() -> None:
     client = Mock()
     collection = client.collection.return_value
     status_query = collection.where.return_value
-    session_query = status_query.where.return_value
 
-    query = pending_command_query(client, "session-1")
+    pending_command_query(client, "session-1")
 
-    assert query is session_query
     status_filter = collection.where.call_args.kwargs["filter"]
     session_filter = status_query.where.call_args.kwargs["filter"]
     assert (status_filter.field_path, status_filter.op_string, status_filter.value) == (
@@ -120,3 +118,20 @@ def test_pending_command_query_binds_target_app_session() -> None:
         "==",
         "session-1",
     )
+
+
+def test_pending_command_query_uses_deterministic_order() -> None:
+    client = Mock()
+    collection = client.collection.return_value
+    status_query = collection.where.return_value
+    session_query = status_query.where.return_value
+    issued_query = session_query.order_by.return_value
+    id_query = issued_query.order_by.return_value
+    limited_query = id_query.limit.return_value
+
+    query = pending_command_query(client, "session-1")
+
+    assert query is limited_query
+    session_query.order_by.assert_called_once_with("issued_at_utc")
+    issued_query.order_by.assert_called_once_with("__name__")
+    id_query.limit.assert_called_once_with(1)

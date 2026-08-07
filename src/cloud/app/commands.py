@@ -83,7 +83,7 @@ def pending_command_query(client: firestore.Client, app_session_id: str):
         filter=FieldFilter("status", "==", CommandStatus.PENDING.value)
     ).where(
         filter=FieldFilter("target_app_session_id", "==", app_session_id)
-    )
+    ).order_by("issued_at_utc").order_by("__name__").limit(1)
 
 
 def _command_document(command: DiagnosticCommand) -> dict[str, object]:
