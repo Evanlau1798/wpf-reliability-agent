@@ -70,7 +70,42 @@ public sealed class CommandPollingSecurityTests
         Assert.Equal(0, handled);
     }
 
-    private sealed class SingleCommandThenBlockHandler(Func<string, string> mutate) : HttpMessageHandler
+    [Fact]
+    public async Task MutationToolIsRejectedByReadOnlyAllowlist()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var handler = new SingleCommandThenBlockHandler(
+            json => json
+                .Replace("2026-08-07T00:00:00Z", "2099-01-01T00:00:00Z")
+                .Replace("2026-08-07T00:01:00Z", "2099-01-01T00:01:00Z"),
+            "diagnostic-command-valid-mutation.json");
+        using var client = new TelemetryApiClient(
+            new Uri("https://reliability.example.test"),
+            "test-token",
+            handler,
+            TimeSpan.FromSeconds(25));
+        var handled = 0;
+        var poller = ReliabilitySensor.RunCommandPollerAsync(
+            client,
+            "device-test",
+            "session-1",
+            (_, _) =>
+            {
+                handled++;
+                return Task.CompletedTask;
+            },
+            cancellation.Token);
+
+        await handler.SecondRequestStarted.Task.WaitAsync(TimeSpan.FromSeconds(1));
+        cancellation.Cancel();
+        await poller.WaitAsync(TimeSpan.FromSeconds(1));
+
+        Assert.Equal(0, handled);
+    }
+
+    private sealed class SingleCommandThenBlockHandler(
+        Func<string, string> mutate,
+        string fixtureName = "diagnostic-command-valid-read.json") : HttpMessageHandler
     {
         private int _requests;
 
@@ -87,7 +122,7 @@ public sealed class CommandPollingSecurityTests
                     Path.Combine(
                         AppContext.BaseDirectory,
                         "fixtures",
-                        "diagnostic-command-valid-read.json"),
+                        fixtureName),
                     cancellationToken);
                 var content = new ByteArrayContent(Encoding.UTF8.GetBytes(mutate(fixture)));
                 content.Headers.ContentType = new MediaTypeHeaderValue("application/json");

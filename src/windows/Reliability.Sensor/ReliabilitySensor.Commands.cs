@@ -26,7 +26,8 @@ public sealed partial class ReliabilitySensor
                         command.TargetAppSessionId,
                         appSessionId,
                         StringComparison.Ordinal)
-                    && command.ExpiresAtUtc > DateTimeOffset.UtcNow)
+                    && command.ExpiresAtUtc > DateTimeOffset.UtcNow
+                    && IsReadOnlyTool(command.Tool))
                 {
                     await handleCommand(command, cancellationToken).ConfigureAwait(false);
                 }
@@ -41,4 +42,14 @@ public sealed partial class ReliabilitySensor
             }
         }
     }
+
+    private static bool IsReadOnlyTool(DiagnosticTool tool) => tool is
+        DiagnosticTool.HealthGetSnapshot
+        or DiagnosticTool.BindingGetErrors
+        or DiagnosticTool.BindingGetLiveCandidates
+        or DiagnosticTool.ExceptionGetRecent
+        or DiagnosticTool.UiGetSubtree
+        or DiagnosticTool.UiGetElementDetails
+        or DiagnosticTool.PerformanceSample
+        or DiagnosticTool.StateCompareSnapshots;
 }
