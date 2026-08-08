@@ -69,6 +69,22 @@ public sealed class SourceMapToolTests
         Assert.Equal("Demo.BrokenWpfApp.MainWindow", xClass);
     }
 
+    [Fact]
+    public void ReadsElementNameAndNamedAncestorChain()
+    {
+        var path = Path.Combine(RepositoryRoot(), "src", "windows", "Demo.BrokenWpfApp", "MainWindow.xaml");
+        var document = SourceMapGenerator.LoadXaml(path);
+        var peopleGrid = document.Descendants().Single(element => element.Name.LocalName == "ItemsControl");
+        var binding = document.Descendants().Single(element =>
+            element.Name.LocalName == "Binding" && (string?)element.Attribute("Path") == "DisplayNmae");
+        var textBlock = binding.Ancestors().First(element => element.Name.LocalName == "TextBlock");
+
+        Assert.Equal("ExperimentalPeopleGrid", SourceMapGenerator.GetXName(peopleGrid));
+        Assert.Equal(
+            new[] { "ExperimentalPeopleGrid" },
+            SourceMapGenerator.GetNamedAncestorChain(textBlock));
+    }
+
     private static string RepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

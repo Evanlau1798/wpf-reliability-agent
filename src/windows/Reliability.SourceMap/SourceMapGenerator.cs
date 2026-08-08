@@ -38,6 +38,16 @@ public static class SourceMapGenerator
     public static string? GetXClass(XDocument document) =>
         document.Root?.Attribute(XamlNamespace + "Class")?.Value;
 
+    public static string? GetXName(XElement element) =>
+        element.Attribute(XamlNamespace + "Name")?.Value;
+
+    public static IReadOnlyList<string> GetNamedAncestorChain(XElement element) =>
+        element.Ancestors()
+            .Reverse()
+            .Select(GetXName)
+            .OfType<string>()
+            .ToArray();
+
     private static bool IsBuildOutput(string root, string path)
     {
         var relative = Path.GetRelativePath(root, path);
