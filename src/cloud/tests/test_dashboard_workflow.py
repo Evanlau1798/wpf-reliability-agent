@@ -1,9 +1,18 @@
+import re
+from pathlib import Path
 from unittest.mock import Mock
 
 from fastapi.testclient import TestClient
 
 from app import firestore_client
 from app.main import app
+
+
+FORMAL_UI_SOURCES = (
+    Path(__file__).parents[1] / "app" / "dashboard.py",
+    Path(__file__).parents[1] / "app" / "reporting.py",
+)
+CJK_PATTERN = re.compile(r"[\u3400-\u9fff\u3040-\u30ff\uac00-\ud7af]")
 
 
 def test_console_incident_detail_renders_log_filter_workflow_identifiers(monkeypatch) -> None:
@@ -49,6 +58,11 @@ def test_console_incident_detail_renders_log_filter_workflow_identifiers(monkeyp
     assert "incident-11" in response.text
     assert "incident-11:7:recovery.result" in response.text
     assert "command-1" in response.text
+
+
+def test_formal_dashboard_ui_sources_do_not_require_cjk() -> None:
+    for path in FORMAL_UI_SOURCES:
+        assert CJK_PATTERN.search(path.read_text(encoding="utf-8")) is None
 
 
 def _set_api_environment(monkeypatch) -> None:
