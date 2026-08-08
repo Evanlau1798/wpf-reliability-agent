@@ -39,13 +39,20 @@ internal sealed class SourceMapCatalog
         try
         {
             var entries = JsonSerializer.Deserialize<SourceMapCatalogEntry[]>(File.ReadAllText(path), JsonOptions);
-            return new SourceMapCatalog(entries ?? []);
+            return new SourceMapCatalog((entries ?? [])
+                .Where(entry => IsRepoRelativePath(entry.File))
+                .ToArray());
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
         {
             return new SourceMapCatalog([]);
         }
     }
+
+    private static bool IsRepoRelativePath(string? path) =>
+        !string.IsNullOrWhiteSpace(path)
+        && !Path.IsPathRooted(path)
+        && !path.Split('/', '\\').Any(segment => segment is "..");
 }
 
 internal sealed record SourceMapCatalogEntry(

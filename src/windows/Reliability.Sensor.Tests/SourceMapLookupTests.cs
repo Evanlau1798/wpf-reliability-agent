@@ -105,6 +105,71 @@ public sealed class SourceMapLookupTests
         Assert.Equal("Command arguments are invalid.", exception.Message);
     }
 
+    [Fact]
+    public async Task SourceLookupBindingRejectsArbitraryPathArgument()
+    {
+        await using var sensor = ReliabilitySensor.Start(TestOptions(sourceMapPath: null));
+        var command = (await ReadCommandAsync()) with
+        {
+            Tool = DiagnosticTool.SourceLookupBinding,
+            Arguments = JsonSerializer.SerializeToElement(new
+            {
+                key = "Demo.MainWindow/PeopleGrid/PersonName#Text|DisplayNmae",
+                path = "C:/secrets/MainWindow.xaml",
+            }),
+        };
+        var executor = new ReadOnlyCommandExecutor(sensor);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            executor.ExecuteAsync(command, CancellationToken.None));
+
+        Assert.Equal("Command arguments are invalid.", exception.Message);
+    }
+
+    [Theory]
+    [InlineData("C:/secrets/MainWindow.xaml")]
+    [InlineData("../secrets/MainWindow.xaml")]
+    [InlineData("src/windows/../secrets/MainWindow.xaml")]
+    public async Task SourceLookupBindingRejectsMapEntriesOutsideRepoRelativePaths(string file)
+    {
+        var sourceMapPath = Path.Combine(
+            Path.GetTempPath(),
+            $"wpf-reliability-source-map-{Guid.NewGuid():N}.json");
+        await File.WriteAllTextAsync(sourceMapPath, JsonSerializer.Serialize(new[]
+        {
+            new
+            {
+                key = "Demo.MainWindow/PeopleGrid/PersonName#Text|DisplayNmae",
+                file,
+                line = 42,
+                column = 17,
+                window_type = "Demo.MainWindow",
+                named_ancestors = new[] { "PeopleGrid" },
+                element_type = "TextBlock",
+                element_name = "PersonName",
+                target_property = "Text",
+                binding_path = "DisplayNmae",
+                unsupported_reason = (string?)null,
+                file_sha256 = new string('a', 64),
+                build_commit = new string('b', 40),
+                source_snippet = "<TextBlock Text=\"{Binding DisplayNmae}\" />",
+                source_snippet_start_line = 42,
+                source_snippet_truncated = false,
+            },
+        }));
+
+        try
+        {
+            await using var sensor = ReliabilitySensor.Start(TestOptions(sourceMapPath));
+
+            Assert.Equal(0, sensor.SourceMapEntryCount);
+        }
+        finally
+        {
+            File.Delete(sourceMapPath);
+        }
+    }
+
     private static void AssertMatch(JsonElement result, string expectedKey)
     {
         var matches = result.GetProperty("matches");
