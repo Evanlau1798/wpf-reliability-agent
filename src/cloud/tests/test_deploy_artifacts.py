@@ -60,3 +60,10 @@ def test_deploy_script_preserves_existing_firestore_database() -> None:
     assert 'gcloud firestore databases describe --database="(default)"' in script
     assert 'gcloud firestore databases create --database="(default)"' in script
     assert "--type=firestore-native" in script
+
+
+def test_deploy_script_creates_pubsub_topic_only_when_missing() -> None:
+    script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
+
+    assert "gcloud pubsub topics describe $PubSubTopic" in script
+    assert "gcloud pubsub topics create $PubSubTopic" in script

@@ -80,8 +80,21 @@ function Ensure-FirestoreDatabase {
     }
 }
 
+function Ensure-PubSubTopic {
+    & gcloud pubsub topics describe $PubSubTopic --project $ProjectId --format="value(name)" 2>$null | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        return
+    }
+
+    & gcloud pubsub topics create $PubSubTopic --project $ProjectId
+    if ($LASTEXITCODE -ne 0) {
+        throw "Pub/Sub topic creation failed."
+    }
+}
+
 Assert-GcloudPrerequisites
 Enable-RequiredApis
 Assert-CloudBuildPermission
 Ensure-ArtifactRepository
 Ensure-FirestoreDatabase
+Ensure-PubSubTopic
