@@ -67,3 +67,14 @@ def test_deploy_script_creates_pubsub_topic_only_when_missing() -> None:
 
     assert "gcloud pubsub topics describe $PubSubTopic" in script
     assert "gcloud pubsub topics create $PubSubTopic" in script
+
+
+def test_deploy_script_creates_api_service_account_with_minimal_project_roles() -> None:
+    script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
+
+    assert "Ensure-ServiceAccount $ApiServiceAccount" in script
+    assert '"roles/datastore.user"' in script
+    assert '"roles/logging.logWriter"' in script
+    assert '"roles/pubsub.publisher"' in script
+    assert "roles/owner" not in script.lower()
+    assert "roles/editor" not in script.lower()

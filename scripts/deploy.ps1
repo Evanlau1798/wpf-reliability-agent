@@ -27,6 +27,11 @@ $RequiredApis = @(
     "run.googleapis.com",
     "secretmanager.googleapis.com"
 )
+$ApiProjectRoles = @(
+    "roles/datastore.user",
+    "roles/logging.logWriter",
+    "roles/pubsub.publisher"
+)
 
 function Assert-GcloudPrerequisites {
     Get-Command gcloud -ErrorAction Stop | Out-Null
@@ -92,9 +97,47 @@ function Ensure-PubSubTopic {
     }
 }
 
+function Get-ServiceAccountEmail {
+    param([string]$Name)
+    return "$Name@$ProjectId.iam.gserviceaccount.com"
+}
+
+function Ensure-ServiceAccount {
+    param(
+        [string]$Name,
+        [string]$DisplayName
+    )
+
+    $email = Get-ServiceAccountEmail $Name
+    & gcloud iam service-accounts describe $email --project $ProjectId --format="value(email)" 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        & gcloud iam service-accounts create $Name --display-name="$DisplayName" --project $ProjectId | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "Service account creation failed for '$Name'."
+        }
+    }
+    return $email
+}
+
+function Grant-ProjectRoles {
+    param(
+        [string]$ServiceAccountEmail,
+        [string[]]$Roles
+    )
+
+    foreach ($role in $Roles) {
+        & gcloud projects add-iam-policy-binding $ProjectId --member="serviceAccount:$ServiceAccountEmail" --role=$role --condition=None --quiet | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "IAM binding failed for '$ServiceAccountEmail' and '$role'."
+        }
+    }
+}
+
 Assert-GcloudPrerequisites
 Enable-RequiredApis
 Assert-CloudBuildPermission
 Ensure-ArtifactRepository
 Ensure-FirestoreDatabase
 Ensure-PubSubTopic
+$ApiServiceAccountEmail = Ensure-ServiceAccount $ApiServiceAccount "WPF Reliability API"
+Grant-ProjectRoles $ApiServiceAccountEmail $ApiProjectRoles
