@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 from html import escape
 
@@ -5,6 +6,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
 from app.firestore_client import (
+    APPROVALS_COLLECTION,
     AUDIT_COLLECTION,
     COMMANDS_COLLECTION,
     EVIDENCE_COLLECTION,
@@ -36,6 +38,7 @@ def render_incident_detail(client: firestore.Client, incident_id: str) -> str | 
     evidence_index = _render_evidence_index(incident_document)
     hypotheses = _render_hypotheses(incident)
     tool_ledger = _render_tool_ledger(client, incident_id)
+    approvals = _render_approvals(incident_document)
     return (
         '<!doctype html><html lang="en"><head><meta charset="utf-8">'
         f"<title>Incident {_display(incident_id)}</title></head><body><main>"
@@ -43,7 +46,7 @@ def render_incident_detail(client: firestore.Client, incident_id: str) -> str | 
         f"<dt>State</dt><dd>{_display(incident.get('state'))}</dd>"
         f"<dt>Summary</dt><dd>{_display(incident.get('summary'))}</dd>"
         f"<dt>Updated</dt><dd>{_display(incident.get('updated_at'))}</dd>"
-        f"</dl>{timeline}{evidence_index}{hypotheses}{tool_ledger}</main></body></html>"
+        f"</dl>{timeline}{evidence_index}{hypotheses}{tool_ledger}{approvals}</main></body></html>"
     )
 
 
@@ -133,6 +136,31 @@ def _timestamp(value: object) -> datetime | None:
         except ValueError:
             return None
     return None
+
+
+def _render_approvals(incident_document: object) -> str:
+    cards = "".join(
+        "<article>"
+        f"<h3>{_display(approval.get('approval_id'))}</h3><dl>"
+        f"<dt>Status</dt><dd>{_display(approval.get('status'))}</dd>"
+        f"<dt>Action</dt><dd>{_display(approval.get('action_id'))}</dd>"
+        f"<dt>Tool</dt><dd>{_display(approval.get('tool'))}</dd>"
+        f"<dt>Arguments</dt><dd>{_display(_json(approval.get('canonical_arguments')))}</dd>"
+        f"<dt>Arguments hash</dt><dd>{_display(approval.get('canonical_arguments_hash'))}</dd>"
+        f"<dt>Evidence hash</dt><dd>{_display(approval.get('evidence_snapshot_hash'))}</dd>"
+        f"<dt>Rollback</dt><dd>{_display(approval.get('rollback_plan'))}</dd>"
+        f"<dt>Expires</dt><dd>{_display(approval.get('expires_at_utc'))}</dd>"
+        "</dl></article>"
+        for approval in (
+            snapshot.to_dict() or {}
+            for snapshot in incident_document.collection(APPROVALS_COLLECTION).stream()
+        )
+    )
+    return f"<section><h2>Approval</h2>{cards}</section>"
+
+
+def _json(value: object) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
 def _render_incident(incident_id: str, incident: dict[str, object]) -> str:

@@ -116,6 +116,7 @@ def test_console_incident_detail_renders_safe_evidence_index_without_raw_secrets
     incident_document.collection.side_effect = lambda name: {
         firestore_client.AUDIT_COLLECTION: audit_collection,
         firestore_client.EVIDENCE_COLLECTION: evidence_collection,
+        firestore_client.APPROVALS_COLLECTION: audit_collection,
     }[name]
     client.collection.return_value.where.return_value.stream.return_value = []
     monkeypatch.setattr("app.main.get_firestore_client", lambda _project_id: client)
@@ -208,6 +209,52 @@ def test_console_incident_detail_renders_tool_ledger_with_hashed_args_and_durati
     assert "COMPLETED" in response.text
     assert "250 ms" in response.text
     assert "private-element" not in response.text
+
+
+def test_console_incident_detail_renders_exact_approval_card(monkeypatch) -> None:
+    _set_api_environment(monkeypatch)
+    incident = Mock(exists=True)
+    incident.to_dict.return_value = {"state": "AWAITING_APPROVAL", "summary": "Rollback proposed"}
+    approval = _snapshot(
+        {
+            "approval_id": "approval-1",
+            "status": "PENDING",
+            "action_id": "action-1",
+            "tool": "recovery.set_feature_flag",
+            "canonical_arguments": {"feature": "ExperimentalPeopleGrid", "enabled": False},
+            "canonical_arguments_hash": "c" * 64,
+            "evidence_snapshot_hash": "d" * 64,
+            "rollback_plan": "Re-enable the feature <script>alert(1)</script>",
+            "expires_at_utc": "2026-08-09T02:00:00Z",
+        }
+    )
+    client = Mock()
+    incident_document = client.collection.return_value.document.return_value
+    incident_document.get.return_value = incident
+    empty_collection = Mock()
+    empty_collection.stream.return_value = []
+    approval_collection = Mock()
+    approval_collection.stream.return_value = [approval]
+    incident_document.collection.side_effect = lambda name: (
+        approval_collection if name == firestore_client.APPROVALS_COLLECTION else empty_collection
+    )
+    client.collection.return_value.where.return_value.stream.return_value = []
+    monkeypatch.setattr("app.main.get_firestore_client", lambda _project_id: client)
+
+    with TestClient(app, base_url="https://testserver") as test_client:
+        assert test_client.post("/console/login", json={"token": "operator-secret"}).status_code == 204
+        response = test_client.get("/console/incidents/incident-7")
+
+    assert response.status_code == 200
+    assert "Approval" in response.text
+    assert "action-1" in response.text
+    assert "recovery.set_feature_flag" in response.text
+    assert '{&quot;enabled&quot;:false,&quot;feature&quot;:&quot;ExperimentalPeopleGrid&quot;}' in response.text
+    assert "c" * 64 in response.text
+    assert "d" * 64 in response.text
+    assert "Re-enable the feature" in response.text
+    assert "2026-08-09T02:00:00Z" in response.text
+    assert "<script>" not in response.text
 
 
 def _snapshot(data: dict[str, object]) -> Mock:
