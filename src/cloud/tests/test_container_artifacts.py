@@ -28,3 +28,11 @@ def test_ci_smokes_api_role_container() -> None:
 
     assert "--env SERVICE_ROLE=api" in workflow
     assert "http://127.0.0.1:18080/healthz" in workflow
+
+
+def test_ci_smokes_worker_role_and_worker_only_route() -> None:
+    workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+    assert "--env SERVICE_ROLE=worker" in workflow
+    assert "http://127.0.0.1:18081/v1/work:push" in workflow
+    assert 'test "$status" = "401"' in workflow
