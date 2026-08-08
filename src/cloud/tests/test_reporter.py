@@ -242,5 +242,22 @@ def test_html_renderer_escapes_untrusted_report_text() -> None:
 
     assert rendered.startswith("<!doctype html>\n")
     assert "<script>" not in rendered
-    assert "&lt;script&gt;" in rendered
+    assert "&amp;lt;script&amp;gt;" in rendered
     assert "incident-1" in rendered
+
+
+def test_report_renderers_sanitize_malicious_ui_text_fixture() -> None:
+    from app.models import IncidentReport
+    from app.reporting import render_report_html, render_report_markdown
+
+    report = IncidentReport.model_validate_json(
+        (FIXTURES / "incident-report-malicious-ui.json").read_text(encoding="utf-8")
+    )
+
+    markdown = render_report_markdown(report)
+    html = render_report_html(report)
+
+    assert "<script>" not in markdown
+    assert "[run](javascript:" not in markdown
+    assert "<script>" not in html
+    assert "<img " not in html

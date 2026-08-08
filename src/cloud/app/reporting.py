@@ -37,6 +37,7 @@ REPORT_HTML_TEMPLATE = """<!doctype html>
 <body><pre>{content}</pre></body>
 </html>
 """
+MARKDOWN_SPECIALS = "\\`*_{}[]()#+!|"
 
 
 class FinalizedReporterRecord(BaseModel):
@@ -199,8 +200,9 @@ def persist_report_json(client: Any, report: IncidentReport, *, version: str) ->
 
 
 def render_report_markdown(report: IncidentReport) -> str:
+    md = _markdown_text
     lines = [
-        f"# Incident {report.incident_id}",
+        f"# Incident {md(report.incident_id)}",
         "",
         "## Summary",
         f"- Status: {report.status.value}",
@@ -210,17 +212,19 @@ def render_report_markdown(report: IncidentReport) -> str:
         "## Timeline",
     ]
     lines.extend(
-        f"- {item.timestamp_utc.isoformat()} | {item.kind} | {item.actor} | {item.reference}"
+        f"- {item.timestamp_utc.isoformat()} | {md(item.kind)} | {md(item.actor)} | "
+        f"{md(item.reference)}"
         for item in report.timeline
     )
     lines.extend(["", "## Evidence"])
     lines.extend(
-        f"- {item.evidence_id} | {item.kind} | {item.summary}" for item in report.evidence
+        f"- {md(item.evidence_id)} | {md(item.kind)} | {md(item.summary)}"
+        for item in report.evidence
     )
     lines.extend(["", "## Claims"])
     lines.extend(
-        f"- {claim.fact_or_hypothesis.value} | {claim.confidence.value} | {claim.text} | "
-        f"evidence: {', '.join(claim.evidence_ids)}"
+        f"- {claim.fact_or_hypothesis.value} | {claim.confidence.value} | {md(claim.text)} | "
+        f"evidence: {', '.join(md(item) for item in claim.evidence_ids)}"
         for claim in report.claims
     )
     lines.extend(["", "## Temporary Mitigation"])
@@ -230,9 +234,9 @@ def render_report_markdown(report: IncidentReport) -> str:
         mitigation = report.temporary_mitigation
         lines.extend(
             [
-                f"- Action: {mitigation.action_id}",
+                f"- Action: {md(mitigation.action_id)}",
                 f"- Tool: {mitigation.tool.value}",
-                f"- Approval: {mitigation.approval_id}",
+                f"- Approval: {md(mitigation.approval_id)}",
             ]
         )
     lines.extend(["", "## Permanent Recommendation"])
@@ -242,14 +246,14 @@ def render_report_markdown(report: IncidentReport) -> str:
         recommendation = report.permanent_recommendation
         lines.extend(
             [
-                f"- Summary: {recommendation.summary}",
+                f"- Summary: {md(recommendation.summary)}",
                 f"- Source fix verified: {str(recommendation.source_fix_verified).lower()}",
             ]
         )
     lines.extend(["", "## Verification"])
     lines.extend(
-        f"- {metric.metric_name}: {metric.before} -> {metric.after} {metric.unit} | "
-        f"evidence: {', '.join(metric.evidence_ids)}"
+        f"- {md(metric.metric_name)}: {metric.before} -> {metric.after} {md(metric.unit)} | "
+        f"evidence: {', '.join(md(item) for item in metric.evidence_ids)}"
         for metric in report.verification
     )
     metadata = report.metadata
@@ -257,14 +261,21 @@ def render_report_markdown(report: IncidentReport) -> str:
         [
             "",
             "## Metadata",
-            f"- Model: {metadata.model_id}",
-            f"- Prompt version: {metadata.prompt_version}",
+            f"- Model: {md(metadata.model_id)}",
+            f"- Prompt version: {md(metadata.prompt_version)}",
             f"- Schema version: {metadata.schema_version}",
-            f"- Policy version: {metadata.policy_version}",
-            f"- Reuse revision: {metadata.reuse_revision}",
+            f"- Policy version: {md(metadata.policy_version)}",
+            f"- Reuse revision: {md(metadata.reuse_revision)}",
         ]
     )
     return "\n".join(lines) + "\n"
+
+
+def _markdown_text(value: object) -> str:
+    text = escape(str(value), quote=False)
+    for character in MARKDOWN_SPECIALS:
+        text = text.replace(character, f"\\{character}")
+    return text
 
 
 def render_report_html(report: IncidentReport) -> str:

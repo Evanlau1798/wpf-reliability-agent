@@ -16,6 +16,7 @@
     { "file": "approval-pending.json", "contract": "approval", "valid": true },
     { "file": "approval-stale-proposal.json", "contract": "approval", "valid": false },
     { "file": "incident-report-mitigated.json", "contract": "incident-report", "valid": true },
+    { "file": "incident-report-malicious-ui.json", "contract": "incident-report", "valid": true },
     { "file": "incident-report-resolved-without-source-fix.json", "contract": "incident-report", "valid": false }
   ]
 }
