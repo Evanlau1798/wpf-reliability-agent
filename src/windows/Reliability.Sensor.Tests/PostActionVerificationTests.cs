@@ -1,3 +1,6 @@
+using System.Windows.Controls;
+using System.Windows.Threading;
+
 namespace Reliability.Sensor.Tests;
 
 public sealed class PostActionVerificationTests
@@ -19,6 +22,46 @@ public sealed class PostActionVerificationTests
         Assert.Equal(1, snapshot.OccurrenceCount);
         Assert.Equal(10, snapshot.ErrorsPerSecond, precision: 6);
         Assert.True(snapshot.CompletedAtUtc > snapshot.StartedAtUtc);
+    }
+
+    [Fact]
+    public async Task PostPerformanceWindowCollectsBoundedVisualCount()
+    {
+        await using var sensor = ReliabilitySensor.Start(Options());
+        var ready = new TaskCompletionSource<(Dispatcher Dispatcher, StackPanel Root)>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var thread = new Thread(() =>
+        {
+            var root = new StackPanel();
+            for (var index = 0; index < 20; index++)
+            {
+                root.Children.Add(new TextBlock());
+            }
+            sensor.InstallPerformanceDiagnostics(
+                Dispatcher.CurrentDispatcher,
+                new PerformanceOptions { MaxVisualNodes = 10 });
+            ready.TrySetResult((Dispatcher.CurrentDispatcher, root));
+            Dispatcher.Run();
+        }) { IsBackground = true };
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        var (dispatcher, root) = await ready.Task.WaitAsync(TimeSpan.FromSeconds(1));
+
+        try
+        {
+            var snapshot = await sensor.CapturePostPerformanceWindowAsync(
+                CancellationToken.None,
+                TimeSpan.FromMilliseconds(10),
+                root);
+
+            Assert.Equal(10, snapshot.VisualCount);
+            Assert.True(snapshot.VisualCountTruncated);
+        }
+        finally
+        {
+            dispatcher.BeginInvokeShutdown(DispatcherPriority.Send);
+            Assert.True(thread.Join(TimeSpan.FromSeconds(1)));
+        }
     }
 
     private static ReliabilitySensorOptions Options() => new()
