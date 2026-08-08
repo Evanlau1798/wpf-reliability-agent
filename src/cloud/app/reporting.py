@@ -26,6 +26,7 @@ Do not call tools and do not request new evidence.
 Do not change the incident ledger, workflow state, approvals, commands, or evidence.
 Reference only identifiers and facts present in the supplied finalized records; never invent them.
 A temporary mitigation must remain MITIGATED unless a permanent source fix was verified.
+A patch proposal is a non-executed artifact; include it only from finalized source evidence and never turn it into a command.
 Return only the requested structured report.
 """
 REPORTER_REPAIR_INSTRUCTION = """Repair your previous response as valid IncidentReport JSON.

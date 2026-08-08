@@ -45,6 +45,7 @@ Max investigation rounds: {MAX_INVESTIGATION_ROUNDS}.
 Max read-only tool calls: {MAX_READ_ONLY_TOOL_CALLS}.
 Action risk is decided by deterministic policy; provide risk hints only.
 A temporary mitigation is not a permanent fix and must never be called RESOLVED.
+When exact source-map evidence supports a permanent fix, a patch proposal may be returned as an artifact; it is never a command and must never be executed.
 """
 SCHEMA_REPAIR_INSTRUCTION = """Repair your previous response as valid AgentDecision JSON.
 Do not change evidence references, tool choice, arguments, proposed action, or meaning.
@@ -92,6 +93,8 @@ def validate_decision_evidence_ids(
     }
     if decision.proposed_action is not None:
         referenced.update(decision.proposed_action.evidence_ids)
+    if decision.patch_proposal is not None:
+        referenced.update(decision.patch_proposal.evidence_ids)
     unknown = sorted(referenced - available)
     if unknown:
         raise ValueError(f"Unknown evidence ID: {unknown[0]}")

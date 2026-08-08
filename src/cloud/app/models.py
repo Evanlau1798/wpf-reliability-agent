@@ -223,11 +223,21 @@ class ProposedAction(BaseModel):
     rollback_plan: Annotated[str, StringConstraints(min_length=1, max_length=2048)]
 
 
+class PatchProposal(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    target_file: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1024)]
+    target_file_sha256: Hash
+    target_line: int = Field(ge=1)
+    unified_diff: Annotated[str, StringConstraints(min_length=1, max_length=32_768)]
+    evidence_ids: list[Identifier] = Field(min_length=1, max_length=20)
+
+
 class AgentDecision(ContractModel):
     decision: DecisionType
     hypotheses: list[Hypothesis] = Field(max_length=10)
     next_command: NextCommand | None = None
     proposed_action: ProposedAction | None = None
+    patch_proposal: PatchProposal | None = None
     stop_reason: Annotated[str, StringConstraints(max_length=1024)] | None = None
     missing_evidence: list[Annotated[str, StringConstraints(min_length=1, max_length=256)]] = Field(
         max_length=10
@@ -306,19 +316,11 @@ class TemporaryMitigation(BaseModel):
     approval_id: Identifier
 
 
-class PatchProposal(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-    target_file: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1024)]
-    target_file_sha256: Hash
-    target_line: int = Field(ge=1)
-    unified_diff: Annotated[str, StringConstraints(min_length=1, max_length=32_768)]
-    evidence_ids: list[Identifier] = Field(min_length=1, max_length=20)
-
-
 class PermanentRecommendation(BaseModel):
     model_config = ConfigDict(extra="ignore")
     summary: Annotated[str, StringConstraints(min_length=1, max_length=4096)]
     source_fix_verified: bool = False
+    patch_proposal: PatchProposal | None = None
 
 
 class VerificationMetric(BaseModel):
@@ -360,6 +362,8 @@ class IncidentReport(ContractModel):
         known = set(evidence_ids)
         referenced = {item for claim in self.claims for item in claim.evidence_ids}
         referenced.update(item for metric in self.verification for item in metric.evidence_ids)
+        if self.permanent_recommendation is not None and self.permanent_recommendation.patch_proposal is not None:
+            referenced.update(self.permanent_recommendation.patch_proposal.evidence_ids)
         if not referenced.issubset(known):
             raise ValueError("report references unknown evidence IDs")
         if self.timeline != sorted(self.timeline, key=lambda item: item.timestamp_utc):
