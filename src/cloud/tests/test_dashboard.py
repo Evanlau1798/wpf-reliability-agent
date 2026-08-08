@@ -48,6 +48,7 @@ def test_console_incident_detail_renders_incident_and_returns_404_when_missing(m
     incident_document = client.collection.return_value.document.return_value
     incident_document.get.return_value = snapshot
     incident_document.collection.return_value.stream.return_value = []
+    client.collection.return_value.where.return_value.stream.return_value = []
     monkeypatch.setattr("app.main.get_firestore_client", lambda _project_id: client)
 
     with TestClient(app, base_url="https://testserver") as test_client:
@@ -77,6 +78,7 @@ def test_console_incident_detail_sorts_timeline_by_sequence_and_time(monkeypatch
     incident_document = client.collection.return_value.document.return_value
     incident_document.get.return_value = incident
     incident_document.collection.return_value.stream.return_value = audit
+    client.collection.return_value.where.return_value.stream.return_value = []
     monkeypatch.setattr("app.main.get_firestore_client", lambda _project_id: client)
 
     with TestClient(app, base_url="https://testserver") as test_client:
@@ -115,6 +117,7 @@ def test_console_incident_detail_renders_safe_evidence_index_without_raw_secrets
         firestore_client.AUDIT_COLLECTION: audit_collection,
         firestore_client.EVIDENCE_COLLECTION: evidence_collection,
     }[name]
+    client.collection.return_value.where.return_value.stream.return_value = []
     monkeypatch.setattr("app.main.get_firestore_client", lambda _project_id: client)
 
     with TestClient(app, base_url="https://testserver") as test_client:
@@ -149,6 +152,7 @@ def test_console_incident_detail_renders_hypotheses_with_evidence_and_confidence
     incident_document = client.collection.return_value.document.return_value
     incident_document.get.return_value = incident
     incident_document.collection.return_value.stream.return_value = []
+    client.collection.return_value.where.return_value.stream.return_value = []
     monkeypatch.setattr("app.main.get_firestore_client", lambda _project_id: client)
 
     with TestClient(app, base_url="https://testserver") as test_client:
@@ -162,6 +166,48 @@ def test_console_incident_detail_renders_hypotheses_with_evidence_and_confidence
     assert "binding-1, ui-1" in response.text
     assert "performance-1" in response.text
     assert "<script>" not in response.text
+
+
+def test_console_incident_detail_renders_tool_ledger_with_hashed_args_and_duration(monkeypatch) -> None:
+    _set_api_environment(monkeypatch)
+    incident = Mock(exists=True)
+    incident.to_dict.return_value = {"state": "INVESTIGATING", "summary": "Binding failures"}
+    command = _snapshot(
+        {
+            "tool": "ui.get_subtree",
+            "arguments": {"element_id": "private-element"},
+            "arguments_hash": "b" * 64,
+            "status": "COMPLETED",
+            "completion_result": {
+                "started_at_utc": "2026-08-09T01:00:00Z",
+                "completed_at_utc": "2026-08-09T01:00:00.250000Z",
+            },
+        }
+    )
+    client = Mock()
+    incident_collection = Mock()
+    command_collection = Mock()
+    client.collection.side_effect = lambda name: {
+        firestore_client.INCIDENTS_COLLECTION: incident_collection,
+        firestore_client.COMMANDS_COLLECTION: command_collection,
+    }[name]
+    incident_document = incident_collection.document.return_value
+    incident_document.get.return_value = incident
+    incident_document.collection.return_value.stream.return_value = []
+    command_collection.where.return_value.stream.return_value = [command]
+    monkeypatch.setattr("app.main.get_firestore_client", lambda _project_id: client)
+
+    with TestClient(app, base_url="https://testserver") as test_client:
+        assert test_client.post("/console/login", json={"token": "operator-secret"}).status_code == 204
+        response = test_client.get("/console/incidents/incident-6")
+
+    assert response.status_code == 200
+    assert "Tool Ledger" in response.text
+    assert "ui.get_subtree" in response.text
+    assert "b" * 64 in response.text
+    assert "COMPLETED" in response.text
+    assert "250 ms" in response.text
+    assert "private-element" not in response.text
 
 
 def _snapshot(data: dict[str, object]) -> Mock:

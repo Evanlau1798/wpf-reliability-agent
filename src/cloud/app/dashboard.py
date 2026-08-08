@@ -2,8 +2,14 @@ from datetime import datetime
 from html import escape
 
 from google.cloud import firestore
+from google.cloud.firestore_v1.base_query import FieldFilter
 
-from app.firestore_client import AUDIT_COLLECTION, EVIDENCE_COLLECTION, INCIDENTS_COLLECTION
+from app.firestore_client import (
+    AUDIT_COLLECTION,
+    COMMANDS_COLLECTION,
+    EVIDENCE_COLLECTION,
+    INCIDENTS_COLLECTION,
+)
 
 
 def render_incident_list(client: firestore.Client) -> str:
@@ -29,6 +35,7 @@ def render_incident_detail(client: firestore.Client, incident_id: str) -> str | 
     timeline = _render_timeline(incident_document)
     evidence_index = _render_evidence_index(incident_document)
     hypotheses = _render_hypotheses(incident)
+    tool_ledger = _render_tool_ledger(client, incident_id)
     return (
         '<!doctype html><html lang="en"><head><meta charset="utf-8">'
         f"<title>Incident {_display(incident_id)}</title></head><body><main>"
@@ -36,7 +43,7 @@ def render_incident_detail(client: firestore.Client, incident_id: str) -> str | 
         f"<dt>State</dt><dd>{_display(incident.get('state'))}</dd>"
         f"<dt>Summary</dt><dd>{_display(incident.get('summary'))}</dd>"
         f"<dt>Updated</dt><dd>{_display(incident.get('updated_at'))}</dd>"
-        f"</dl>{timeline}{evidence_index}{hypotheses}</main></body></html>"
+        f"</dl>{timeline}{evidence_index}{hypotheses}{tool_ledger}</main></body></html>"
     )
 
 
@@ -88,6 +95,44 @@ def _render_hypotheses(incident: dict[str, object]) -> str:
 
 def _ids(value: object) -> str:
     return ", ".join(item for item in value if isinstance(item, str)) if isinstance(value, list) else ""
+
+
+def _render_tool_ledger(client: firestore.Client, incident_id: str) -> str:
+    query = client.collection(COMMANDS_COLLECTION).where(
+        filter=FieldFilter("incident_id", "==", incident_id)
+    )
+    items = "".join(
+        "<li>"
+        f"{_display(command.get('tool'))} — "
+        f"Args hash: {_display(command.get('arguments_hash'))} — "
+        f"Status: {_display(command.get('status'))} — "
+        f"Duration: {_display(_command_duration(command))}"
+        "</li>"
+        for command in (snapshot.to_dict() or {} for snapshot in query.stream())
+    )
+    return f"<section><h2>Tool Ledger</h2><ul>{items}</ul></section>"
+
+
+def _command_duration(command: dict[str, object]) -> str:
+    result = command.get("completion_result")
+    if not isinstance(result, dict):
+        return ""
+    started = _timestamp(result.get("started_at_utc"))
+    completed = _timestamp(result.get("completed_at_utc"))
+    if started is None or completed is None or completed < started:
+        return ""
+    return f"{(completed - started).total_seconds() * 1000:.0f} ms"
+
+
+def _timestamp(value: object) -> datetime | None:
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    return None
 
 
 def _render_incident(incident_id: str, incident: dict[str, object]) -> str:
