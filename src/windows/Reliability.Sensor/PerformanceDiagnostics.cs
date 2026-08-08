@@ -38,6 +38,11 @@ public sealed record PerformanceSampleResult(
     bool VisualCountTruncated,
     PerformanceDiagnosticError? Error);
 
+internal sealed record PerformanceFrameWindow(
+    FrameStatistics FrameStatistics,
+    double SampleDurationMilliseconds,
+    Confidence Confidence);
+
 internal sealed class FixedCircularBuffer<T>
 {
     private readonly object _gate = new();
@@ -117,6 +122,7 @@ internal sealed class PerformanceDiagnosticCollector : IDisposable
     private TimeSpan? _lastRenderingTime;
     private TimeSpan _lastHeartbeatDelay;
     private long _lastSampleTimestamp;
+    private long _frameSampleCount;
     private bool _installed;
 
     public PerformanceDiagnosticCollector(Dispatcher dispatcher, PerformanceOptions options)
@@ -204,6 +210,7 @@ internal sealed class PerformanceDiagnosticCollector : IDisposable
             }
 
             _frameIntervals.Add(interval.TotalMilliseconds);
+            _frameSampleCount++;
             _lastRenderingTime = renderingTime;
         }
     }
@@ -218,6 +225,37 @@ internal sealed class PerformanceDiagnosticCollector : IDisposable
 
     public FrameStatistics GetFrameStatistics() =>
         PerformanceStatisticsCalculator.Calculate(_frameIntervals.Snapshot());
+
+    public long FrameSampleCount
+    {
+        get
+        {
+            lock (_metricGate)
+            {
+                return _frameSampleCount;
+            }
+        }
+    }
+
+    public PerformanceFrameWindow CaptureFrameWindowSince(long baselineSampleCount)
+    {
+        lock (_metricGate)
+        {
+            if (baselineSampleCount < 0 || baselineSampleCount > _frameSampleCount)
+            {
+                throw new ArgumentOutOfRangeException(nameof(baselineSampleCount));
+            }
+
+            var available = _frameIntervals.Snapshot();
+            var newSampleCount = Math.Min(_frameSampleCount - baselineSampleCount, available.Count);
+            var samples = available.Skip(available.Count - (int)newSampleCount).ToArray();
+            var statistics = PerformanceStatisticsCalculator.Calculate(samples);
+            return new PerformanceFrameWindow(
+                statistics,
+                samples.Sum(),
+                ConfidenceForSampleCount(statistics.SampleCount));
+        }
+    }
 
     public bool TryBeginSample()
     {
@@ -236,6 +274,9 @@ internal sealed class PerformanceDiagnosticCollector : IDisposable
     }
 
     public void Dispose() => Uninstall();
+
+    private static Confidence ConfidenceForSampleCount(int sampleCount) =>
+        sampleCount >= 90 ? Confidence.HIGH : sampleCount >= 30 ? Confidence.MEDIUM : Confidence.LOW;
 
     private void OnRendering(object? sender, EventArgs args)
     {

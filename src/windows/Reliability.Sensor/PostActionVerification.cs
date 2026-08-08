@@ -6,6 +6,11 @@ internal sealed record PostBindingWindowSnapshot(
     long OccurrenceCount,
     double ErrorsPerSecond);
 
+internal sealed record PostPerformanceWindowSnapshot(
+    DateTimeOffset StartedAtUtc,
+    DateTimeOffset CompletedAtUtc,
+    PerformanceFrameWindow Window);
+
 public sealed partial class ReliabilitySensor
 {
     internal static readonly TimeSpan PostActionObservationWindow = TimeSpan.FromSeconds(10);
@@ -16,11 +21,7 @@ public sealed partial class ReliabilitySensor
     {
         var aggregator = _bindingAggregator
             ?? throw new InvalidOperationException("Binding diagnostics are not configured.");
-        var window = observationWindow ?? PostActionObservationWindow;
-        if (window <= TimeSpan.Zero || window > TimeSpan.FromMinutes(1))
-        {
-            throw new ArgumentOutOfRangeException(nameof(observationWindow));
-        }
+        var window = ResolveObservationWindow(observationWindow);
 
         var startedAt = DateTimeOffset.UtcNow;
         var beforeCount = aggregator.AcceptedCount;
@@ -32,5 +33,33 @@ public sealed partial class ReliabilitySensor
             completedAt,
             occurrenceCount,
             occurrenceCount / window.TotalSeconds);
+    }
+
+    internal async Task<PostPerformanceWindowSnapshot> CapturePostPerformanceWindowAsync(
+        CancellationToken cancellationToken,
+        TimeSpan? observationWindow = null)
+    {
+        PerformanceDiagnosticCollector collector;
+        lock (_collectorLifecycleLock)
+        {
+            collector = _performanceCollector
+                ?? throw new InvalidOperationException("Performance diagnostics are not installed.");
+        }
+        var window = ResolveObservationWindow(observationWindow);
+        var startedAt = DateTimeOffset.UtcNow;
+        var baseline = collector.FrameSampleCount;
+        await Task.Delay(window, cancellationToken).ConfigureAwait(false);
+        return new PostPerformanceWindowSnapshot(
+            startedAt,
+            DateTimeOffset.UtcNow,
+            collector.CaptureFrameWindowSince(baseline));
+    }
+
+    private static TimeSpan ResolveObservationWindow(TimeSpan? observationWindow)
+    {
+        var window = observationWindow ?? PostActionObservationWindow;
+        return window > TimeSpan.Zero && window <= TimeSpan.FromMinutes(1)
+            ? window
+            : throw new ArgumentOutOfRangeException(nameof(observationWindow));
     }
 }

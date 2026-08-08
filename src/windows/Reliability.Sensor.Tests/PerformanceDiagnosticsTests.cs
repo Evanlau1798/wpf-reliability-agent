@@ -60,6 +60,30 @@ public sealed class PerformanceDiagnosticsTests
     }
 
     [Fact]
+    public void PerformanceWindowUsesOnlyFramesRecordedAfterBaseline()
+    {
+        using var collector = new PerformanceDiagnosticCollector(
+            Dispatcher.CurrentDispatcher,
+            new PerformanceOptions());
+        collector.RecordFrame(TimeSpan.Zero);
+        collector.RecordFrame(TimeSpan.FromMilliseconds(10));
+        var baseline = collector.FrameSampleCount;
+        var renderingTime = TimeSpan.FromMilliseconds(10);
+        for (var index = 0; index < 35; index++)
+        {
+            renderingTime += TimeSpan.FromMilliseconds(20);
+            collector.RecordFrame(renderingTime);
+        }
+
+        var window = collector.CaptureFrameWindowSince(baseline);
+
+        Assert.Equal(35, window.FrameStatistics.SampleCount);
+        Assert.Equal(20, window.FrameStatistics.P95Milliseconds);
+        Assert.Equal(700, window.SampleDurationMilliseconds);
+        Assert.Equal(Confidence.MEDIUM, window.Confidence);
+    }
+
+    [Fact]
     public void InstallIsIdempotentAndHeartbeatDelayIsReported()
     {
         RunSta(() =>
