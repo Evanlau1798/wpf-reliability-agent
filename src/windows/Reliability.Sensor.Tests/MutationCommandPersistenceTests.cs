@@ -58,6 +58,7 @@ public sealed class MutationCommandPersistenceTests
 
             var results = await handler.CompletedTwice.Task.WaitAsync(TimeSpan.FromSeconds(2));
 
+            Assert.Equal(2, handler.CommandDeliveryCount);
             Assert.Equal(1, invocationCount);
             Assert.Equal(2, results.Count);
             Assert.Equal(results[0].ResultHash, results[1].ResultHash);
@@ -163,6 +164,9 @@ public sealed class MutationCommandPersistenceTests
         private readonly object _sync = new();
         private readonly List<CommandResult> _results = [];
         private int _leaseCount;
+        private int _commandDeliveryCount;
+
+        public int CommandDeliveryCount => Volatile.Read(ref _commandDeliveryCount);
 
         public TaskCompletionSource<IReadOnlyList<CommandResult>> CompletedTwice { get; } = new(
             TaskCreationOptions.RunContinuationsAsynchronously);
@@ -178,6 +182,7 @@ public sealed class MutationCommandPersistenceTests
                 await _commandsAllowed.Task.WaitAsync(cancellationToken);
                 if (Interlocked.Increment(ref _leaseCount) <= 2)
                 {
+                    Interlocked.Increment(ref _commandDeliveryCount);
                     var body = await request.Content!.ReadAsStringAsync(cancellationToken);
                     using var lease = JsonDocument.Parse(body);
                     var sessionId = lease.RootElement.GetProperty("app_session_id").GetString()!;
