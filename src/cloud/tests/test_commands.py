@@ -439,3 +439,58 @@ def test_first_completion_persists_material_tool_result_evidence(monkeypatch) ->
     assert stored[1]["tool"] == "ui.get_subtree"
     assert stored[1]["evidence_hash"] == result.result_hash
     assert stored[1]["result"] == result.model_dump(mode="json")
+
+
+def test_successful_mutation_completion_marks_verification_pending(monkeypatch) -> None:
+    client = Mock()
+    transaction = Mock()
+    command_collection = Mock()
+    incident_collection = Mock()
+    command_document = Mock()
+    incident_document = Mock()
+    evidence_document = Mock()
+    audit_document = Mock()
+    client.transaction.return_value = transaction
+    client.collection.side_effect = lambda name: (
+        command_collection if name == "commands" else incident_collection
+    )
+    command_collection.document.return_value = command_document
+    incident_collection.document.return_value = incident_document
+    incident_document.collection.return_value.document.side_effect = (
+        lambda name: audit_document if name == "12" else evidence_document
+    )
+    command = json.loads(
+        (FIXTURES / "diagnostic-command-valid-mutation.json").read_text(encoding="utf-8")
+    )
+    command.update({"status": CommandStatus.LEASED.value, "lease_owner": "device-a"})
+    command_document.get.return_value = Mock(exists=True, to_dict=lambda: command)
+    incident = {
+        "app_session_id": "session-1",
+        "evidence_revision": 5,
+        "pending_command_id": command["command_id"],
+        "state": "EXECUTING",
+        "state_version": 8,
+        "audit_sequence": 11,
+    }
+    incident_document.get.return_value = Mock(exists=True, to_dict=lambda: incident)
+    monkeypatch.setattr(commands.firestore, "transactional", lambda callback: callback)
+    result = CommandResult.model_validate_json(
+        (FIXTURES / "command-result-success.json").read_text(encoding="utf-8")
+    ).model_copy(
+        update={
+            "command_id": command["command_id"],
+            "result": {"status": "APPLIED", "before_state": True, "after_state": False},
+        }
+    )
+    result = result.model_copy(update={"result_hash": command_result_hash(result)})
+
+    complete_command_once(
+        client,
+        command_id=command["command_id"],
+        lease_owner="device-a",
+        result=result,
+    )
+
+    incident_updates = [call.args[1] for call in transaction.update.call_args_list]
+    assert any(update.get("state") == "VERIFYING" for update in incident_updates)
+    assert not any(update.get("state") == "MITIGATED" for update in incident_updates)

@@ -13,7 +13,8 @@ from app.firestore_client import (
     INCIDENTS_COLLECTION,
     next_evidence_revision,
 )
-from app.models import CommandResult, DiagnosticCommand, ResultStatus
+from app.models import CommandResult, DiagnosticCommand, DiagnosticTool, ResultStatus
+from app.workflow_state import IncidentState, transition_incident_in_transaction
 
 
 class CommandStatus(StrEnum):
@@ -223,6 +224,20 @@ def complete_command_once(
         pending_command_id = incident.get("pending_command_id")
         if pending_command_id not in {None, command_id}:
             raise ValueError("Incident pending command mismatch")
+        if (
+            command.tool is DiagnosticTool.RECOVERY_SET_FEATURE_FLAG
+            and result.status is ResultStatus.SUCCEEDED
+        ):
+            state_version = incident.get("state_version")
+            if incident.get("state") != IncidentState.EXECUTING.value or type(state_version) is not int:
+                raise ValueError("Mutation completion incident state is invalid")
+            transition_incident_in_transaction(
+                transaction,
+                incident_document=incident_document,
+                expected_state=IncidentState.EXECUTING,
+                expected_version=state_version,
+                target_state=IncidentState.VERIFYING,
+            )
         evidence_revision = next_evidence_revision(
             incident.get("evidence_revision"),
             event_type="tool.result",
