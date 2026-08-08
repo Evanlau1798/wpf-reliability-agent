@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Windows.Threading;
 using Reliability.Contracts;
 
@@ -12,7 +13,8 @@ public enum RecoveryStatus
 {
     APPLIED,
     ALREADY_APPLIED,
-    REJECTED
+    REJECTED,
+    FAILED
 }
 
 public sealed record RecoveryResult(
@@ -73,7 +75,7 @@ public sealed class RecoveryActionRegistrations
 
 public sealed partial class ReliabilitySensor
 {
-    internal Task<RecoveryResult> ExecuteMutationCommandAsync(
+    internal async Task<RecoveryResult> ExecuteMutationCommandAsync(
         DiagnosticCommand command,
         CancellationToken cancellationToken)
     {
@@ -87,17 +89,34 @@ public sealed partial class ReliabilitySensor
             || !command.Arguments.TryGetProperty("expected_current_value", out var expectedCurrentValue)
             || expectedCurrentValue.ValueKind is not System.Text.Json.JsonValueKind.True)
         {
-            return Task.FromResult(new RecoveryResult(
+            return new RecoveryResult(
                 RecoveryStatus.REJECTED,
                 false,
                 false,
                 0,
-                "UNSUPPORTED_ACTION"));
+                "UNSUPPORTED_ACTION");
         }
 
-        return RecoveryActions.ExecuteAsync(
-            RecoveryAction.DisableExperimentalPeopleGrid,
-            expectedCurrentState: true,
-            cancellationToken);
+        var started = Stopwatch.GetTimestamp();
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromMilliseconds(command.TimeoutMs));
+        try
+        {
+            return await RecoveryActions.ExecuteAsync(
+                    RecoveryAction.DisableExperimentalPeopleGrid,
+                    expectedCurrentState: true,
+                    timeout.Token)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (
+            !cancellationToken.IsCancellationRequested && timeout.IsCancellationRequested)
+        {
+            return new RecoveryResult(
+                RecoveryStatus.FAILED,
+                false,
+                false,
+                (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds,
+                "TIMEOUT");
+        }
     }
 }
