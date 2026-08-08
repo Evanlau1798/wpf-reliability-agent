@@ -267,3 +267,14 @@ if ($LASTEXITCODE -ne 0) {
 }
 $ApiUrl = (& gcloud run services describe $ApiService --region=$Region --project=$ProjectId --format="value(status.url)").Trim()
 $ApiRevision = (& gcloud run services describe $ApiService --region=$Region --project=$ProjectId --format="value(status.latestReadyRevisionName)").Trim()
+& gcloud run deploy $WorkerService --image=$ImageDigestRef --service-account=$WorkerServiceAccountEmail --region=$Region --project=$ProjectId --min-instances=0 --max-instances=2 --memory=1Gi --timeout=120 --port=8080 --set-env-vars="SERVICE_ROLE=worker,GOOGLE_CLOUD_PROJECT=$ProjectId,DEMO_DEVICE_ID=worker-unused,DEMO_DEVICE_TOKEN=worker-unused,PUBSUB_TOPIC=$PubSubTopic,PUBSUB_PUSH_AUDIENCE=https://placeholder.invalid,PUBSUB_INVOKER_EMAIL=$PubSubInvokerServiceAccountEmail,GOOGLE_CLOUD_LOCATION=$Region" --no-allow-unauthenticated --quiet | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    throw "Worker Cloud Run deployment failed."
+}
+$WorkerUrl = (& gcloud run services describe $WorkerService --region=$Region --project=$ProjectId --format="value(status.url)").Trim()
+& gcloud run services update $WorkerService --region=$Region --project=$ProjectId --update-env-vars="PUBSUB_PUSH_AUDIENCE=$WorkerUrl" --quiet | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    throw "Worker audience update failed."
+}
+Grant-WorkerInvoker $PubSubInvokerServiceAccountEmail
+$WorkerRevision = (& gcloud run services describe $WorkerService --region=$Region --project=$ProjectId --format="value(status.latestReadyRevisionName)").Trim()

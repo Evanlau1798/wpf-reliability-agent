@@ -148,3 +148,19 @@ def test_api_deploy_uses_digest_identity_cost_limits_and_secret_refs() -> None:
     assert "--allow-unauthenticated" in script
     assert "DEMO_DEVICE_TOKEN=${DeviceTokenSecret}:latest" in script
     assert "DEMO_OPERATOR_TOKEN=${OperatorTokenSecret}:latest" in script
+
+
+def test_worker_deploy_uses_same_digest_private_identity_and_limits() -> None:
+    script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
+
+    assert "gcloud run deploy $WorkerService" in script
+    assert script.count("--image=$ImageDigestRef") == 2
+    assert "--service-account=$WorkerServiceAccountEmail" in script
+    assert "--memory=1Gi" in script
+    assert "--timeout=120" in script
+    assert "--no-allow-unauthenticated" in script
+    assert "SERVICE_ROLE=worker" in script
+    assert "PUBSUB_INVOKER_EMAIL=$PubSubInvokerServiceAccountEmail" in script
+    assert "gcloud run services update $WorkerService" in script
+    assert "PUBSUB_PUSH_AUDIENCE=$WorkerUrl" in script
+    assert "Grant-WorkerInvoker $PubSubInvokerServiceAccountEmail" in script
