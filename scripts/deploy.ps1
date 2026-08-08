@@ -267,6 +267,25 @@ function Grant-BuildResourceAccess {
     }
 }
 
+function Invoke-DeploymentSmokeTests {
+    $health = Invoke-RestMethod -Method Get -Uri "$ApiUrl/healthz"
+    if ($health.status -ne "ok") {
+        throw "API health smoke test failed."
+    }
+
+    $DeviceToken = (& gcloud secrets versions access latest --secret=$DeviceTokenSecret --project=$ProjectId).Trim()
+    if ($LASTEXITCODE -ne 0 -or -not $DeviceToken) {
+        throw "Unable to read the device token for authenticated smoke testing."
+    }
+    try {
+        $headers = @{ Authorization = "Bearer $DeviceToken" }
+        Invoke-RestMethod -Method Post -Uri "$ApiUrl/v1/telemetry:batch" -Headers $headers -ContentType "application/json" -Body '{"events":[]}' | Out-Null
+    }
+    finally {
+        $DeviceToken = $null
+    }
+}
+
 Assert-GcloudPrerequisites
 Enable-RequiredApis
 Assert-CloudBuildPermission
@@ -328,6 +347,7 @@ $WorkerRevision = (& gcloud run services describe $WorkerService --region=$Regio
 Grant-PubSubTokenCreator
 Ensure-PushSubscription
 Grant-DeadLetterAccess
+Invoke-DeploymentSmokeTests
 Write-Host "API URL: $ApiUrl"
 Write-Host "Cloud Build ID: $BuildId"
 Write-Host "Image digest: $ImageDigestRef"

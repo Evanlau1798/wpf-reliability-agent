@@ -207,3 +207,14 @@ def test_deploy_script_outputs_non_secret_deployment_and_windows_config_names() 
     assert 'Write-Host "  WPF_RELIABILITY_API_BASE_URI=$ApiUrl"' in script
     assert 'Write-Host "  WPF_RELIABILITY_DEVICE_ID=$DemoDeviceId"' in script
     assert 'Write-Host "  WPF_RELIABILITY_DEVICE_TOKEN=<Secret Manager device token>"' in script
+
+
+def test_deploy_script_runs_health_and_authenticated_telemetry_smoke() -> None:
+    script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
+
+    assert 'Invoke-RestMethod -Method Get -Uri "$ApiUrl/healthz"' in script
+    assert "gcloud secrets versions access latest --secret=$DeviceTokenSecret" in script
+    assert 'Authorization = "Bearer $DeviceToken"' in script
+    assert 'Invoke-RestMethod -Method Post -Uri "$ApiUrl/v1/telemetry:batch"' in script
+    assert "'{\"events\":[]}'" in script
+    assert "$DeviceToken = $null" in script
