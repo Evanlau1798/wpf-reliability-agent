@@ -54,3 +54,11 @@ def test_cloud_job_scans_tracked_files_for_secrets() -> None:
     workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
 
     assert "python scripts/scan_secrets.py" in workflow
+
+
+def test_python_jobs_use_setup_python_dependency_cache() -> None:
+    workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+    assert workflow.count('cache: "pip"') == 2
+    assert workflow.count("cache-dependency-path: src/cloud/pyproject.toml") == 2
+    assert "actions/cache" not in workflow
