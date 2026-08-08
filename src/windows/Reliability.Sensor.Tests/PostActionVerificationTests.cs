@@ -14,7 +14,6 @@ public sealed class PostActionVerificationTests
         var capture = sensor.CapturePostBindingWindowAsync(
             CancellationToken.None,
             TimeSpan.FromMilliseconds(100));
-        await Task.Delay(20);
         Assert.True(sensor.ReportBindingFailure("DuringWindow", "Text", "TextBlock"));
 
         var snapshot = await capture;
