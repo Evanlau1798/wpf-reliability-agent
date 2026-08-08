@@ -191,6 +191,75 @@ def persist_report_json(client: Any, report: IncidentReport, *, version: str) ->
     ).document(version).set(report.model_dump(mode="json"))
 
 
+def render_report_markdown(report: IncidentReport) -> str:
+    lines = [
+        f"# Incident {report.incident_id}",
+        "",
+        "## Summary",
+        f"- Status: {report.status.value}",
+        f"- Severity: {report.severity.value}",
+        f"- Confidence: {report.confidence.value}",
+        "",
+        "## Timeline",
+    ]
+    lines.extend(
+        f"- {item.timestamp_utc.isoformat()} | {item.kind} | {item.actor} | {item.reference}"
+        for item in report.timeline
+    )
+    lines.extend(["", "## Evidence"])
+    lines.extend(
+        f"- {item.evidence_id} | {item.kind} | {item.summary}" for item in report.evidence
+    )
+    lines.extend(["", "## Claims"])
+    lines.extend(
+        f"- {claim.fact_or_hypothesis.value} | {claim.confidence.value} | {claim.text} | "
+        f"evidence: {', '.join(claim.evidence_ids)}"
+        for claim in report.claims
+    )
+    lines.extend(["", "## Temporary Mitigation"])
+    if report.temporary_mitigation is None:
+        lines.append("- None")
+    else:
+        mitigation = report.temporary_mitigation
+        lines.extend(
+            [
+                f"- Action: {mitigation.action_id}",
+                f"- Tool: {mitigation.tool.value}",
+                f"- Approval: {mitigation.approval_id}",
+            ]
+        )
+    lines.extend(["", "## Permanent Recommendation"])
+    if report.permanent_recommendation is None:
+        lines.append("- None")
+    else:
+        recommendation = report.permanent_recommendation
+        lines.extend(
+            [
+                f"- Summary: {recommendation.summary}",
+                f"- Source fix verified: {str(recommendation.source_fix_verified).lower()}",
+            ]
+        )
+    lines.extend(["", "## Verification"])
+    lines.extend(
+        f"- {metric.metric_name}: {metric.before} -> {metric.after} {metric.unit} | "
+        f"evidence: {', '.join(metric.evidence_ids)}"
+        for metric in report.verification
+    )
+    metadata = report.metadata
+    lines.extend(
+        [
+            "",
+            "## Metadata",
+            f"- Model: {metadata.model_id}",
+            f"- Prompt version: {metadata.prompt_version}",
+            f"- Schema version: {metadata.schema_version}",
+            f"- Policy version: {metadata.policy_version}",
+            f"- Reuse revision: {metadata.reuse_revision}",
+        ]
+    )
+    return "\n".join(lines) + "\n"
+
+
 def build_reporter_agent(model_id: str) -> Agent:
     return Agent(
         name="reliability_reporter",

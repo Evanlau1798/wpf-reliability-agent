@@ -204,3 +204,27 @@ def test_report_json_persistence_keeps_required_metadata() -> None:
     saved = report_document.set.call_args.args[0]
     assert saved["schema_version"] == "1.0"
     assert saved["metadata"] == report.metadata.model_dump(mode="json")
+
+
+def test_markdown_renderer_is_deterministic_and_model_free(monkeypatch) -> None:
+    from app import reporting
+    from app.models import IncidentReport
+
+    report = IncidentReport.model_validate_json(
+        (FIXTURES / "incident-report-mitigated.json").read_text(encoding="utf-8")
+    )
+    monkeypatch.setattr(
+        reporting,
+        "build_reporter_agent",
+        lambda *_args, **_kwargs: pytest.fail("Markdown rendering must not call the model"),
+    )
+
+    first = reporting.render_report_markdown(report)
+    second = reporting.render_report_markdown(report)
+
+    assert first == second
+    assert first.startswith("# Incident incident-1\n")
+    assert "## Timeline" in first
+    assert "## Evidence" in first
+    assert "## Verification" in first
+    assert "MITIGATED" in first
