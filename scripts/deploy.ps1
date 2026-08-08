@@ -328,3 +328,12 @@ $WorkerRevision = (& gcloud run services describe $WorkerService --region=$Regio
 Grant-PubSubTokenCreator
 Ensure-PushSubscription
 Grant-DeadLetterAccess
+Write-Host "API URL: $ApiUrl"
+Write-Host "Cloud Build ID: $BuildId"
+Write-Host "Image digest: $ImageDigestRef"
+Write-Host "API revision: $ApiRevision"
+Write-Host "Worker revision: $WorkerRevision"
+Write-Host "Windows configuration:"
+Write-Host "  WPF_RELIABILITY_API_BASE_URI=$ApiUrl"
+Write-Host "  WPF_RELIABILITY_DEVICE_ID=$DemoDeviceId"
+Write-Host "  WPF_RELIABILITY_DEVICE_TOKEN=<Secret Manager device token>"

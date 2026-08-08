@@ -194,3 +194,16 @@ def test_push_subscription_has_bounded_dead_letter_delivery() -> None:
     assert "--role=roles/pubsub.publisher" in script
     assert "gcloud pubsub subscriptions add-iam-policy-binding $PubSubSubscription" in script
     assert "--role=roles/pubsub.subscriber" in script
+
+
+def test_deploy_script_outputs_non_secret_deployment_and_windows_config_names() -> None:
+    script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
+
+    assert 'Write-Host "API URL: $ApiUrl"' in script
+    assert 'Write-Host "Cloud Build ID: $BuildId"' in script
+    assert 'Write-Host "Image digest: $ImageDigestRef"' in script
+    assert 'Write-Host "API revision: $ApiRevision"' in script
+    assert 'Write-Host "Worker revision: $WorkerRevision"' in script
+    assert 'Write-Host "  WPF_RELIABILITY_API_BASE_URI=$ApiUrl"' in script
+    assert 'Write-Host "  WPF_RELIABILITY_DEVICE_ID=$DemoDeviceId"' in script
+    assert 'Write-Host "  WPF_RELIABILITY_DEVICE_TOKEN=<Secret Manager device token>"' in script
