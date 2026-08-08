@@ -16,6 +16,18 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+$RequiredApis = @(
+    "aiplatform.googleapis.com",
+    "artifactregistry.googleapis.com",
+    "cloudbuild.googleapis.com",
+    "firestore.googleapis.com",
+    "iam.googleapis.com",
+    "logging.googleapis.com",
+    "pubsub.googleapis.com",
+    "run.googleapis.com",
+    "secretmanager.googleapis.com"
+)
+
 function Assert-GcloudPrerequisites {
     Get-Command gcloud -ErrorAction Stop | Out-Null
 
@@ -37,5 +49,13 @@ function Assert-CloudBuildPermission {
     }
 }
 
+function Enable-RequiredApis {
+    & gcloud services enable $RequiredApis --project $ProjectId
+    if ($LASTEXITCODE -ne 0) {
+        throw "Required API enablement failed for '$ProjectId'."
+    }
+}
+
 Assert-GcloudPrerequisites
+Enable-RequiredApis
 Assert-CloudBuildPermission

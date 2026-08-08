@@ -26,3 +26,21 @@ def test_deploy_script_checks_gcloud_auth_project_and_build_permission_only() ->
     assert "gcloud builds list --project $ProjectId --limit=1" in script
     assert "Docker Desktop" not in script
     assert "WSL" not in script
+
+
+def test_deploy_script_enables_required_apis_idempotently() -> None:
+    script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
+
+    for api in (
+        "artifactregistry.googleapis.com",
+        "cloudbuild.googleapis.com",
+        "firestore.googleapis.com",
+        "iam.googleapis.com",
+        "logging.googleapis.com",
+        "pubsub.googleapis.com",
+        "run.googleapis.com",
+        "secretmanager.googleapis.com",
+        "aiplatform.googleapis.com",
+    ):
+        assert api in script
+    assert "gcloud services enable $RequiredApis --project $ProjectId" in script
