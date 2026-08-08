@@ -29,6 +29,12 @@ public partial class MainWindow : Window
         RefreshView();
         if (_sensor is not null)
         {
+            _sensor.RecoveryActions.Register(
+                RecoveryAction.DisableExperimentalPeopleGrid,
+                Dispatcher,
+                expectedCurrentState => ApplyRecoveryAction(
+                    RecoveryAction.DisableExperimentalPeopleGrid,
+                    expectedCurrentState));
             Dispatcher.BeginInvoke(ProbeBrokenBindings, DispatcherPriority.Loaded);
         }
     }

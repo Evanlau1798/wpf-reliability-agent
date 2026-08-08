@@ -3,7 +3,9 @@ using System.Net;
 using System.Runtime.ExceptionServices;
 using System.Text;
 using System.Text.Json;
+using System.Windows;
 using System.Windows.Threading;
+using Reliability.Contracts;
 using Reliability.Sensor;
 
 namespace Demo.BrokenWpfApp.Tests;
@@ -17,6 +19,10 @@ public sealed class BindingSignalIntegrationTests
     [Fact]
     public void BrokenGridRemainsResponsiveAndRelaysDurableEventsAfterReconnect()
         => RunOnSta(RunDurableRelay);
+
+    [Fact]
+    public void ApprovedMutationDisablesGridAndShowsFallbackView()
+        => RunOnSta(RunRecoveryAction);
 
     private static void RunOnSta(Action action)
     {
@@ -136,6 +142,60 @@ public sealed class BindingSignalIntegrationTests
                 Directory.Delete(directory, recursive: true);
             }
         }
+    }
+
+    private static void RunRecoveryAction()
+    {
+        var sensor = ReliabilitySensor.Start(null);
+        var window = new MainWindow(sensor);
+        try
+        {
+            window.Show();
+            window.UpdateLayout();
+
+            var result = sensor.ExecuteMutationCommandAsync(
+                    MutationCommand(sensor.AppSessionId),
+                    CancellationToken.None)
+                .GetAwaiter()
+                .GetResult();
+
+            Assert.Equal(RecoveryStatus.APPLIED, result.Status);
+            Assert.Equal(
+                Visibility.Visible,
+                Assert.IsAssignableFrom<FrameworkElement>(window.FindName("FallbackView")).Visibility);
+        }
+        finally
+        {
+            window.Close();
+            sensor.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        }
+    }
+
+    private static DiagnosticCommand MutationCommand(string appSessionId)
+    {
+        var arguments = JsonSerializer.SerializeToElement(new
+        {
+            feature = "ExperimentalPeopleGrid",
+            enabled = false,
+            expected_current_value = true,
+        });
+        var now = DateTimeOffset.UtcNow;
+        return new DiagnosticCommand(
+            "1.0",
+            "command-1",
+            "incident-1",
+            appSessionId,
+            DiagnosticTool.RecoverySetFeatureFlag,
+            arguments,
+            new string('0', 64),
+            RiskLevel.HIGH,
+            "approval-1",
+            "idempotency-1",
+            now,
+            now.AddMinutes(1),
+            1_000,
+            1,
+            "action-1");
     }
 
     private static OutboxEvent? WaitForPendingRetry(SqliteOutbox outbox)
