@@ -7,10 +7,12 @@ from app.verification import (
     MetricDelta,
     PerformanceDelta,
     binding_rate_delta,
+    build_inconclusive_verification_audit,
     build_verification_audit,
     evaluate_post_action_verification,
     frame_p95_delta,
     meets_mitigation_thresholds,
+    recovery_evidence_binding,
     visual_count_delta,
 )
 
@@ -235,3 +237,30 @@ def test_post_action_verification_pairs_durable_pre_action_evidence() -> None:
     audit = build_verification_audit(result, "MITIGATED")
     assert audit["post_evidence_id"] == "post-1"
     assert audit["metrics"]["binding_errors_per_second"]["delta"] == -4.8
+
+
+def test_inconclusive_audit_keeps_post_and_action_binding_without_success_metrics() -> None:
+    evidence = [
+        {
+            "evidence_id": "post-1",
+            "event_type": "recovery.result",
+            "correlation": {
+                "incident_id": "incident-1",
+                "command_id": "command-1",
+                "action_id": "action-1",
+            },
+        }
+    ]
+
+    binding = recovery_evidence_binding(evidence, "post-1")
+
+    assert binding == ("command-1", "action-1")
+    assert build_inconclusive_verification_audit("post-1", *binding) == {
+        "outcome": "INCONCLUSIVE",
+        "reason": "insufficient_evidence",
+        "command_id": "command-1",
+        "action_id": "action-1",
+        "post_evidence_id": "post-1",
+        "evidence_ids": ["post-1", "command-1"],
+        "metrics": {},
+    }

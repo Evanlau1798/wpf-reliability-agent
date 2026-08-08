@@ -246,6 +246,46 @@ def test_recovery_work_uses_deterministic_verification_path(monkeypatch) -> None
     ]
 
 
+def test_recovery_work_returns_inconclusive_evidence_to_investigating(monkeypatch) -> None:
+    _set_environment(monkeypatch, "worker")
+    _allow_identity(monkeypatch)
+    firestore_client = object()
+    committed: list[dict[str, object]] = []
+    monkeypatch.setattr(main, "get_firestore_client", lambda _project_id: firestore_client)
+    monkeypatch.setattr(main, "is_run_processed", lambda *_args: False)
+    monkeypatch.setattr(main, "load_incident_evidence", lambda *_args: [{"evidence_id": "post-1"}])
+    monkeypatch.setattr(main, "evaluate_post_action_verification", lambda *_args: None)
+    monkeypatch.setattr(
+        main,
+        "recovery_evidence_binding",
+        lambda *_args: ("command-1", "action-1"),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        main,
+        "build_inconclusive_verification_audit",
+        lambda *_args: {"outcome": "INCONCLUSIVE"},
+        raising=False,
+    )
+
+    def commit(*_args, **kwargs):
+        committed.append(kwargs)
+        return True
+
+    monkeypatch.setattr(main, "commit_verification_run", commit)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/work:push",
+            headers={"Authorization": "Bearer signed-token"},
+            json=_push_envelope(trigger="recovery.result", evidence_revision=7, event_id="post-1"),
+        )
+
+    assert response.status_code == 204
+    assert committed[0]["target_state"] is main.IncidentState.INVESTIGATING
+    assert committed[0]["verification"] == {"outcome": "INCONCLUSIVE"}
+
+
 def _set_environment(monkeypatch, role: str) -> None:
     monkeypatch.setenv("SERVICE_ROLE", role)
     monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "project-test")

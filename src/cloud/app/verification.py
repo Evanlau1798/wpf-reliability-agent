@@ -277,6 +277,42 @@ def build_verification_audit(
     }
 
 
+def recovery_evidence_binding(
+    evidence: list[dict[str, object]],
+    post_evidence_id: str,
+) -> tuple[str, str] | None:
+    post = _find_evidence(evidence, post_evidence_id)
+    if post is None or post.get("event_type") != "recovery.result":
+        return None
+    correlation = _object(post.get("correlation"))
+    command_id = correlation.get("command_id")
+    action_id = correlation.get("action_id")
+    if not all(isinstance(value, str) and value for value in (command_id, action_id)):
+        return None
+    return command_id, action_id
+
+
+def build_inconclusive_verification_audit(
+    post_evidence_id: str,
+    command_id: str,
+    action_id: str,
+    verification: PostActionVerification | None = None,
+) -> dict[str, object]:
+    if verification is not None:
+        audit = build_verification_audit(verification, "INCONCLUSIVE")
+        audit["reason"] = "thresholds_not_met"
+        return audit
+    return {
+        "outcome": "INCONCLUSIVE",
+        "reason": "insufficient_evidence",
+        "command_id": command_id,
+        "action_id": action_id,
+        "post_evidence_id": post_evidence_id,
+        "evidence_ids": [post_evidence_id, command_id],
+        "metrics": {},
+    }
+
+
 def _payload(evidence: dict[str, object]) -> dict[str, object]:
     payload = evidence.get("payload")
     return payload if isinstance(payload, dict) else {}

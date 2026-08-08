@@ -38,9 +38,11 @@ from app.pubsub import publish_work
 from app.worker import build_run_key, decode_pubsub_envelope, pubsub_message_id
 from app.worker_auth import authenticate_pubsub_push
 from app.verification import (
+    build_inconclusive_verification_audit,
     build_verification_audit,
     evaluate_post_action_verification,
     meets_mitigation_thresholds,
+    recovery_evidence_binding,
 )
 from app.workflow_state import IncidentState, commit_new_incident_run, commit_verification_run
 
@@ -208,22 +210,39 @@ async def worker_push(request: Request) -> None:
         evidence = load_incident_evidence(client, work["incident_id"])
         verification = evaluate_post_action_verification(evidence, work["event_id"])
         if verification is None:
-            raise ValueError("Post-action verification evidence is incomplete")
-        if not meets_mitigation_thresholds(
+            binding = recovery_evidence_binding(evidence, work["event_id"])
+            if binding is None:
+                raise ValueError("Post-action verification binding is invalid")
+            command_id, action_id = binding
+            target_state = IncidentState.INVESTIGATING
+            audit = build_inconclusive_verification_audit(
+                work["event_id"], command_id, action_id
+            )
+        elif meets_mitigation_thresholds(
             verification.binding,
             verification.performance,
             verification.visual,
         ):
-            raise ValueError("Post-action verification did not meet mitigation thresholds")
+            command_id = verification.command_id
+            action_id = verification.action_id
+            target_state = IncidentState.MITIGATED
+            audit = build_verification_audit(verification, target_state.value)
+        else:
+            command_id = verification.command_id
+            action_id = verification.action_id
+            target_state = IncidentState.INVESTIGATING
+            audit = build_inconclusive_verification_audit(
+                work["event_id"], command_id, action_id, verification
+            )
         committed = commit_verification_run(
             client,
             run_key=run_key,
             incident_id=work["incident_id"],
             evidence_revision=work["evidence_revision"],
-            command_id=verification.command_id,
-            action_id=verification.action_id,
-            target_state=IncidentState.MITIGATED,
-            verification=build_verification_audit(verification, IncidentState.MITIGATED.value),
+            command_id=command_id,
+            action_id=action_id,
+            target_state=target_state,
+            verification=audit,
         )
         if not committed:
             request.app.state.logger.info("worker_duplicate_run run_key=%s", run_key)
