@@ -24,6 +24,7 @@ PAYLOAD_FIELDS = {
             "element_type",
             "element_name",
             "occurrence_count",
+            "aggregation_window_ms",
             "first_seen_utc",
             "last_seen_utc",
             "message_truncated",

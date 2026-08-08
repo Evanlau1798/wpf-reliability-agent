@@ -136,6 +136,24 @@ def test_binding_ingest_builds_publish_payload_after_persist(monkeypatch) -> Non
     }
 
 
+def test_binding_ingest_preserves_aggregation_window_for_rate_verification() -> None:
+    event = _event(
+        "binding.aggregate",
+        {"binding_path": "DisplayNmae"},
+        {
+            "fingerprint": "binding-1",
+            "binding_path": "DisplayNmae",
+            "occurrence_count": 50,
+            "aggregation_window_ms": 10_000,
+        },
+    )
+
+    valid, rejected = validate_telemetry_events([event])
+
+    assert rejected == []
+    assert valid[0].payload["aggregation_window_ms"] == 10_000
+
+
 def test_work_message_contains_only_durable_work_identifiers() -> None:
     event = _event(
         "binding.aggregate",

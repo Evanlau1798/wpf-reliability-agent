@@ -351,6 +351,7 @@ internal sealed class BindingDiagnosticAggregator
                 element_type = aggregate.Diagnostic.ElementType,
                 element_name = aggregate.Diagnostic.ElementName,
                 occurrence_count = aggregate.Count,
+                aggregation_window_ms = _window.TotalMilliseconds,
                 first_seen_utc = aggregate.FirstSeenUtc,
                 last_seen_utc = aggregate.LastSeenUtc,
                 message_truncated = aggregate.WasTruncated,

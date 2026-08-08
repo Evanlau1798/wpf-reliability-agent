@@ -191,6 +191,7 @@ public sealed class BindingDiagnosticsTests
         aggregator.FlushExpired(start.AddSeconds(10));
         var envelope = Assert.Single(ReadAll(sensor));
         Assert.Equal(1, envelope.Payload.GetProperty("occurrence_count").GetInt32());
+        Assert.Equal(10_000, envelope.Payload.GetProperty("aggregation_window_ms").GetDouble());
         Assert.Equal(start, envelope.Payload.GetProperty("first_seen_utc").GetDateTimeOffset());
         Assert.Equal(start, envelope.Payload.GetProperty("last_seen_utc").GetDateTimeOffset());
     }
