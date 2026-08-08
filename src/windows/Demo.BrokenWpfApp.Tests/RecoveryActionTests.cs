@@ -1,3 +1,5 @@
+using Reliability.Sensor;
+
 namespace Demo.BrokenWpfApp.Tests;
 
 public sealed class RecoveryActionTests

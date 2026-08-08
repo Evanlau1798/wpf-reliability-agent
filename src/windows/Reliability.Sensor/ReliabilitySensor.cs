@@ -117,6 +117,8 @@ public sealed partial class ReliabilitySensor : IAsyncDisposable
 
     public bool CanUpload { get; }
 
+    public RecoveryActionRegistrations RecoveryActions { get; } = new();
+
     public long BindingAggregateCount => Interlocked.Read(ref _bindingAggregateCount);
 
     internal ChannelReader<DiagnosticEnvelope> Events => _events.Reader;

@@ -28,7 +28,11 @@ public sealed partial class ReliabilitySensor
             (_, completed, token) => ReplayCompletedCommandAsync(
                 client,
                 completed,
-                token)).ConfigureAwait(false);
+                token),
+            handleMutationCommand: async (command, token) =>
+            {
+                _ = await ExecuteMutationCommandAsync(command, token).ConfigureAwait(false);
+            }).ConfigureAwait(false);
     }
 
     private async Task ExecuteReadOnlyCommandAsync(

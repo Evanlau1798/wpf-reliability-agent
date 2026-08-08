@@ -1,27 +1,7 @@
 using System.Diagnostics;
+using Reliability.Sensor;
 
 namespace Demo.BrokenWpfApp;
-
-public enum RecoveryAction
-{
-    DisableExperimentalPeopleGrid
-}
-
-public enum RecoveryStatus
-{
-    APPLIED,
-    ALREADY_APPLIED,
-    REJECTED
-}
-
-public sealed record RecoveryResult(
-    RecoveryStatus Status,
-    bool BeforeState,
-    bool AfterState,
-    long DurationMilliseconds,
-    string? ErrorCode = null);
-
-public delegate RecoveryResult RecoveryActionHandler(bool expectedCurrentState);
 
 public sealed class ExperimentalPeopleGridState
 {
