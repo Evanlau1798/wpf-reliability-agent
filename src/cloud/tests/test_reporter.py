@@ -115,3 +115,13 @@ def test_reporter_rejects_mitigated_report_without_finalized_post_action_verific
 
     with pytest.raises(ValueError, match="post-action verification"):
         validate_reporter_output(reporter_input, report)
+
+
+def test_reporter_rejects_resolved_status_for_temporary_feature_rollback() -> None:
+    from app.models import IncidentReport
+
+    payload = json.loads((FIXTURES / "incident-report-mitigated.json").read_text(encoding="utf-8"))
+    payload["status"] = "RESOLVED"
+
+    with pytest.raises(ValidationError, match="temporary feature rollback must remain MITIGATED"):
+        IncidentReport.model_validate(payload)
