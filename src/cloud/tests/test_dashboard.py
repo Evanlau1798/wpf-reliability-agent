@@ -91,6 +91,45 @@ def test_console_incident_detail_sorts_timeline_by_sequence_and_time(monkeypatch
     assert response.text.index("2026-08-09T01:01:00Z") < response.text.index("2026-08-09T01:03:00Z")
 
 
+def test_console_incident_detail_renders_safe_evidence_index_without_raw_secrets(monkeypatch) -> None:
+    _set_api_environment(monkeypatch)
+    incident = Mock(exists=True)
+    incident.to_dict.return_value = {"state": "INVESTIGATING", "summary": "Exception burst"}
+    evidence = _snapshot(
+        {
+            "event_type": "exception.summary",
+            "evidence_hash": "a" * 64,
+            "payload": {"message_template": "Authorization: Bearer private-secret"},
+            "result": {"raw": "private-result-secret"},
+        }
+    )
+    evidence.id = "evidence-1"
+    client = Mock()
+    incident_document = client.collection.return_value.document.return_value
+    incident_document.get.return_value = incident
+    audit_collection = Mock()
+    audit_collection.stream.return_value = []
+    evidence_collection = Mock()
+    evidence_collection.stream.return_value = [evidence]
+    incident_document.collection.side_effect = lambda name: {
+        firestore_client.AUDIT_COLLECTION: audit_collection,
+        firestore_client.EVIDENCE_COLLECTION: evidence_collection,
+    }[name]
+    monkeypatch.setattr("app.main.get_firestore_client", lambda _project_id: client)
+
+    with TestClient(app, base_url="https://testserver") as test_client:
+        assert test_client.post("/console/login", json={"token": "operator-secret"}).status_code == 204
+        response = test_client.get("/console/incidents/incident-4")
+
+    assert response.status_code == 200
+    assert "Evidence" in response.text
+    assert "evidence-1" in response.text
+    assert "exception.summary" in response.text
+    assert "a" * 64 in response.text
+    assert "private-secret" not in response.text
+    assert "private-result-secret" not in response.text
+
+
 def _snapshot(data: dict[str, object]) -> Mock:
     snapshot = Mock()
     snapshot.to_dict.return_value = data

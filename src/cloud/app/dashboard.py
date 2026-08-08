@@ -3,7 +3,7 @@ from html import escape
 
 from google.cloud import firestore
 
-from app.firestore_client import AUDIT_COLLECTION, INCIDENTS_COLLECTION
+from app.firestore_client import AUDIT_COLLECTION, EVIDENCE_COLLECTION, INCIDENTS_COLLECTION
 
 
 def render_incident_list(client: firestore.Client) -> str:
@@ -27,6 +27,7 @@ def render_incident_detail(client: firestore.Client, incident_id: str) -> str | 
         return None
     incident = snapshot.to_dict() or {}
     timeline = _render_timeline(incident_document)
+    evidence_index = _render_evidence_index(incident_document)
     return (
         '<!doctype html><html lang="en"><head><meta charset="utf-8">'
         f"<title>Incident {_display(incident_id)}</title></head><body><main>"
@@ -34,7 +35,7 @@ def render_incident_detail(client: firestore.Client, incident_id: str) -> str | 
         f"<dt>State</dt><dd>{_display(incident.get('state'))}</dd>"
         f"<dt>Summary</dt><dd>{_display(incident.get('summary'))}</dd>"
         f"<dt>Updated</dt><dd>{_display(incident.get('updated_at'))}</dd>"
-        f"</dl>{timeline}</main></body></html>"
+        f"</dl>{timeline}{evidence_index}</main></body></html>"
     )
 
 
@@ -53,6 +54,18 @@ def _render_timeline(incident_document: object) -> str:
         for record in records
     )
     return f"<section><h2>Timeline</h2><ol>{items}</ol></section>"
+
+
+def _render_evidence_index(incident_document: object) -> str:
+    items = "".join(
+        "<li>"
+        f"{_display(snapshot.id)} — "
+        f"{_display((snapshot.to_dict() or {}).get('event_type'))} — "
+        f"{_display((snapshot.to_dict() or {}).get('evidence_hash'))}"
+        "</li>"
+        for snapshot in incident_document.collection(EVIDENCE_COLLECTION).stream()
+    )
+    return f"<section><h2>Evidence</h2><ul>{items}</ul></section>"
 
 
 def _render_incident(incident_id: str, incident: dict[str, object]) -> str:
