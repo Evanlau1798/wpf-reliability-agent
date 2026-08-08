@@ -1,5 +1,7 @@
 from pathlib import Path
+from types import SimpleNamespace
 
+import asyncio
 import json
 import pytest
 from pydantic import ValidationError
@@ -125,3 +127,55 @@ def test_reporter_rejects_resolved_status_for_temporary_feature_rollback() -> No
 
     with pytest.raises(ValidationError, match="temporary feature rollback must remain MITIGATED"):
         IncidentReport.model_validate(payload)
+
+
+def test_reporter_repairs_schema_once_then_uses_deterministic_fallback() -> None:
+    from app.models import Severity
+    from app.reporting import ReporterInput, run_reporter_once
+
+    calls: list[dict[str, object]] = []
+    outputs = [{"schema_version": "1.0"}, {"schema_version": "1.0"}]
+
+    class SessionService:
+        async def create_session(self, **kwargs):
+            calls.append({"create_session": kwargs})
+
+    class Runner:
+        app_name = "wpf_reliability_agent"
+        session_service = SessionService()
+
+        def run_async(self, **kwargs):
+            calls.append({"run_async": kwargs})
+            output = outputs.pop(0)
+
+            async def events():
+                yield SimpleNamespace(
+                    is_final_response=lambda: True,
+                    output=output,
+                    content=None,
+                )
+
+            return events()
+
+    report = asyncio.run(
+        run_reporter_once(
+            Runner(),
+            incident_id="incident-1",
+            run_key="incident-1:report:1",
+            reporter_input=ReporterInput(evidence=[], tools=[], approvals=[], verification=[]),
+            severity=Severity.ERROR,
+            model_id="gemini-test",
+            prompt_version="1",
+            policy_version="1",
+            reuse_revision="9" * 40,
+        )
+    )
+
+    run_calls = [call["run_async"] for call in calls if "run_async" in call]
+    assert len(run_calls) == 2
+    assert "repair" in run_calls[1]["new_message"].parts[0].text.lower()
+    assert report.status.value == "FAILED_SAFE"
+    assert report.incident_id == "incident-1"
+    assert report.claims == []
+    assert report.metadata.model_id == "gemini-test"
+    assert report.metadata.reuse_revision == "9" * 40
