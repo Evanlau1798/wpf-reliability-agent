@@ -4,7 +4,9 @@ from enum import StrEnum
 from google.cloud import firestore
 
 from app.contracts import sha256_canonical
-from app.firestore_client import AUDIT_COLLECTION, INCIDENTS_COLLECTION, PROCESSED_RUNS_COLLECTION
+from app.firestore_client import (
+    AUDIT_COLLECTION, COMMANDS_COLLECTION, INCIDENTS_COLLECTION, PROCESSED_RUNS_COLLECTION,
+)
 
 
 MAX_INVESTIGATION_ROUNDS = 4
@@ -403,6 +405,93 @@ def commit_new_incident_run(
                 "evidence_revision": evidence_revision,
                 "trigger": trigger,
                 "model_id": model_id,
+                "processed_at": firestore.SERVER_TIMESTAMP,
+            },
+        )
+        return True
+
+    return commit(client.transaction())
+
+
+def commit_verification_run(
+    client: firestore.Client,
+    *,
+    run_key: str,
+    incident_id: str,
+    evidence_revision: int,
+    command_id: str,
+    action_id: str,
+    target_state: IncidentState,
+    verification: dict[str, object],
+) -> bool:
+    if target_state not in {IncidentState.MITIGATED, IncidentState.INVESTIGATING, IncidentState.FAILED_SAFE}:
+        raise ValueError("Invalid verification target state")
+    incident_document = client.collection(INCIDENTS_COLLECTION).document(incident_id)
+    processed_document = client.collection(PROCESSED_RUNS_COLLECTION).document(run_key)
+    command_document = client.collection(COMMANDS_COLLECTION).document(command_id)
+
+    @firestore.transactional
+    def commit(transaction: firestore.Transaction) -> bool:
+        if processed_document.get(transaction=transaction).exists:
+            return False
+        incident_snapshot = incident_document.get(transaction=transaction)
+        command_snapshot = command_document.get(transaction=transaction)
+        if not incident_snapshot.exists or not command_snapshot.exists:
+            raise ValueError("Verification binding does not exist")
+        incident = incident_snapshot.to_dict() or {}
+        command = command_snapshot.to_dict() or {}
+        state_version = incident.get("state_version")
+        audit_sequence = incident.get("audit_sequence")
+        if incident.get("state") != IncidentState.VERIFYING.value:
+            raise ValueError("Incident is not VERIFYING")
+        if type(state_version) is not int or state_version < 1:
+            raise ValueError("Incident state version is invalid")
+        if type(audit_sequence) is not int or audit_sequence < 0:
+            raise ValueError("Incident audit sequence is invalid")
+        if incident.get("evidence_revision") != evidence_revision:
+            raise ValueError("Incident evidence revision changed")
+        if (
+            command.get("command_id") != command_id
+            or command.get("incident_id") != incident_id
+            or command.get("action_id") != action_id
+            or command.get("tool") != "recovery.set_feature_flag"
+            or command.get("status") != "COMPLETED"
+        ):
+            raise ValueError("Verification command binding mismatch")
+
+        next_version = state_version + 1
+        next_audit_sequence = audit_sequence + 1
+        audit_document = incident_document.collection(AUDIT_COLLECTION).document(
+            str(next_audit_sequence)
+        )
+        transaction.update(
+            incident_document,
+            {
+                "state": target_state.value,
+                "state_version": next_version,
+                "audit_sequence": next_audit_sequence,
+                "updated_at": firestore.SERVER_TIMESTAMP,
+            },
+        )
+        transaction.create(
+            audit_document,
+            {
+                "sequence": next_audit_sequence,
+                "type": "state.transition",
+                "from_state": IncidentState.VERIFYING.value,
+                "to_state": target_state.value,
+                "state_version": next_version,
+                "verification": verification,
+                "created_at": firestore.SERVER_TIMESTAMP,
+            },
+        )
+        transaction.create(
+            processed_document,
+            {
+                "incident_id": incident_id,
+                "evidence_revision": evidence_revision,
+                "trigger": "recovery.result",
+                "processor": "deterministic-verification-v1",
                 "processed_at": firestore.SERVER_TIMESTAMP,
             },
         )

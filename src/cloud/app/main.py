@@ -37,7 +37,12 @@ from app.models import CommandResult, EventType
 from app.pubsub import publish_work
 from app.worker import build_run_key, decode_pubsub_envelope, pubsub_message_id
 from app.worker_auth import authenticate_pubsub_push
-from app.workflow_state import commit_new_incident_run
+from app.verification import (
+    build_verification_audit,
+    evaluate_post_action_verification,
+    meets_mitigation_thresholds,
+)
+from app.workflow_state import IncidentState, commit_new_incident_run, commit_verification_run
 
 
 MAX_TELEMETRY_BATCH_BYTES = 512 * 1024
@@ -199,6 +204,30 @@ async def worker_push(request: Request) -> None:
     if is_run_processed(client, run_key):
         request.app.state.logger.info("worker_duplicate_run run_key=%s", run_key)
         return
+    if work["trigger"] == EventType.RECOVERY_RESULT.value:
+        evidence = load_incident_evidence(client, work["incident_id"])
+        verification = evaluate_post_action_verification(evidence, work["event_id"])
+        if verification is None:
+            raise ValueError("Post-action verification evidence is incomplete")
+        if not meets_mitigation_thresholds(
+            verification.binding,
+            verification.performance,
+            verification.visual,
+        ):
+            raise ValueError("Post-action verification did not meet mitigation thresholds")
+        committed = commit_verification_run(
+            client,
+            run_key=run_key,
+            incident_id=work["incident_id"],
+            evidence_revision=work["evidence_revision"],
+            command_id=verification.command_id,
+            action_id=verification.action_id,
+            target_state=IncidentState.MITIGATED,
+            verification=build_verification_audit(verification, IncidentState.MITIGATED.value),
+        )
+        if not committed:
+            request.app.state.logger.info("worker_duplicate_run run_key=%s", run_key)
+        return
     committed = commit_new_incident_run(
         client,
         run_key=run_key,
@@ -209,6 +238,15 @@ async def worker_push(request: Request) -> None:
     )
     if not committed:
         request.app.state.logger.info("worker_duplicate_run run_key=%s", run_key)
+
+
+def load_incident_evidence(client: object, incident_id: str) -> list[dict[str, object]]:
+    incident = client.collection(firestore_client.INCIDENTS_COLLECTION).document(incident_id)
+    snapshots = incident.collection(firestore_client.EVIDENCE_COLLECTION).stream()
+    return [
+        {"evidence_id": snapshot.id, **(snapshot.to_dict() or {})}
+        for snapshot in snapshots
+    ]
 
 
 async def enforce_telemetry_body_limit(request: Request) -> None:

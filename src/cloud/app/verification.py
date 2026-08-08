@@ -1,4 +1,5 @@
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+from datetime import datetime
 import math
 
 
@@ -28,6 +29,18 @@ class MitigationThresholds:
     min_visual_count_reduction_ratio: float
     min_performance_sample_count: int
     min_performance_confidence: str
+
+
+@dataclass(frozen=True)
+class PostActionVerification:
+    binding: MetricDelta
+    performance: PerformanceDelta
+    visual: MetricDelta
+    before_binding_evidence_id: str
+    before_performance_evidence_id: str
+    post_evidence_id: str
+    command_id: str
+    action_id: str
 
 
 DEFAULT_MITIGATION_THRESHOLDS = MitigationThresholds(
@@ -165,6 +178,105 @@ def meets_mitigation_thresholds(
     )
 
 
+def evaluate_post_action_verification(
+    evidence: list[dict[str, object]],
+    post_evidence_id: str,
+) -> PostActionVerification | None:
+    post = _find_evidence(evidence, post_evidence_id)
+    if post is None or post.get("event_type") != "recovery.result":
+        return None
+    session_id = post.get("app_session_id")
+    correlation = _object(post.get("correlation"))
+    command_id = correlation.get("command_id")
+    action_id = correlation.get("action_id")
+    if not all(isinstance(value, str) and value for value in (session_id, command_id, action_id)):
+        return None
+
+    command_evidence = _find_evidence(evidence, command_id)
+    if command_evidence is None or command_evidence.get("event_type") != "tool.result":
+        return None
+    if command_evidence.get("tool") != "recovery.set_feature_flag":
+        return None
+    if command_evidence.get("app_session_id") != session_id:
+        return None
+    command_result = _object(command_evidence.get("result"))
+    action_result = _object(command_result.get("result"))
+    if command_result.get("status") != "SUCCEEDED":
+        return None
+    if action_result.get("status") not in {"APPLIED", "ALREADY_APPLIED"}:
+        return None
+    action_started = _timestamp(command_result.get("started_at_utc"))
+    if action_started is None:
+        return None
+
+    binding_candidates: list[tuple[datetime, dict[str, object]]] = []
+    performance_candidates: list[tuple[datetime, dict[str, object]]] = []
+    for item in evidence:
+        if item.get("app_session_id") != session_id:
+            continue
+        if item.get("event_type") == "binding.aggregate":
+            observed_at = _timestamp(_payload(item).get("last_seen_utc"))
+            if observed_at is not None and observed_at <= action_started:
+                binding_candidates.append((observed_at, item))
+        elif item.get("event_type") == "performance.sample":
+            observed_at = _timestamp(item.get("timestamp_utc"))
+            if observed_at is not None and observed_at <= action_started:
+                performance_candidates.append((observed_at, item))
+    if not binding_candidates or not performance_candidates:
+        return None
+    before_binding = max(binding_candidates, key=lambda item: item[0])[1]
+    before_performance = max(performance_candidates, key=lambda item: item[0])[1]
+    binding = binding_rate_delta(before_binding, post)
+    performance = frame_p95_delta(before_performance, post)
+    visual = visual_count_delta(before_performance, post)
+    before_binding_id = _evidence_id(before_binding)
+    before_performance_id = _evidence_id(before_performance)
+    if None in (binding, performance, visual, before_binding_id, before_performance_id):
+        return None
+    return PostActionVerification(
+        binding,
+        performance,
+        visual,
+        before_binding_id,
+        before_performance_id,
+        post_evidence_id,
+        command_id,
+        action_id,
+    )
+
+
+def build_verification_audit(
+    verification: PostActionVerification,
+    outcome: str,
+) -> dict[str, object]:
+    return {
+        "outcome": outcome,
+        "command_id": verification.command_id,
+        "action_id": verification.action_id,
+        "post_evidence_id": verification.post_evidence_id,
+        "evidence_ids": [
+            verification.before_binding_evidence_id,
+            verification.before_performance_evidence_id,
+            verification.post_evidence_id,
+            verification.command_id,
+        ],
+        "metrics": {
+            "binding_errors_per_second": _metric_audit(verification.binding, "errors_per_second"),
+            "frame_p95_ms": {
+                **_metric_audit(verification.performance.p95, "milliseconds"),
+                "before_sample_count": verification.performance.before_sample_count,
+                "after_sample_count": verification.performance.after_sample_count,
+                "before_duration_ms": verification.performance.before_duration_ms,
+                "after_duration_ms": verification.performance.after_duration_ms,
+                "before_confidence": verification.performance.before_confidence,
+                "after_confidence": verification.performance.after_confidence,
+            },
+            "visual_count": _metric_audit(verification.visual, "nodes"),
+        },
+        "thresholds": asdict(DEFAULT_MITIGATION_THRESHOLDS),
+    }
+
+
 def _payload(evidence: dict[str, object]) -> dict[str, object]:
     payload = evidence.get("payload")
     return payload if isinstance(payload, dict) else {}
@@ -201,3 +313,36 @@ def _reduction_ratio(delta: MetricDelta) -> float | None:
     if delta.before <= 0:
         return None
     return (delta.before - delta.after) / delta.before
+
+
+def _find_evidence(
+    evidence: list[dict[str, object]],
+    evidence_id: str,
+) -> dict[str, object] | None:
+    return next((item for item in evidence if _evidence_id(item) == evidence_id), None)
+
+
+def _evidence_id(evidence: dict[str, object]) -> str | None:
+    value = evidence.get("evidence_id")
+    return value if isinstance(value, str) and value else None
+
+
+def _timestamp(value: object) -> datetime | None:
+    if isinstance(value, datetime):
+        return value if value.tzinfo is not None else None
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo is not None else None
+
+
+def _metric_audit(metric: MetricDelta, unit: str) -> dict[str, object]:
+    return {
+        "before": metric.before,
+        "after": metric.after,
+        "delta": metric.delta,
+        "unit": unit,
+    }

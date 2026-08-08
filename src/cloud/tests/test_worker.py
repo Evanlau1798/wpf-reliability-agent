@@ -1,6 +1,7 @@
 import base64
 import io
 import json
+from unittest.mock import Mock
 
 from fastapi.testclient import TestClient
 
@@ -198,6 +199,53 @@ def test_new_work_commits_durable_step_before_ack(monkeypatch) -> None:
     ]
 
 
+def test_recovery_work_uses_deterministic_verification_path(monkeypatch) -> None:
+    _set_environment(monkeypatch, "worker")
+    _allow_identity(monkeypatch)
+    firestore_client = object()
+    verification = Mock(
+        binding=Mock(),
+        performance=Mock(),
+        visual=Mock(),
+        command_id="command-1",
+        action_id="action-1",
+    )
+    committed: list[dict[str, object]] = []
+    monkeypatch.setattr(main, "get_firestore_client", lambda _project_id: firestore_client)
+    monkeypatch.setattr(main, "is_run_processed", lambda *_args: False)
+    monkeypatch.setattr(main, "load_incident_evidence", lambda *_args: [{"evidence_id": "post-1"}])
+    monkeypatch.setattr(main, "evaluate_post_action_verification", lambda *_args: verification)
+    monkeypatch.setattr(main, "meets_mitigation_thresholds", lambda *_args: True)
+    monkeypatch.setattr(main, "build_verification_audit", lambda *_args: {"outcome": "MITIGATED"})
+    monkeypatch.setattr(main, "commit_new_incident_run", Mock(side_effect=AssertionError("wrong path")))
+
+    def commit(*_args, **kwargs):
+        committed.append(kwargs)
+        return True
+
+    monkeypatch.setattr(main, "commit_verification_run", commit, raising=False)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/work:push",
+            headers={"Authorization": "Bearer signed-token"},
+            json=_push_envelope(trigger="recovery.result", evidence_revision=7, event_id="post-1"),
+        )
+
+    assert response.status_code == 204
+    assert committed == [
+        {
+            "run_key": "incident-1:7:recovery.result",
+            "incident_id": "incident-1",
+            "evidence_revision": 7,
+            "command_id": "command-1",
+            "action_id": "action-1",
+            "target_state": main.IncidentState.MITIGATED,
+            "verification": {"outcome": "MITIGATED"},
+        }
+    ]
+
+
 def _set_environment(monkeypatch, role: str) -> None:
     monkeypatch.setenv("SERVICE_ROLE", role)
     monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "project-test")
@@ -220,12 +268,17 @@ def _allow_identity(monkeypatch) -> None:
     )
 
 
-def _push_envelope() -> dict[str, object]:
+def _push_envelope(
+    *,
+    trigger: str = "binding.aggregate",
+    evidence_revision: int = 2,
+    event_id: str = "event-1",
+) -> dict[str, object]:
     work = {
         "incident_id": "incident-1",
-        "evidence_revision": 2,
-        "trigger": "binding.aggregate",
-        "event_id": "event-1",
+        "evidence_revision": evidence_revision,
+        "trigger": trigger,
+        "event_id": event_id,
     }
     return {
         "message": {
