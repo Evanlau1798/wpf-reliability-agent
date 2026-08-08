@@ -1,9 +1,15 @@
+import json
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
 from app.audit import AuditEvent
+from app.contracts import sha256_canonical
+
+
+FIXTURES = Path(__file__).parents[3] / "contracts" / "fixtures"
 
 
 def test_audit_event_shape_requires_chain_fields() -> None:
@@ -40,3 +46,9 @@ def test_audit_event_shape_requires_chain_fields() -> None:
                 "timestamp_utc": "2026-08-08T06:00:00Z",
             }
         )
+
+
+def test_audit_payload_hash_uses_canonical_json_golden_fixture() -> None:
+    fixture = json.loads((FIXTURES / "hash-reordered.json").read_text(encoding="utf-8"))
+
+    assert sha256_canonical(fixture["input"]) == fixture["sha256"]
