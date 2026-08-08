@@ -239,3 +239,32 @@ def test_regression_thresholds_are_fixture_locked_and_keep_rollback_guidance() -
     audit = build_regression_verification_audit(verification, "Re-enable the feature.")
     assert audit["outcome"] == "FAILED_SAFE"
     assert audit["rollback_guidance"] == "Re-enable the feature."
+
+
+def test_inconclusive_performance_sample_does_not_claim_improvement() -> None:
+    fixture = json.loads(
+        (FIXTURES / "post-action-inconclusive-performance.json").read_text(encoding="utf-8")
+    )
+
+    verification = evaluate_post_action_verification(fixture["evidence"], "post-1")
+
+    assert verification is not None
+    assert verification.performance.after_sample_count == fixture["after_sample_count"]
+    assert not meets_mitigation_thresholds(
+        verification.binding,
+        verification.performance,
+        verification.visual,
+    )
+    assert not is_regression(
+        verification.binding,
+        verification.performance,
+        verification.visual,
+    )
+    audit = build_inconclusive_verification_audit(
+        "post-1",
+        verification.command_id,
+        verification.action_id,
+        verification,
+    )
+    assert audit["outcome"] == fixture["expected_outcome"] == "INCONCLUSIVE"
+    assert audit["metrics"]["frame_p95_ms"]["after_sample_count"] == fixture["after_sample_count"]
