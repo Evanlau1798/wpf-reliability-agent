@@ -64,6 +64,11 @@ public static class SourceMapGenerator
         }
 
         var path = markup[prefix.Length..^1].Trim();
+        if (path.StartsWith("Path=", StringComparison.Ordinal))
+        {
+            path = path["Path=".Length..].Trim();
+        }
+
         return path.Length > 0 && !path.Contains(',') && !path.Contains('=') ? path : null;
     }
 

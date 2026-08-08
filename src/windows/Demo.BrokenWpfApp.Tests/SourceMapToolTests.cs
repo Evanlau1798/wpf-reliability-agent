@@ -102,6 +102,12 @@ public sealed class SourceMapToolTests
         Assert.Equal("DisplayNmae", SourceMapGenerator.ParseBindingPath("{Binding DisplayNmae}"));
     }
 
+    [Fact]
+    public void ParsesBindingPathEqualsForm()
+    {
+        Assert.Equal("DisplayNmae", SourceMapGenerator.ParseBindingPath("{Binding Path=DisplayNmae}"));
+    }
+
     private static string RepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
