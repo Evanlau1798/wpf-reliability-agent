@@ -227,6 +227,7 @@ internal sealed class BindingDiagnosticAggregator
     private readonly int _burstThreshold;
     private readonly int _maxFingerprints;
     private readonly FixedCircularBuffer<JsonElement> _recentAggregates;
+    private long _acceptedCount;
 
     public BindingDiagnosticAggregator(
         ReliabilitySensor sensor,
@@ -254,6 +255,7 @@ internal sealed class BindingDiagnosticAggregator
 
     public void Accept(BindingDiagnostic diagnostic)
     {
+        Interlocked.Increment(ref _acceptedCount);
         var pending = new List<PendingAggregate>();
         var rejected = false;
         lock (_gate)
@@ -303,6 +305,8 @@ internal sealed class BindingDiagnosticAggregator
     }
 
     public IReadOnlyList<JsonElement> SnapshotRecent() => _recentAggregates.Snapshot();
+
+    public long AcceptedCount => Interlocked.Read(ref _acceptedCount);
 
     public static string Fingerprint(string applicationVersion, BindingDiagnostic diagnostic) =>
         CanonicalJson.Hash(JsonSerializer.SerializeToElement(new
