@@ -32,6 +32,11 @@ $ApiProjectRoles = @(
     "roles/logging.logWriter",
     "roles/pubsub.publisher"
 )
+$WorkerProjectRoles = @(
+    "roles/aiplatform.user",
+    "roles/datastore.user",
+    "roles/logging.logWriter"
+)
 
 function Assert-GcloudPrerequisites {
     Get-Command gcloud -ErrorAction Stop | Out-Null
@@ -141,3 +146,5 @@ Ensure-FirestoreDatabase
 Ensure-PubSubTopic
 $ApiServiceAccountEmail = Ensure-ServiceAccount $ApiServiceAccount "WPF Reliability API"
 Grant-ProjectRoles $ApiServiceAccountEmail $ApiProjectRoles
+$WorkerServiceAccountEmail = Ensure-ServiceAccount $WorkerServiceAccount "WPF Reliability Worker"
+Grant-ProjectRoles $WorkerServiceAccountEmail $WorkerProjectRoles
