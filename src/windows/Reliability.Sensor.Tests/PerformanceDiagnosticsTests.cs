@@ -10,18 +10,18 @@ namespace Reliability.Sensor.Tests;
 public sealed class PerformanceDiagnosticsTests
 {
     [Fact]
-    public void CircularBufferOverwritesTheOldestSampleAtCapacity()
+    public void CircularBufferRemainsBoundedAcrossManyWraps()
     {
         var buffer = new FixedCircularBuffer<int>(120);
 
-        for (var value = 1; value <= 121; value++)
+        for (var value = 1; value <= 100_000; value++)
         {
             buffer.Add(value);
         }
 
         Assert.Equal(120, buffer.Count);
-        Assert.Equal(2, buffer.Snapshot()[0]);
-        Assert.Equal(121, buffer.Snapshot()[^1]);
+        Assert.Equal(99_881, buffer.Snapshot()[0]);
+        Assert.Equal(100_000, buffer.Snapshot()[^1]);
     }
 
     [Fact]
