@@ -63,3 +63,13 @@ def test_reporter_rejects_claim_with_unknown_evidence_id() -> None:
 
     with pytest.raises(ValidationError, match="unknown evidence IDs"):
         IncidentReport.model_validate(payload)
+
+
+def test_reporter_rejects_reverse_timeline_order() -> None:
+    from app.models import IncidentReport
+
+    payload = json.loads((FIXTURES / "incident-report-mitigated.json").read_text(encoding="utf-8"))
+    payload["timeline"].reverse()
+
+    with pytest.raises(ValidationError, match="timeline must be ordered"):
+        IncidentReport.model_validate(payload)
