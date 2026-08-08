@@ -155,6 +155,7 @@ def test_incident_create_writes_complete_initial_state() -> None:
             "state": "NEW",
             "state_version": 1,
             "audit_sequence": 0,
+            "audit_entry_hash": "0" * 64,
             "evidence_revision": 0,
             "proposal_version": 0,
             "investigation_round_count": 0,

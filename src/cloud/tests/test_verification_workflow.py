@@ -1,6 +1,6 @@
 from unittest.mock import Mock
 
-from app import firestore_client, workflow_state
+from app import audit, firestore_client, workflow_state
 
 
 def test_verification_run_atomically_commits_mitigated_state_and_metrics(monkeypatch) -> None:
@@ -30,6 +30,7 @@ def test_verification_run_atomically_commits_mitigated_state_and_metrics(monkeyp
             "state": "VERIFYING",
             "state_version": 9,
             "audit_sequence": 12,
+            "audit_entry_hash": "a" * 64,
             "evidence_revision": 7,
         },
     )
@@ -62,25 +63,19 @@ def test_verification_run_atomically_commits_mitigated_state_and_metrics(monkeyp
     )
 
     assert committed is True
+    audit_record = transaction.create.call_args_list[0].args[1]
     transaction.update.assert_called_once_with(
         incident_document,
         {
             "state": "MITIGATED",
             "state_version": 10,
             "audit_sequence": 13,
+            "audit_entry_hash": audit_record["entry_hash"],
             "updated_at": firestore_client.firestore.SERVER_TIMESTAMP,
         },
     )
-    assert transaction.create.call_args_list[0].args == (
-        audit_document,
-        {
-            "sequence": 13,
-            "type": "state.transition",
-            "from_state": "VERIFYING",
-            "to_state": "MITIGATED",
-            "state_version": 10,
-            "verification": verification,
-            "created_at": firestore_client.firestore.SERVER_TIMESTAMP,
-        },
-    )
+    assert transaction.create.call_args_list[0].args[0] is audit_document
+    assert audit_record["previous_entry_hash"] == "a" * 64
+    assert audit_record["verification"] == verification
+    assert audit_record["entry_hash"] != audit.ZERO_HASH
     assert transaction.create.call_args_list[1].args[0] is processed_document

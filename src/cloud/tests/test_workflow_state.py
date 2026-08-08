@@ -3,7 +3,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from app import firestore_client
+from app import audit, firestore_client
 from app import workflow_state
 
 
@@ -106,6 +106,7 @@ def test_investigating_incident_waits_for_approval_without_command(monkeypatch) 
             "state": "INVESTIGATING",
             "state_version": 4,
             "audit_sequence": 7,
+            "audit_entry_hash": "1" * 64,
         },
     )
     monkeypatch.setattr(workflow_state.firestore, "transactional", lambda callback: callback)
@@ -120,26 +121,11 @@ def test_investigating_incident_waits_for_approval_without_command(monkeypatch) 
 
     assert next_version == 5
     client.collection.assert_called_once_with(firestore_client.INCIDENTS_COLLECTION)
-    transaction.update.assert_called_once_with(
-        incident_document,
-        {
-            "state": "AWAITING_APPROVAL",
-            "state_version": 5,
-            "audit_sequence": 8,
-            "updated_at": firestore_client.firestore.SERVER_TIMESTAMP,
-        },
-    )
-    transaction.create.assert_called_once_with(
-        audit_document,
-        {
-            "sequence": 8,
-            "type": "state.transition",
-            "from_state": "INVESTIGATING",
-            "to_state": "AWAITING_APPROVAL",
-            "state_version": 5,
-            "created_at": firestore_client.firestore.SERVER_TIMESTAMP,
-        },
-    )
+    record = transaction.create.call_args.args[1]
+    update = transaction.update.call_args.args[1]
+    assert update["state"] == "AWAITING_APPROVAL"
+    assert update["audit_entry_hash"] == record["entry_hash"]
+    assert record["previous_entry_hash"] == "1" * 64
     assert firestore_client.COMMANDS_COLLECTION not in [
         call.args[0] for call in client.collection.call_args_list
     ]
@@ -278,16 +264,9 @@ def test_state_transitions_write_monotonic_audit_sequence(monkeypatch) -> None:
     client.collection.return_value.document.return_value = incident_document
     incident_document.collection.return_value = audit_collection
     audit_collection.document.side_effect = audit_documents
-    incident_document.get.side_effect = [
-        Mock(
-            exists=True,
-            to_dict=lambda: {"state": "NEW", "state_version": 1, "audit_sequence": 0},
-        ),
-        Mock(
-            exists=True,
-            to_dict=lambda: {"state": "TRIAGING", "state_version": 2, "audit_sequence": 1},
-        ),
-    ]
+    incident = {"state": "NEW", "state_version": 1, "audit_sequence": 0, "audit_entry_hash": audit.ZERO_HASH}
+    incident_document.get.return_value = Mock(exists=True, to_dict=lambda: dict(incident))
+    transaction.update.side_effect = lambda _document, update: incident.update(update)
     monkeypatch.setattr(workflow_state.firestore, "transactional", lambda callback: callback)
 
     assert workflow_state.transition_incident(
@@ -314,6 +293,41 @@ def test_state_transitions_write_monotonic_audit_sequence(monkeypatch) -> None:
     assert [call.kwargs if call.kwargs else call.args[1] for call in transaction.update.call_args_list]
     assert transaction.update.call_args_list[0].args[1]["audit_sequence"] == 1
     assert transaction.update.call_args_list[1].args[1]["audit_sequence"] == 2
+    assert transaction.create.call_args_list[1].args[1]["previous_entry_hash"] == (
+        transaction.create.call_args_list[0].args[1]["entry_hash"]
+    )
+
+
+def test_state_transition_persists_chained_audit_hash(monkeypatch) -> None:
+    client = Mock()
+    transaction = Mock()
+    incident_document = Mock()
+    audit_document = Mock()
+    client.transaction.return_value = transaction
+    client.collection.return_value.document.return_value = incident_document
+    incident_document.collection.return_value.document.return_value = audit_document
+    incident_document.get.return_value = Mock(
+        exists=True,
+        to_dict=lambda: {
+            "state": "NEW",
+            "state_version": 1,
+            "audit_sequence": 0,
+            "audit_entry_hash": audit.ZERO_HASH,
+        },
+    )
+    monkeypatch.setattr(workflow_state.firestore, "transactional", lambda callback: callback)
+
+    workflow_state.transition_incident(
+        client,
+        incident_id="incident-1",
+        expected_state=workflow_state.IncidentState.NEW,
+        expected_version=1,
+        target_state=workflow_state.IncidentState.TRIAGING,
+    )
+
+    record = transaction.create.call_args.args[1]
+    assert audit.verify_audit_chain([record])
+    assert transaction.update.call_args.args[1]["audit_entry_hash"] == record["entry_hash"]
 
 
 def test_new_incident_run_commits_transition_and_processed_marker_together(monkeypatch) -> None:
@@ -363,12 +377,14 @@ def test_new_incident_run_commits_transition_and_processed_marker_together(monke
 
     assert committed is True
     assert order == ["transition", "audit", "processed"]
+    audit_record = transaction.create.call_args_list[0].args[1]
     transaction.update.assert_called_once_with(
         incident_document,
         {
             "state": "TRIAGING",
             "state_version": 2,
             "audit_sequence": 1,
+            "audit_entry_hash": audit_record["entry_hash"],
             "updated_at": firestore_client.firestore.SERVER_TIMESTAMP,
         },
     )

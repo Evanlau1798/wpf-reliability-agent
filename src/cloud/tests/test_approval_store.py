@@ -218,6 +218,7 @@ def test_rejected_decision_enters_rejected_reporting_path_without_command(monkey
             "state": "AWAITING_APPROVAL",
             "state_version": 5,
             "audit_sequence": 8,
+            "audit_entry_hash": "8" * 64,
         },
     )
     monkeypatch.setattr(firestore_client.firestore, "transactional", lambda callback: callback)
@@ -239,12 +240,14 @@ def test_rejected_decision_enters_rejected_reporting_path_without_command(monkey
             "updated_at": firestore_client.firestore.SERVER_TIMESTAMP,
         },
     )
+    state_audit = next(call.args[1] for call in transaction.create.call_args_list if call.args[1].get("type") == "state.transition")
     transaction.update.assert_any_call(
         snapshot.reference.parent.parent,
         {
             "state": "REJECTED",
             "state_version": 6,
             "audit_sequence": 9,
+            "audit_entry_hash": state_audit["entry_hash"],
             "updated_at": firestore_client.firestore.SERVER_TIMESTAMP,
         },
     )

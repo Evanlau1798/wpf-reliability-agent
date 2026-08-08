@@ -10,7 +10,6 @@ from app.contracts import sha256_canonical
 from app.models import ApprovalRecord, ApprovalStatus, DiagnosticCommand, ProposedAction, RiskLevel
 from app.policy import POLICY_VERSION
 
-
 DEVICES_COLLECTION = "devices"
 INCIDENTS_COLLECTION = "incidents"
 EVIDENCE_COLLECTION = "evidence"
@@ -425,6 +424,7 @@ def build_incident_document(
         "state": "NEW",
         "state_version": 1,
         "audit_sequence": 0,
+        "audit_entry_hash": "0" * 64,
         "evidence_revision": evidence_revision,
         "proposal_version": 0,
         "investigation_round_count": 0,

@@ -62,6 +62,31 @@ def build_audit_record(
     return {**event.model_dump(mode="json"), **payload}
 
 
+def build_state_transition_audit(
+    incident: dict[str, object],
+    *,
+    sequence: int,
+    from_state: str,
+    to_state: str,
+    state_version: int,
+    extra: dict[str, object] | None = None,
+) -> dict[str, object]:
+    previous_hash = incident.get("audit_entry_hash")
+    if previous_hash is None and incident.get("audit_sequence") == 0:
+        previous_hash = ZERO_HASH
+    if not isinstance(previous_hash, str):
+        raise ValueError("Incident audit entry hash is invalid")
+    return build_audit_record(
+        sequence=sequence,
+        event_type="state.transition",
+        actor_type="SYSTEM",
+        actor_id="reliability-worker",
+        payload={"from_state": from_state, "to_state": to_state, "state_version": state_version, **(extra or {})},
+        previous_entry_hash=previous_hash,
+        timestamp_utc=datetime.now(timezone.utc),
+    )
+
+
 def verify_audit_chain(records: list[dict[str, object]]) -> bool:
     previous_hash = ZERO_HASH
     for expected_sequence, record in enumerate(records, start=1):

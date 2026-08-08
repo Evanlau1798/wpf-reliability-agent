@@ -3,6 +3,7 @@ from enum import StrEnum
 
 from google.cloud import firestore
 
+from app.audit import build_state_transition_audit
 from app.contracts import sha256_canonical
 from app.firestore_client import (
     AUDIT_COLLECTION, COMMANDS_COLLECTION, INCIDENTS_COLLECTION, PROCESSED_RUNS_COLLECTION,
@@ -248,26 +249,24 @@ def transition_incident_in_transaction(
     audit_document = incident_document.collection(AUDIT_COLLECTION).document(
         str(next_audit_sequence)
     )
+    audit_record = build_state_transition_audit(
+        incident,
+        sequence=next_audit_sequence,
+        from_state=expected_state.value,
+        to_state=target_state.value,
+        state_version=next_version,
+    )
     transaction.update(
         incident_document,
         {
             "state": target_state.value,
             "state_version": next_version,
             "audit_sequence": next_audit_sequence,
+            "audit_entry_hash": audit_record["entry_hash"],
             "updated_at": firestore.SERVER_TIMESTAMP,
         },
     )
-    transaction.create(
-        audit_document,
-        {
-            "sequence": next_audit_sequence,
-            "type": "state.transition",
-            "from_state": expected_state.value,
-            "to_state": target_state.value,
-            "state_version": next_version,
-            "created_at": firestore.SERVER_TIMESTAMP,
-        },
-    )
+    transaction.create(audit_document, audit_record)
     return next_version
 
 
@@ -378,26 +377,24 @@ def commit_new_incident_run(
         audit_document = incident_document.collection(AUDIT_COLLECTION).document(
             str(next_audit_sequence)
         )
+        audit_record = build_state_transition_audit(
+            incident,
+            sequence=next_audit_sequence,
+            from_state="NEW",
+            to_state="TRIAGING",
+            state_version=next_version,
+        )
         transaction.update(
             incident_document,
             {
                 "state": "TRIAGING",
                 "state_version": next_version,
                 "audit_sequence": next_audit_sequence,
+                "audit_entry_hash": audit_record["entry_hash"],
                 "updated_at": firestore.SERVER_TIMESTAMP,
             },
         )
-        transaction.create(
-            audit_document,
-            {
-                "sequence": next_audit_sequence,
-                "type": "state.transition",
-                "from_state": "NEW",
-                "to_state": "TRIAGING",
-                "state_version": next_version,
-                "created_at": firestore.SERVER_TIMESTAMP,
-            },
-        )
+        transaction.create(audit_document, audit_record)
         transaction.create(
             processed_document,
             {
@@ -464,27 +461,25 @@ def commit_verification_run(
         audit_document = incident_document.collection(AUDIT_COLLECTION).document(
             str(next_audit_sequence)
         )
+        audit_record = build_state_transition_audit(
+            incident,
+            sequence=next_audit_sequence,
+            from_state=IncidentState.VERIFYING.value,
+            to_state=target_state.value,
+            state_version=next_version,
+            extra={"verification": verification},
+        )
         transaction.update(
             incident_document,
             {
                 "state": target_state.value,
                 "state_version": next_version,
                 "audit_sequence": next_audit_sequence,
+                "audit_entry_hash": audit_record["entry_hash"],
                 "updated_at": firestore.SERVER_TIMESTAMP,
             },
         )
-        transaction.create(
-            audit_document,
-            {
-                "sequence": next_audit_sequence,
-                "type": "state.transition",
-                "from_state": IncidentState.VERIFYING.value,
-                "to_state": target_state.value,
-                "state_version": next_version,
-                "verification": verification,
-                "created_at": firestore.SERVER_TIMESTAMP,
-            },
-        )
+        transaction.create(audit_document, audit_record)
         transaction.create(
             processed_document,
             {

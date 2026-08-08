@@ -468,10 +468,11 @@ def test_successful_mutation_completion_marks_verification_pending(monkeypatch) 
         "app_session_id": "session-1",
         "evidence_revision": 5,
         "pending_command_id": command["command_id"],
-        "state": "EXECUTING",
-        "state_version": 8,
-        "audit_sequence": 11,
-    }
+            "state": "EXECUTING",
+            "state_version": 8,
+            "audit_sequence": 11,
+            "audit_entry_hash": "b" * 64,
+        }
     incident_document.get.return_value = Mock(exists=True, to_dict=lambda: incident)
     monkeypatch.setattr(commands.firestore, "transactional", lambda callback: callback)
     result = CommandResult.model_validate_json(
