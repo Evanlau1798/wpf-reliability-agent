@@ -5,7 +5,18 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from app.audit import AuditEvent, build_audit_record, verify_audit_chain
+from app.audit import (
+    ZERO_HASH,
+    AuditEvent,
+    build_approval_decision_audit,
+    build_audit_record,
+    build_mutation_execution_audit,
+    build_mutation_verification_audit,
+    build_state_transition_audit,
+    build_tool_request_audit,
+    build_tool_result_audit,
+    verify_audit_chain,
+)
 from app.contracts import sha256_canonical
 
 
@@ -77,3 +88,54 @@ def test_entry_hash_chain_detects_changed_payload() -> None:
     assert verify_audit_chain([first, second])
     changed = {**second, "outcome": "FAILED_SAFE"}
     assert not verify_audit_chain([first, changed])
+
+
+def test_complete_audit_ledger_chain_passes_and_rejects_tampering() -> None:
+    first = build_state_transition_audit(
+        {"audit_sequence": 0, "audit_entry_hash": ZERO_HASH},
+        sequence=1,
+        from_state="NEW",
+        to_state="TRIAGING",
+        state_version=2,
+    )
+    request = build_tool_request_audit(
+        {"audit_sequence": 1, "audit_entry_hash": first["entry_hash"]},
+        tool="ui.get_subtree",
+        request_hash="1" * 64,
+    )
+    result = build_tool_result_audit(
+        {"audit_sequence": 2, "audit_entry_hash": request["entry_hash"]},
+        tool="ui.get_subtree",
+        command_id="command-1",
+        result_hash="2" * 64,
+        actor_id="device-1",
+    )
+    approval = build_approval_decision_audit(
+        {"audit_sequence": 3, "audit_entry_hash": result["entry_hash"]},
+        approval_id="approval-1",
+        actor="demo-operator",
+        status="APPROVED",
+        timestamp_utc=datetime(2026, 8, 8, 6, 1, tzinfo=timezone.utc),
+    )
+    execution = build_mutation_execution_audit(
+        {"audit_sequence": 4, "audit_entry_hash": approval["entry_hash"]},
+        command_id="command-2",
+        action_id="action-1",
+        arguments_hash="3" * 64,
+        result_hash="4" * 64,
+        status="SUCCEEDED",
+        actor_id="device-1",
+    )
+    verification = build_mutation_verification_audit(
+        {"audit_sequence": 5, "audit_entry_hash": execution["entry_hash"]},
+        command_id="command-2",
+        action_id="action-1",
+        arguments_hash="3" * 64,
+        result_hash="4" * 64,
+        verification={"outcome": "MITIGATED", "post_evidence_id": "post-1"},
+    )
+    records = [first, request, result, approval, execution, verification]
+
+    assert verify_audit_chain(records)
+    tampered = [*records[:-1], {**verification, "result_hash": "5" * 64}]
+    assert not verify_audit_chain(tampered)
