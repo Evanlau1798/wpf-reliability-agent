@@ -7,6 +7,7 @@ param(
     [string]$ArtifactRepository = "reliability-agent",
     [string]$PubSubTopic = "incident-work",
     [string]$PubSubSubscription = "incident-work-push",
+    [string]$DeadLetterTopic = "incident-work-dead-letter",
     [string]$ImageName = "reliability-agent",
     [string]$ApiServiceAccount = "reliability-api-sa",
     [string]$WorkerServiceAccount = "reliability-worker-sa",
@@ -105,14 +106,16 @@ function Ensure-FirestoreDatabase {
 }
 
 function Ensure-PubSubTopic {
-    & gcloud pubsub topics describe $PubSubTopic --project $ProjectId --format="value(name)" 2>$null | Out-Null
+    param([string]$Name)
+
+    & gcloud pubsub topics describe $Name --project $ProjectId --format="value(name)" 2>$null | Out-Null
     if ($LASTEXITCODE -eq 0) {
         return
     }
 
-    & gcloud pubsub topics create $PubSubTopic --project $ProjectId
+    & gcloud pubsub topics create $Name --project $ProjectId
     if ($LASTEXITCODE -ne 0) {
-        throw "Pub/Sub topic creation failed."
+        throw "Pub/Sub topic creation failed for '$Name'."
     }
 }
 
@@ -161,12 +164,16 @@ function Grant-WorkerInvoker {
     }
 }
 
-function Grant-PubSubTokenCreator {
+function Get-PubSubServiceAgentEmail {
     $ProjectNumber = (& gcloud projects describe $ProjectId --format="value(projectNumber)").Trim()
     if ($LASTEXITCODE -ne 0 -or -not $ProjectNumber) {
         throw "Unable to resolve project number for Pub/Sub service agent."
     }
-    $PubSubServiceAgent = "service-$ProjectNumber@gcp-sa-pubsub.iam.gserviceaccount.com"
+    return "service-$ProjectNumber@gcp-sa-pubsub.iam.gserviceaccount.com"
+}
+
+function Grant-PubSubTokenCreator {
+    $PubSubServiceAgent = Get-PubSubServiceAgentEmail
     & gcloud iam service-accounts add-iam-policy-binding $PubSubInvokerServiceAccountEmail --project=$ProjectId --member="serviceAccount:$PubSubServiceAgent" --role=roles/iam.serviceAccountTokenCreator --condition=None --quiet | Out-Null
     if ($LASTEXITCODE -ne 0) {
         throw "Pub/Sub OIDC token creator binding failed."
@@ -177,13 +184,25 @@ function Ensure-PushSubscription {
     $PushEndpoint = "$WorkerUrl/v1/work:push"
     & gcloud pubsub subscriptions describe $PubSubSubscription --project=$ProjectId --format="value(name)" 2>$null | Out-Null
     if ($LASTEXITCODE -eq 0) {
-        & gcloud pubsub subscriptions update $PubSubSubscription --project=$ProjectId --push-endpoint="$PushEndpoint" --push-auth-service-account=$PubSubInvokerServiceAccountEmail --push-auth-token-audience=$WorkerUrl | Out-Null
+        & gcloud pubsub subscriptions update $PubSubSubscription --project=$ProjectId --push-endpoint="$PushEndpoint" --push-auth-service-account=$PubSubInvokerServiceAccountEmail --push-auth-token-audience=$WorkerUrl --dead-letter-topic=$DeadLetterTopic --max-delivery-attempts=5 | Out-Null
     }
     else {
-        & gcloud pubsub subscriptions create $PubSubSubscription --project=$ProjectId --topic=$PubSubTopic --push-endpoint="$PushEndpoint" --push-auth-service-account=$PubSubInvokerServiceAccountEmail --push-auth-token-audience=$WorkerUrl | Out-Null
+        & gcloud pubsub subscriptions create $PubSubSubscription --project=$ProjectId --topic=$PubSubTopic --push-endpoint="$PushEndpoint" --push-auth-service-account=$PubSubInvokerServiceAccountEmail --push-auth-token-audience=$WorkerUrl --dead-letter-topic=$DeadLetterTopic --max-delivery-attempts=5 | Out-Null
     }
     if ($LASTEXITCODE -ne 0) {
         throw "Authenticated Pub/Sub push subscription configuration failed."
+    }
+}
+
+function Grant-DeadLetterAccess {
+    $PubSubServiceAgent = Get-PubSubServiceAgentEmail
+    & gcloud pubsub topics add-iam-policy-binding $DeadLetterTopic --project=$ProjectId --member="serviceAccount:$PubSubServiceAgent" --role=roles/pubsub.publisher --condition=None --quiet | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Dead-letter topic publisher binding failed."
+    }
+    & gcloud pubsub subscriptions add-iam-policy-binding $PubSubSubscription --project=$ProjectId --member="serviceAccount:$PubSubServiceAgent" --role=roles/pubsub.subscriber --condition=None --quiet | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Source subscription subscriber binding failed."
     }
 }
 
@@ -253,7 +272,8 @@ Enable-RequiredApis
 Assert-CloudBuildPermission
 Ensure-ArtifactRepository
 Ensure-FirestoreDatabase
-Ensure-PubSubTopic
+Ensure-PubSubTopic $PubSubTopic
+Ensure-PubSubTopic $DeadLetterTopic
 $ApiServiceAccountEmail = Ensure-ServiceAccount $ApiServiceAccount "WPF Reliability API"
 Grant-ProjectRoles $ApiServiceAccountEmail $ApiProjectRoles
 $WorkerServiceAccountEmail = Ensure-ServiceAccount $WorkerServiceAccount "WPF Reliability Worker"
@@ -307,3 +327,4 @@ Grant-WorkerInvoker $PubSubInvokerServiceAccountEmail
 $WorkerRevision = (& gcloud run services describe $WorkerService --region=$Region --project=$ProjectId --format="value(status.latestReadyRevisionName)").Trim()
 Grant-PubSubTokenCreator
 Ensure-PushSubscription
+Grant-DeadLetterAccess

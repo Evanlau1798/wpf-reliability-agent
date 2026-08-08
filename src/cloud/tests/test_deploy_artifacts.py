@@ -66,8 +66,9 @@ def test_deploy_script_preserves_existing_firestore_database() -> None:
 def test_deploy_script_creates_pubsub_topic_only_when_missing() -> None:
     script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
 
-    assert "gcloud pubsub topics describe $PubSubTopic" in script
-    assert "gcloud pubsub topics create $PubSubTopic" in script
+    assert "gcloud pubsub topics describe $Name" in script
+    assert "gcloud pubsub topics create $Name" in script
+    assert "Ensure-PubSubTopic $PubSubTopic" in script
 
 
 def test_deploy_script_creates_api_service_account_with_minimal_project_roles() -> None:
@@ -180,3 +181,16 @@ def test_push_subscription_uses_worker_url_and_oidc_invoker_identity() -> None:
     assert '--push-endpoint="$PushEndpoint"' in script
     assert "--push-auth-service-account=$PubSubInvokerServiceAccountEmail" in script
     assert "--push-auth-token-audience=$WorkerUrl" in script
+
+
+def test_push_subscription_has_bounded_dead_letter_delivery() -> None:
+    script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
+
+    assert '[string]$DeadLetterTopic = "incident-work-dead-letter"' in script
+    assert "Ensure-PubSubTopic $DeadLetterTopic" in script
+    assert "--dead-letter-topic=$DeadLetterTopic" in script
+    assert "--max-delivery-attempts=5" in script
+    assert "gcloud pubsub topics add-iam-policy-binding $DeadLetterTopic" in script
+    assert "--role=roles/pubsub.publisher" in script
+    assert "gcloud pubsub subscriptions add-iam-policy-binding $PubSubSubscription" in script
+    assert "--role=roles/pubsub.subscriber" in script
