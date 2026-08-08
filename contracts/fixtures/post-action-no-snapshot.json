@@ -1,0 +1,43 @@
+{
+  "missing_post_evidence_id": "post-1",
+  "evidence": [
+    {
+      "evidence_id": "binding-before",
+      "event_type": "binding.aggregate",
+      "app_session_id": "session-1",
+      "timestamp_utc": "2026-08-08T01:00:00Z",
+      "payload": {
+        "occurrence_count": 50,
+        "aggregation_window_ms": 10000,
+        "last_seen_utc": "2026-08-08T00:59:59Z"
+      }
+    },
+    {
+      "evidence_id": "performance-before",
+      "event_type": "performance.sample",
+      "app_session_id": "session-1",
+      "timestamp_utc": "2026-08-08T01:00:01Z",
+      "payload": {
+        "frame_statistics": { "sample_count": 120, "p95_milliseconds": 48.0 },
+        "sample_duration_ms": 2000.0,
+        "confidence": "HIGH",
+        "visual_count": 1500,
+        "visual_count_truncated": false,
+        "visual_scope_id": "element-session-1-7"
+      }
+    },
+    {
+      "evidence_id": "command-1",
+      "event_type": "tool.result",
+      "command_id": "command-1",
+      "tool": "recovery.set_feature_flag",
+      "app_session_id": "session-1",
+      "result": {
+        "status": "SUCCEEDED",
+        "started_at_utc": "2026-08-08T01:00:02Z",
+        "completed_at_utc": "2026-08-08T01:00:03Z",
+        "result": { "status": "APPLIED" }
+      }
+    }
+  ]
+}

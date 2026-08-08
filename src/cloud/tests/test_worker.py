@@ -1,6 +1,7 @@
 import base64
 import io
 import json
+from pathlib import Path
 from unittest.mock import Mock
 
 from fastapi.testclient import TestClient
@@ -10,6 +11,9 @@ from app import worker
 from app import worker_auth
 from app.logging_config import configure_logging
 from app.main import app
+
+
+FIXTURES = Path(__file__).parents[3] / "contracts" / "fixtures"
 
 
 def test_worker_push_route_is_available_only_to_worker_role(monkeypatch) -> None:
@@ -284,6 +288,32 @@ def test_recovery_work_returns_inconclusive_evidence_to_investigating(monkeypatc
     assert response.status_code == 204
     assert committed[0]["target_state"] is main.IncidentState.INVESTIGATING
     assert committed[0]["verification"] == {"outcome": "INCONCLUSIVE"}
+
+
+def test_recovery_work_without_post_snapshot_never_commits_success_state(monkeypatch) -> None:
+    fixture = json.loads((FIXTURES / "post-action-no-snapshot.json").read_text(encoding="utf-8"))
+    _set_environment(monkeypatch, "worker")
+    _allow_identity(monkeypatch)
+    firestore_client = object()
+    commit = Mock()
+    monkeypatch.setattr(main, "get_firestore_client", lambda _project_id: firestore_client)
+    monkeypatch.setattr(main, "is_run_processed", lambda *_args: False)
+    monkeypatch.setattr(main, "load_incident_evidence", lambda *_args: fixture["evidence"])
+    monkeypatch.setattr(main, "commit_verification_run", commit)
+
+    with TestClient(app, raise_server_exceptions=False) as client:
+        response = client.post(
+            "/v1/work:push",
+            headers={"Authorization": "Bearer signed-token"},
+            json=_push_envelope(
+                trigger="recovery.result",
+                evidence_revision=7,
+                event_id=fixture["missing_post_evidence_id"],
+            ),
+        )
+
+    assert response.status_code == 500
+    commit.assert_not_called()
 
 
 def test_recovery_regression_enters_failed_safe_with_rollback_guidance(monkeypatch) -> None:
