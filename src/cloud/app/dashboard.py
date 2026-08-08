@@ -312,7 +312,26 @@ def _report_item(incident_id: str, version: str, report: dict[str, object]) -> s
     return (
         f"<li>Version {_display(version)} — SHA-256: {_display(report_hash)} — "
         f'<a href="{_display(base)}.md" download>Markdown</a> — '
-        f'<a href="{_display(base)}.html" download>HTML</a></li>'
+        f'<a href="{_display(base)}.html" download>HTML</a>'
+        f"{_render_patch_proposal(report)}</li>"
+    )
+
+
+def _render_patch_proposal(report: dict[str, object]) -> str:
+    recommendation = report.get("permanent_recommendation")
+    if not isinstance(recommendation, dict):
+        return ""
+    patch = recommendation.get("patch_proposal")
+    if not isinstance(patch, dict):
+        return ""
+    return (
+        "<div><h3>Patch Proposal</h3><dl>"
+        f"<dt>Target</dt><dd>{_display(patch.get('target_file'))}</dd>"
+        f"<dt>SHA-256</dt><dd>{_display(patch.get('target_file_sha256'))}</dd>"
+        f"<dt>Line</dt><dd>{_display(patch.get('target_line'))}</dd>"
+        "</dl><pre><code>"
+        f"{_display(patch.get('unified_diff'))}"
+        "</code></pre></div>"
     )
 
 

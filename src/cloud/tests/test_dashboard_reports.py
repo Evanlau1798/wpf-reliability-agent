@@ -27,6 +27,26 @@ def test_console_incident_detail_shows_report_downloads_and_hash(monkeypatch) ->
     assert 'href="/console/incidents/incident-1/reports/1.html"' in response.text
 
 
+def test_console_incident_detail_renders_escaped_patch_proposal(monkeypatch) -> None:
+    diff = (
+        '- Text="{Binding DisplayNmae}"\n'
+        '+ Text="{Binding DisplayName}" <script>alert(1)</script>'
+    )
+    client, _report = _report_client(patch_diff=diff)
+    _set_api_environment(monkeypatch)
+    monkeypatch.setattr("app.main.get_firestore_client", lambda _project_id: client)
+
+    with TestClient(app, base_url="https://testserver") as test_client:
+        assert test_client.post("/console/login", json={"token": "operator-secret"}).status_code == 204
+        response = test_client.get("/console/incidents/incident-1")
+
+    assert response.status_code == 200
+    assert "Patch Proposal" in response.text
+    assert "DisplayNmae" in response.text and "DisplayName" in response.text
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in response.text
+    assert "<script>alert(1)</script>" not in response.text
+
+
 def test_console_report_download_requires_operator_session_and_serves_both_formats(monkeypatch) -> None:
     client, _report = _report_client()
     _set_api_environment(monkeypatch)
@@ -49,11 +69,19 @@ def test_console_report_download_requires_operator_session_and_serves_both_forma
     assert html.text.startswith("<!doctype html>\n")
 
 
-def _report_client() -> tuple[Mock, IncidentReport]:
+def _report_client(*, patch_diff: str | None = None) -> tuple[Mock, IncidentReport]:
     report = IncidentReport.model_validate_json(
         (FIXTURES / "incident-report-mitigated.json").read_text(encoding="utf-8")
     )
     payload = report.model_dump(mode="json")
+    if patch_diff is not None:
+        payload["permanent_recommendation"]["patch_proposal"] = {
+            "target_file": "src/windows/Demo.BrokenWpfApp/MainWindow.xaml",
+            "target_file_sha256": "a" * 64,
+            "target_line": 42,
+            "unified_diff": patch_diff,
+            "evidence_ids": ["evidence-before-1"],
+        }
     payload["metadata"]["report_sha256"] = "f" * 64
     report_snapshot = Mock(id="1", exists=True)
     report_snapshot.to_dict.return_value = payload
