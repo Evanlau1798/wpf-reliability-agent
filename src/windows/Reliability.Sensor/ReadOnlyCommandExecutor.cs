@@ -161,6 +161,9 @@ internal sealed class ReadOnlyCommandExecutor
                 unsupported_reason = entry.UnsupportedReason,
                 file_sha256 = entry.FileSha256,
                 build_commit = entry.BuildCommit,
+                source_snippet = entry.SourceSnippet,
+                source_snippet_start_line = entry.SourceSnippetStartLine,
+                source_snippet_truncated = entry.SourceSnippetTruncated,
             }),
         });
     }

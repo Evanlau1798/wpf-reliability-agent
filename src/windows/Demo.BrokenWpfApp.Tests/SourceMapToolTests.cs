@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using System.Xml;
 using Reliability.Sensor;
@@ -187,6 +188,41 @@ public sealed class SourceMapToolTests
         Assert.Equal(
             first.Entries.Select(entry => entry.Key).Order(StringComparer.Ordinal),
             first.Entries.Select(entry => entry.Key));
+    }
+
+    [Fact]
+    public void SourceMapSnippetIsBoundedByLinesAndUtf8Bytes()
+    {
+        var repositoryRoot = Directory.CreateTempSubdirectory("source-map-snippet-");
+        var projectRoot = Directory.CreateDirectory(Path.Combine(repositoryRoot.FullName, "Demo"));
+        var sourcePath = Path.Combine(projectRoot.FullName, "MainWindow.xaml");
+        var lines = new List<string>
+        {
+            "<Window xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" xmlns:x=\"http://schemas.microsoft.com/winfx/2006/xaml\" x:Class=\"Demo.MainWindow\">",
+        };
+        lines.AddRange(Enumerable.Range(0, 41).Select(index => $"  <!-- before {index:D2} -->"));
+        lines.Add($"  <TextBlock x:Name=\"PersonName\" Text=\"{{Binding DisplayNmae}}\" Tag=\"{new string('é', 3_000)}\" />");
+        lines.AddRange(Enumerable.Range(0, 41).Select(index => $"  <!-- after {index:D2} -->"));
+        lines.Add("</Window>");
+        File.WriteAllText(sourcePath, string.Join('\n', lines));
+
+        try
+        {
+            var entry = Assert.Single(SourceMapGenerator.GenerateSourceMap(
+                repositoryRoot.FullName,
+                projectRoot.FullName,
+                buildCommit: null).Entries);
+
+            Assert.InRange(entry.SourceSnippet.Split('\n').Length, 1, 40);
+            Assert.True(Encoding.UTF8.GetByteCount(entry.SourceSnippet) <= 4_096);
+            Assert.True(entry.SourceSnippetTruncated);
+            Assert.True(entry.SourceSnippetStartLine > 1);
+            Assert.Contains("{Binding DisplayNmae}", entry.SourceSnippet, StringComparison.Ordinal);
+        }
+        finally
+        {
+            repositoryRoot.Delete(recursive: true);
+        }
     }
 
     [Fact]

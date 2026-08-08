@@ -8,6 +8,8 @@ namespace Reliability.SourceMap;
 
 public static class SourceMapGenerator
 {
+    private const int MaxSnippetLines = 40;
+    private const int MaxSnippetBytes = 4_096;
     private static readonly XNamespace XamlNamespace = "http://schemas.microsoft.com/winfx/2006/xaml";
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -194,6 +196,7 @@ public static class SourceMapGenerator
         var windowType = GetXClass(document);
         var relativePath = NormalizeRepoRelativePath(repositoryRoot, path);
         var fileSha256 = ComputeFileSha256(path);
+        var sourceLines = File.ReadAllLines(path);
 
         foreach (var element in document.Root.DescendantsAndSelf())
         {
@@ -208,7 +211,8 @@ public static class SourceMapGenerator
                     element,
                     attribute.Name.LocalName,
                     parsed,
-                    attribute);
+                    attribute,
+                    sourceLines);
             }
         }
 
@@ -233,7 +237,8 @@ public static class SourceMapGenerator
                 target,
                 targetProperty,
                 parsed,
-                binding);
+                binding,
+                sourceLines);
         }
     }
 
@@ -245,11 +250,13 @@ public static class SourceMapGenerator
         XElement element,
         string targetProperty,
         BindingParseResult parsed,
-        XObject source)
+        XObject source,
+        IReadOnlyList<string> sourceLines)
     {
         var ancestors = GetNamedAncestorChain(element);
         var elementName = GetXName(element) ?? element.Name.LocalName;
         var position = GetSourcePosition(source) ?? new SourcePosition(0, 0);
+        var snippet = BuildSourceSnippet(sourceLines, position.Line);
         var key = string.Join(
             '/',
             windowType ?? "unknown",
@@ -268,7 +275,42 @@ public static class SourceMapGenerator
             parsed.Path,
             parsed.UnsupportedReason,
             fileSha256,
-            buildCommit);
+            buildCommit,
+            snippet.Text,
+            snippet.StartLine,
+            snippet.Truncated);
+    }
+
+    private static (string Text, int StartLine, bool Truncated) BuildSourceSnippet(
+        IReadOnlyList<string> lines,
+        int sourceLine)
+    {
+        if (lines.Count == 0)
+        {
+            return (string.Empty, 1, false);
+        }
+
+        var targetIndex = Math.Clamp(sourceLine - 1, 0, lines.Count - 1);
+        var startIndex = Math.Max(0, targetIndex - (MaxSnippetLines / 2));
+        startIndex = Math.Min(startIndex, Math.Max(0, lines.Count - MaxSnippetLines));
+        var lineCount = Math.Min(MaxSnippetLines, lines.Count - startIndex);
+        var text = string.Join('\n', lines.Skip(startIndex).Take(lineCount));
+        var truncated = startIndex > 0 || startIndex + lineCount < lines.Count;
+        if (Encoding.UTF8.GetByteCount(text) > MaxSnippetBytes)
+        {
+            var bytes = new byte[MaxSnippetBytes];
+            Encoding.UTF8.GetEncoder().Convert(
+                text.AsSpan(),
+                bytes,
+                flush: true,
+                out var charsUsed,
+                out _,
+                out _);
+            text = text[..charsUsed];
+            truncated = true;
+        }
+
+        return (text, startIndex + 1, truncated);
     }
 
     private static bool IsBindingMarkup(XAttribute attribute) =>

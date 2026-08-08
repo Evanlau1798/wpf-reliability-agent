@@ -28,6 +28,9 @@ public sealed class SourceMapLookupTests
                 unsupported_reason = (string?)null,
                 file_sha256 = new string('a', 64),
                 build_commit = new string('b', 40),
+                source_snippet = "<TextBlock Text=\"{Binding DisplayNmae}\" />",
+                source_snippet_start_line = 42,
+                source_snippet_truncated = false,
             },
             new
             {
@@ -44,6 +47,9 @@ public sealed class SourceMapLookupTests
                 unsupported_reason = (string?)null,
                 file_sha256 = new string('a', 64),
                 build_commit = new string('b', 40),
+                source_snippet = "<TextBlock Text=\"{Binding Age}\" />",
+                source_snippet_start_line = 50,
+                source_snippet_truncated = false,
             },
         }));
 
@@ -111,6 +117,11 @@ public sealed class SourceMapLookupTests
         Assert.Equal(17, matches[0].GetProperty("column").GetInt32());
         Assert.Equal("Text", matches[0].GetProperty("target_property").GetString());
         Assert.Equal("DisplayNmae", matches[0].GetProperty("binding_path").GetString());
+        Assert.Equal(
+            "<TextBlock Text=\"{Binding DisplayNmae}\" />",
+            matches[0].GetProperty("source_snippet").GetString());
+        Assert.Equal(42, matches[0].GetProperty("source_snippet_start_line").GetInt32());
+        Assert.False(matches[0].GetProperty("source_snippet_truncated").GetBoolean());
     }
 
     private static async Task<DiagnosticCommand> ReadCommandAsync()

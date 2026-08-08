@@ -13,4 +13,7 @@ public sealed record SourceMapEntry(
     string? BindingPath,
     string? UnsupportedReason,
     string FileSha256,
-    string? BuildCommit);
+    string? BuildCommit,
+    string SourceSnippet,
+    int SourceSnippetStartLine,
+    bool SourceSnippetTruncated);
