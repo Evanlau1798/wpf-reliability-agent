@@ -157,13 +157,13 @@ public sealed class BindingDiagnosticsTests
     }
 
     [Fact]
-    public async Task OneThousandDuplicateErrorsProduceAtMostTwoBoundedEvents()
+    public async Task TenThousandDuplicateErrorsProduceAtMostTwoBoundedEvents()
     {
         await using var sensor = ReliabilitySensor.Start(Options());
         var aggregator = new BindingDiagnosticAggregator(sensor, TimeSpan.FromSeconds(10), burstThreshold: 10);
         var start = DateTimeOffset.UtcNow;
 
-        for (var index = 0; index < 1_000; index++)
+        for (var index = 0; index < 10_000; index++)
         {
             aggregator.Accept(new BindingTraceMessage(start.AddMilliseconds(index), PropertyNotFoundMessage, false));
         }
