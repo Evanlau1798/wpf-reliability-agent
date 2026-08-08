@@ -48,6 +48,13 @@ public static class SourceMapGenerator
             .OfType<string>()
             .ToArray();
 
+    public static string? GetTargetProperty(XElement binding)
+    {
+        var localName = binding.Parent?.Name.LocalName;
+        var separator = localName?.LastIndexOf('.') ?? -1;
+        return separator >= 0 ? localName![(separator + 1)..] : null;
+    }
+
     private static bool IsBuildOutput(string root, string path)
     {
         var relative = Path.GetRelativePath(root, path);

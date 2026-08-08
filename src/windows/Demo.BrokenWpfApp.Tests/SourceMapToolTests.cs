@@ -85,6 +85,17 @@ public sealed class SourceMapToolTests
             SourceMapGenerator.GetNamedAncestorChain(textBlock));
     }
 
+    [Fact]
+    public void ReadsBindingTargetProperty()
+    {
+        var path = Path.Combine(RepositoryRoot(), "src", "windows", "Demo.BrokenWpfApp", "MainWindow.xaml");
+        var document = SourceMapGenerator.LoadXaml(path);
+        var binding = document.Descendants().Single(element =>
+            element.Name.LocalName == "Binding" && (string?)element.Attribute("Path") == "DisplayNmae");
+
+        Assert.Equal("Text", SourceMapGenerator.GetTargetProperty(binding));
+    }
+
     private static string RepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
