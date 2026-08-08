@@ -20,7 +20,8 @@
   ],
   "evidence": [
     { "evidence_id": "evidence-before-1", "kind": "binding.aggregate", "summary": "High binding error rate." },
-    { "evidence_id": "evidence-after-1", "kind": "performance.sample", "summary": "Binding rate and frame p95 improved." }
+    { "evidence_id": "evidence-after-1", "kind": "performance.sample", "summary": "Binding rate and frame p95 improved." },
+    { "evidence_id": "source-command-1", "kind": "source.lookup_binding", "summary": "Exact source-map attribution for DisplayNmae." }
   ],
   "claims": [
     {
@@ -37,7 +38,14 @@
   },
   "permanent_recommendation": {
     "summary": "Correct DisplayNmae to DisplayName and remove per-row animation.",
-    "source_fix_verified": false
+    "source_fix_verified": false,
+    "patch_proposal": {
+      "target_file": "src/windows/Demo.BrokenWpfApp/MainWindow.xaml",
+      "target_file_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "target_line": 42,
+      "unified_diff": "- Text=\"{Binding DisplayNmae}\"\n+ Text=\"{Binding DisplayName}\"",
+      "evidence_ids": ["source-command-1"]
+    }
   },
   "verification": [
     {

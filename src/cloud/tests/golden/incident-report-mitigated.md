@@ -22,6 +22,7 @@
 ## Evidence Index
 - evidence-before-1 | binding.aggregate | High binding error rate.
 - evidence-after-1 | performance.sample | Binding rate and frame p95 improved.
+- source-command-1 | source.lookup\_binding | Exact source-map attribution for DisplayNmae.
 
 ## Root-Cause Hypotheses
 - None recorded.
@@ -40,6 +41,12 @@
 ## Permanent Engineering Recommendation
 - Summary: Correct DisplayNmae to DisplayName and remove per-row animation.
 - Source fix verified: false
+- Patch proposal target: src/windows/Demo.BrokenWpfApp/MainWindow.xaml:42
+- Patch proposal SHA-256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+- Patch proposal evidence: source-command-1
+- Patch proposal unified diff:
+  - Text="\{Binding DisplayNmae\}"
+  \+ Text="\{Binding DisplayName\}"
 
 ## Risk Assessment
 - Incident severity: ERROR

@@ -234,6 +234,28 @@ def test_markdown_renderer_is_deterministic_and_model_free(monkeypatch) -> None:
     assert "MITIGATED" in first
 
 
+def test_permanent_patch_proposal_renders_without_resolving_incident() -> None:
+    from app.models import IncidentReport
+    from app.reporting import render_report_markdown
+
+    payload = json.loads((FIXTURES / "incident-report-mitigated.json").read_text(encoding="utf-8"))
+    payload["permanent_recommendation"]["patch_proposal"] = {
+        "target_file": "src/windows/Demo.BrokenWpfApp/MainWindow.xaml",
+        "target_file_sha256": "a" * 64,
+        "target_line": 42,
+        "unified_diff": '- Text="{Binding DisplayNmae}"\n+ Text="{Binding DisplayName}"',
+        "evidence_ids": ["evidence-before-1"],
+    }
+    report = IncidentReport.model_validate(payload)
+
+    rendered = render_report_markdown(report)
+
+    assert report.status.value == "MITIGATED"
+    assert "Patch proposal" in rendered
+    assert "src/windows/Demo.BrokenWpfApp/MainWindow.xaml" in rendered
+    assert "DisplayNmae" in rendered and "DisplayName" in rendered
+
+
 def test_html_renderer_escapes_untrusted_report_text() -> None:
     from app.models import IncidentReport
     from app.reporting import render_report_html

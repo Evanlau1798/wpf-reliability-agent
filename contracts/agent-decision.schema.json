@@ -16,6 +16,7 @@
     },
     "next_command": { "type": ["object", "null"] },
     "proposed_action": { "$ref": "#/$defs/actionOrNull" },
+    "patch_proposal": { "$ref": "#/$defs/patchOrNull" },
     "stop_reason": { "type": ["string", "null"], "maxLength": 1024 },
     "missing_evidence": {
       "type": "array",
@@ -48,6 +49,24 @@
         "rollback_plan": { "type": "string", "minLength": 1, "maxLength": 2048 }
       }
     },
-    "actionOrNull": { "oneOf": [{ "$ref": "#/$defs/action" }, { "type": "null" }] }
+    "patch": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["target_file", "target_file_sha256", "target_line", "unified_diff", "evidence_ids"],
+      "properties": {
+        "target_file": { "type": "string", "minLength": 1, "maxLength": 1024 },
+        "target_file_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "target_line": { "type": "integer", "minimum": 1 },
+        "unified_diff": { "type": "string", "minLength": 1, "maxLength": 32768 },
+        "evidence_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 20,
+          "items": { "$ref": "#/$defs/id" }
+        }
+      }
+    },
+    "actionOrNull": { "oneOf": [{ "$ref": "#/$defs/action" }, { "type": "null" }] },
+    "patchOrNull": { "oneOf": [{ "$ref": "#/$defs/patch" }, { "type": "null" }] }
   }
 }

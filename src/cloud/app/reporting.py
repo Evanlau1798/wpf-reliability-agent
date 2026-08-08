@@ -285,6 +285,17 @@ def render_report_markdown(report: IncidentReport) -> str:
                 f"- Source fix verified: {str(recommendation.source_fix_verified).lower()}",
             ]
         )
+        if recommendation.patch_proposal is not None:
+            patch = recommendation.patch_proposal
+            lines.extend(
+                [
+                    f"- Patch proposal target: {md(patch.target_file)}:{patch.target_line}",
+                    f"- Patch proposal SHA-256: {patch.target_file_sha256}",
+                    f"- Patch proposal evidence: {', '.join(md(item) for item in patch.evidence_ids)}",
+                    "- Patch proposal unified diff:",
+                ]
+            )
+            lines.extend(f"  {md(line)}" for line in patch.unified_diff.splitlines())
     lines.extend(
         [
             "",
