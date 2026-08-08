@@ -55,6 +55,18 @@ public static class SourceMapGenerator
         return separator >= 0 ? localName![(separator + 1)..] : null;
     }
 
+    public static string? ParseBindingPath(string markup)
+    {
+        const string prefix = "{Binding ";
+        if (!markup.StartsWith(prefix, StringComparison.Ordinal) || !markup.EndsWith('}'))
+        {
+            return null;
+        }
+
+        var path = markup[prefix.Length..^1].Trim();
+        return path.Length > 0 && !path.Contains(',') && !path.Contains('=') ? path : null;
+    }
+
     private static bool IsBuildOutput(string root, string path)
     {
         var relative = Path.GetRelativePath(root, path);

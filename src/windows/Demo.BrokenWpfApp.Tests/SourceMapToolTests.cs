@@ -96,6 +96,12 @@ public sealed class SourceMapToolTests
         Assert.Equal("Text", SourceMapGenerator.GetTargetProperty(binding));
     }
 
+    [Fact]
+    public void ParsesBindingShorthandPath()
+    {
+        Assert.Equal("DisplayNmae", SourceMapGenerator.ParseBindingPath("{Binding DisplayNmae}"));
+    }
+
     private static string RepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
