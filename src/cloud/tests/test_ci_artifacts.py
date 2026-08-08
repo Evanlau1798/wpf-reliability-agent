@@ -62,3 +62,11 @@ def test_python_jobs_use_setup_python_dependency_cache() -> None:
     assert workflow.count('cache: "pip"') == 2
     assert workflow.count("cache-dependency-path: src/cloud/pyproject.toml") == 2
     assert "actions/cache" not in workflow
+
+
+def test_ci_runs_for_pull_requests_and_master_pushes() -> None:
+    workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+    assert "  pull_request:" in workflow
+    assert "  push:" in workflow
+    assert "branches: [master]" in workflow
