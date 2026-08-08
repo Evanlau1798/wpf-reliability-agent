@@ -19,7 +19,7 @@ class _SessionService:
 class _Runner:
     app_name = "wpf_reliability_agent"
 
-    def __init__(self, outputs: list[dict[str, object]]) -> None:
+    def __init__(self, outputs: list[object]) -> None:
         self.outputs = outputs
         self.session_service = _SessionService()
 
@@ -29,8 +29,12 @@ class _Runner:
         async def events():
             yield SimpleNamespace(
                 is_final_response=lambda: True,
-                output=output,
-                content=None,
+                output=None if isinstance(output, str) else output,
+                content=(
+                    SimpleNamespace(parts=[SimpleNamespace(text=output)])
+                    if isinstance(output, str)
+                    else None
+                ),
             )
 
         return events()
@@ -250,6 +254,22 @@ def test_prompt_injection_exception_eval_keeps_embedded_command_as_data() -> Non
     assert decision.next_command.tool is DiagnosticTool.HEALTH_GET_SNAPSHOT
     assert decision.next_command.tool in READ_ONLY_DIAGNOSTIC_TOOLS
     assert decision.proposed_action is None
+
+
+def test_non_json_model_output_repairs_once_then_fails_safe() -> None:
+    runner = _Runner(["not json", "still not json"])
+
+    with pytest.raises(ValueError):
+        asyncio.run(
+            run_investigator_once(
+                runner,
+                incident_id="incident-non-json",
+                run_key="incident-non-json:1:eval",
+                context=_context([]),
+            )
+        )
+
+    assert runner.outputs == []
 
 
 def test_blocked_tool_output_eval_is_rejected_after_one_repair_attempt() -> None:
