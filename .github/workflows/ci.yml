@@ -8,3 +8,19 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Install contract test dependencies
+        working-directory: src/cloud
+        run: python -m pip install -e ".[test]"
+      - name: Validate Python contract schemas and fixtures
+        working-directory: src/cloud
+        run: python -m pytest tests/test_contracts.py -q
+      - name: Build contract fixture tests
+        run: dotnet build src/windows/Reliability.Sensor.Tests/Reliability.Sensor.Tests.csproj -c Release
+      - name: Verify cross-language contract fixtures
+        run: dotnet test src/windows/Reliability.Sensor.Tests/Reliability.Sensor.Tests.csproj -c Release --no-build --filter FullyQualifiedName~ContractFixtureTests
