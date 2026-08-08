@@ -72,6 +72,14 @@ public static class SourceMapGenerator
         return path.Length > 0 && !path.Contains(',') && !path.Contains('=') ? path : null;
     }
 
+    public static BindingParseResult ParseBinding(string markup)
+    {
+        var path = ParseBindingPath(markup);
+        return path is null
+            ? new BindingParseResult(null, "unsupported_binding_markup")
+            : new BindingParseResult(path, null);
+    }
+
     private static bool IsBuildOutput(string root, string path)
     {
         var relative = Path.GetRelativePath(root, path);

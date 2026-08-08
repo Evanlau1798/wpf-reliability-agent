@@ -108,6 +108,15 @@ public sealed class SourceMapToolTests
         Assert.Equal("DisplayNmae", SourceMapGenerator.ParseBindingPath("{Binding Path=DisplayNmae}"));
     }
 
+    [Fact]
+    public void ReportsUnsupportedBindingMarkupWithoutGuessing()
+    {
+        var result = SourceMapGenerator.ParseBinding("{Binding Path=DisplayNmae, Mode=OneWay}");
+
+        Assert.Null(result.Path);
+        Assert.Equal("unsupported_binding_markup", result.UnsupportedReason);
+    }
+
     private static string RepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
