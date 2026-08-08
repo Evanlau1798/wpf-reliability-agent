@@ -160,6 +160,7 @@ public sealed class BindingSignalIntegrationTests
                 .GetResult();
 
             Assert.Equal(RecoveryStatus.APPLIED, result.Status);
+            Assert.False(result.AfterState);
             Assert.Equal(
                 Visibility.Visible,
                 Assert.IsAssignableFrom<FrameworkElement>(window.FindName("FallbackView")).Visibility);
