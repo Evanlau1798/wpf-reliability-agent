@@ -137,6 +137,41 @@ public sealed class UiDiagnosticsTests
     }
 
     [Fact]
+    public void HugeTreeRemainsBoundedByTraversalAndPayloadBudgets()
+    {
+        var result = RunSta(() =>
+        {
+            var root = new StackPanel();
+            for (var branchIndex = 0; branchIndex < 100; branchIndex++)
+            {
+                var branch = new StackPanel();
+                for (var childIndex = 0; childIndex < 100; childIndex++)
+                {
+                    branch.Children.Add(new TextBlock());
+                }
+                root.Children.Add(branch);
+            }
+
+            return UiTreeSnapshotter.Capture(
+                root,
+                new UiTreeOptions(),
+                new ElementIdentityRegistry("session"),
+                _ => false);
+        });
+        var byteCount = JsonSerializer.SerializeToUtf8Bytes(new
+        {
+            nodes = result.Nodes,
+            truncated = result.Truncated,
+            omitted_node_count = result.OmittedNodeCount,
+        }).Length;
+
+        Assert.True(result.Truncated);
+        Assert.Equal(300, result.Nodes.Count);
+        Assert.True(result.OmittedNodeCount > 0);
+        Assert.InRange(byteCount, 1, 65_000);
+    }
+
+    [Fact]
     public async Task ElementDetailsRejectUnknownFieldsAndUnknownSessionElements()
     {
         await using var sensor = ReliabilitySensor.Start(Options());
