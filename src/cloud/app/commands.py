@@ -306,6 +306,7 @@ def complete_command_once(
                 "event_type": "tool.result",
                 "command_id": command_id,
                 "tool": command.tool.value,
+                **({"privacy_classification": "source_code"} if command.tool is DiagnosticTool.SOURCE_LOOKUP_BINDING else {}),
                 "app_session_id": result.app_session_id,
                 "evidence_hash": result.result_hash,
                 "result": result.model_dump(mode="json"),

@@ -379,7 +379,7 @@ def test_conflicting_command_result_is_rejected_without_overwrite(monkeypatch) -
     transaction.update.assert_not_called()
 
 
-def test_first_completion_persists_material_tool_result_evidence(monkeypatch) -> None:
+def test_source_lookup_completion_persists_source_code_evidence(monkeypatch) -> None:
     client = Mock()
     transaction = Mock()
     command_collection = Mock()
@@ -399,7 +399,7 @@ def test_first_completion_persists_material_tool_result_evidence(monkeypatch) ->
     command = json.loads(
         (FIXTURES / "diagnostic-command-valid-read.json").read_text(encoding="utf-8")
     )
-    command.update({"status": CommandStatus.LEASED.value, "lease_owner": "device-a"})
+    command.update({"status": CommandStatus.LEASED.value, "lease_owner": "device-a", "tool": "source.lookup_binding"})
     command_document.get.return_value = Mock(exists=True, to_dict=lambda: command)
     incident_document.get.return_value = Mock(
         exists=True,
@@ -431,7 +431,8 @@ def test_first_completion_persists_material_tool_result_evidence(monkeypatch) ->
     assert transaction.create.call_count == 2
     stored = next(call.args[1] for call in transaction.create.call_args_list if call.args[1].get("event_type") == "tool.result")
     assert stored["command_id"] == "command-read-1"
-    assert stored["tool"] == "ui.get_subtree"
+    assert stored["tool"] == "source.lookup_binding"
+    assert stored["privacy_classification"] == "source_code"
     assert stored["evidence_hash"] == result.result_hash
     assert stored["result"] == result.model_dump(mode="json")
 
