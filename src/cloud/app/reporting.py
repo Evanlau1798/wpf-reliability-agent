@@ -3,7 +3,7 @@ from typing import Annotated
 from google.adk.agents import Agent
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
-from app.models import Hash, Identifier, IncidentReport, UtcDateTime
+from app.models import Hash, Identifier, IncidentReport, IncidentStatus, UtcDateTime
 
 
 REPORTER_INSTRUCTION = """You write the final report for one WPF reliability incident.
@@ -43,6 +43,8 @@ def validate_reporter_output(reporter_input: ReporterInput, report: IncidentRepo
         record.reference for record in reporter_input.approvals
     }:
         raise ValueError("report references unknown approval ID")
+    if report.status is IncidentStatus.MITIGATED and not reporter_input.verification:
+        raise ValueError("MITIGATED report requires finalized post-action verification")
     return report
 
 

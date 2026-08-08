@@ -86,3 +86,32 @@ def test_reporter_rejects_temporary_mitigation_without_finalized_approval() -> N
 
     with pytest.raises(ValueError, match="unknown approval ID"):
         validate_reporter_output(reporter_input, report)
+
+
+def test_reporter_rejects_mitigated_report_without_finalized_post_action_verification() -> None:
+    from app.models import IncidentReport
+    from app.reporting import ReporterInput, validate_reporter_output
+
+    report = IncidentReport.model_validate_json(
+        (FIXTURES / "incident-report-mitigated.json").read_text(encoding="utf-8")
+    )
+    reporter_input = ReporterInput.model_validate(
+        {
+            "evidence": [],
+            "tools": [],
+            "approvals": [
+                {
+                    "reference": "approval-1",
+                    "kind": "approval.approved",
+                    "summary": "Approved feature rollback.",
+                    "payload_hash": "a" * 64,
+                    "related_ids": ["action-1"],
+                    "timestamp_utc": "2026-08-08T06:00:00Z",
+                }
+            ],
+            "verification": [],
+        }
+    )
+
+    with pytest.raises(ValueError, match="post-action verification"):
+        validate_reporter_output(reporter_input, report)
