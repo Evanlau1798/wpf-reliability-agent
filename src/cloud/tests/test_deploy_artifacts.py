@@ -133,3 +133,18 @@ def test_cloud_build_uses_explicit_minimal_identity_sha_tag_and_digest() -> None
     assert "gcloud artifacts docker images describe $ImageTag" in script
     assert "GIT_SHA=${_GIT_SHA}" in config
     assert "${_IMAGE_URI}" in config
+
+
+def test_api_deploy_uses_digest_identity_cost_limits_and_secret_refs() -> None:
+    script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
+
+    assert "gcloud secrets versions list $Name" in script
+    assert "gcloud run deploy $ApiService" in script
+    assert "--image=$ImageDigestRef" in script
+    assert "--service-account=$ApiServiceAccountEmail" in script
+    assert "--min-instances=0" in script
+    assert "--max-instances=2" in script
+    assert "--memory=512Mi" in script
+    assert "--allow-unauthenticated" in script
+    assert "DEMO_DEVICE_TOKEN=${DeviceTokenSecret}:latest" in script
+    assert "DEMO_OPERATOR_TOKEN=${OperatorTokenSecret}:latest" in script

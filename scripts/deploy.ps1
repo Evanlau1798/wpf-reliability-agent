@@ -13,7 +13,8 @@ param(
     [string]$BuildServiceAccount = "reliability-build-sa",
     [string]$DeviceTokenSecret = "reliability-device-token",
     [string]$OperatorTokenSecret = "reliability-operator-token",
-    [string]$BuildSourceBucket = ""
+    [string]$BuildSourceBucket = "",
+    [string]$DemoDeviceId = "demo-device"
 )
 
 Set-StrictMode -Version Latest
@@ -185,6 +186,15 @@ function Grant-SecretAccess {
     }
 }
 
+function Assert-SecretHasEnabledVersion {
+    param([string]$Name)
+
+    $version = (& gcloud secrets versions list $Name --project $ProjectId --filter="state=ENABLED" --limit=1 --format="value(name)").Trim()
+    if ($LASTEXITCODE -ne 0 -or -not $version) {
+        throw "Secret '$Name' needs an enabled version before deployment."
+    }
+}
+
 function Ensure-BuildSourceBucket {
     & gcloud storage buckets describe $BuildSourceBucketUri --project $ProjectId 2>$null | Out-Null
     if ($LASTEXITCODE -eq 0) {
@@ -229,6 +239,8 @@ Grant-SecretAccess $OperatorTokenSecret $ApiServiceAccountEmail
 Write-Host "Provision Secret Manager values through stdin before deployment:"
 Write-Host "  gcloud secrets versions add $DeviceTokenSecret --project $ProjectId --data-file=-"
 Write-Host "  gcloud secrets versions add $OperatorTokenSecret --project $ProjectId --data-file=-"
+Assert-SecretHasEnabledVersion $DeviceTokenSecret
+Assert-SecretHasEnabledVersion $OperatorTokenSecret
 $BuildServiceAccountEmail = Ensure-ServiceAccount $BuildServiceAccount "WPF Reliability Cloud Build"
 Grant-ProjectRoles $BuildServiceAccountEmail $BuildProjectRoles
 Ensure-BuildSourceBucket
@@ -249,3 +261,9 @@ if ($LASTEXITCODE -ne 0 -or -not $ImageDigest) {
     throw "Unable to resolve immutable image digest."
 }
 $ImageDigestRef = "${ImageBase}@$ImageDigest"
+& gcloud run deploy $ApiService --image=$ImageDigestRef --service-account=$ApiServiceAccountEmail --region=$Region --project=$ProjectId --min-instances=0 --max-instances=2 --memory=512Mi --port=8080 --set-env-vars="SERVICE_ROLE=api,GOOGLE_CLOUD_PROJECT=$ProjectId,DEMO_DEVICE_ID=$DemoDeviceId,PUBSUB_TOPIC=$PubSubTopic" --set-secrets="DEMO_DEVICE_TOKEN=${DeviceTokenSecret}:latest,DEMO_OPERATOR_TOKEN=${OperatorTokenSecret}:latest" --allow-unauthenticated --quiet | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    throw "API Cloud Run deployment failed."
+}
+$ApiUrl = (& gcloud run services describe $ApiService --region=$Region --project=$ProjectId --format="value(status.url)").Trim()
+$ApiRevision = (& gcloud run services describe $ApiService --region=$Region --project=$ProjectId --format="value(status.latestReadyRevisionName)").Trim()
