@@ -45,6 +45,7 @@ public sealed class PostActionEvidenceTests
             Assert.Equal("action-1", envelope.Correlation.GetProperty("action_id").GetString());
             Assert.Equal(1, envelope.Payload.GetProperty("binding_occurrence_count").GetInt64());
             Assert.Equal(2, envelope.Payload.GetProperty("visual_count").GetInt32());
+            Assert.Equal(sensor.GetElementId(root), envelope.Payload.GetProperty("visual_scope_id").GetString());
             Assert.True(ContractValidator.Validate(envelope));
         }
         finally

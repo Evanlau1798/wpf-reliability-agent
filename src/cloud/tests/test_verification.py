@@ -1,4 +1,4 @@
-from app.verification import binding_rate_delta, frame_p95_delta
+from app.verification import binding_rate_delta, frame_p95_delta, visual_count_delta
 
 
 def test_binding_rate_delta_normalizes_before_and_after_to_errors_per_second() -> None:
@@ -65,3 +65,33 @@ def test_frame_p95_delta_preserves_before_and_after_sample_confidence() -> None:
     assert delta.after_duration_ms == 1_500.0
     assert delta.before_confidence == "HIGH"
     assert delta.after_confidence == "HIGH"
+
+
+def test_visual_count_delta_requires_same_exact_scope() -> None:
+    before = {
+        "app_session_id": "session-1",
+        "payload": {
+            "visual_count": 1_500,
+            "visual_count_truncated": False,
+            "visual_scope_id": "element-session-1-7",
+        },
+    }
+    after = {
+        "app_session_id": "session-1",
+        "payload": {
+            "visual_count": 420,
+            "visual_count_truncated": False,
+            "visual_scope_id": "element-session-1-7",
+        },
+    }
+
+    delta = visual_count_delta(before, after)
+
+    assert delta is not None
+    assert delta.before == 1_500.0
+    assert delta.after == 420.0
+    assert delta.delta == -1_080.0
+    assert visual_count_delta(
+        before,
+        {**after, "payload": {**after["payload"], "visual_scope_id": "element-session-1-8"}},
+    ) is None

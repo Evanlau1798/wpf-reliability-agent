@@ -254,6 +254,7 @@ internal sealed class ReadOnlyCommandExecutor
             heartbeat_delay_ms = result.HeartbeatDelayMilliseconds,
             visual_count = result.VisualCount,
             visual_count_truncated = result.VisualCountTruncated,
+            visual_scope_id = result.VisualScopeId,
             error = result.Error is null ? null : new { code = result.Error.Code, message = result.Error.Message },
         });
     }

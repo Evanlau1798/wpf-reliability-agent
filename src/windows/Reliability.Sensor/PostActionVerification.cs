@@ -15,7 +15,8 @@ internal sealed record PostPerformanceWindowSnapshot(
     DateTimeOffset CompletedAtUtc,
     PerformanceFrameWindow Window,
     int VisualCount,
-    bool VisualCountTruncated);
+    bool VisualCountTruncated,
+    string VisualScopeId);
 
 public sealed partial class ReliabilitySensor
 {
@@ -56,11 +57,12 @@ public sealed partial class ReliabilitySensor
         var startedAt = DateTimeOffset.UtcNow;
         var baseline = collector.FrameSampleCount;
         await Task.Delay(window, cancellationToken).ConfigureAwait(false);
-        (int Count, bool Truncated) CaptureVisualCount()
+        (int Count, bool Truncated, string ScopeId) CaptureVisualCount()
         {
             var resolvedRoot = root ?? Application.Current?.MainWindow
                 ?? throw new InvalidOperationException("No WPF root element is available.");
-            return PerformanceVisualCounter.Count(resolvedRoot, collector.Options.MaxVisualNodes);
+            var visual = PerformanceVisualCounter.Count(resolvedRoot, collector.Options.MaxVisualNodes);
+            return (visual.Count, visual.Truncated, _elementIds.GetOrCreate(resolvedRoot));
         }
         var visual = collector.Dispatcher.CheckAccess()
             ? CaptureVisualCount()
@@ -71,7 +73,8 @@ public sealed partial class ReliabilitySensor
             DateTimeOffset.UtcNow,
             collector.CaptureFrameWindowSince(baseline),
             visual.Count,
-            visual.Truncated);
+            visual.Truncated,
+            visual.ScopeId);
     }
 
     internal async Task<string> CaptureAndQueuePostActionSnapshotAsync(
@@ -125,6 +128,7 @@ public sealed partial class ReliabilitySensor
             performance_confidence = performance.Window.Confidence,
             visual_count = performance.VisualCount,
             visual_count_truncated = performance.VisualCountTruncated,
+            visual_scope_id = performance.VisualScopeId,
         });
         if (!TryEnqueue(EventType.RecoveryResult, Severity.INFO, correlation, payload, out var envelope)
             || envelope is null)

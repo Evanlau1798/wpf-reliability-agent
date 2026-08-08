@@ -49,6 +49,7 @@ PAYLOAD_FIELDS = {
             "heartbeat_delay_ms",
             "visual_count",
             "visual_count_truncated",
+            "visual_scope_id",
         }
     ),
     EventType.TOOL_RESULT: frozenset(),
@@ -62,6 +63,7 @@ PAYLOAD_FIELDS = {
             "performance_confidence",
             "visual_count",
             "visual_count_truncated",
+            "visual_scope_id",
         }
     ),
 }

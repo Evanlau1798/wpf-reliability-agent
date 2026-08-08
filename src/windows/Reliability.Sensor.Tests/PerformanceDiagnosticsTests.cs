@@ -164,6 +164,7 @@ public sealed class PerformanceDiagnosticsTests
             Assert.Equal("PERFORMANCE_SAMPLE_COOLDOWN", second.Error?.Code);
             Assert.True(sensor.Events.TryRead(out var envelope));
             Assert.Equal(EventType.PerformanceSample, envelope.EventType);
+            Assert.Equal(sensor.GetElementId(root), envelope.Payload.GetProperty("visual_scope_id").GetString());
             Assert.True(ContractValidator.Validate(envelope));
             Assert.InRange(
                 JsonSerializer.SerializeToUtf8Bytes(envelope, ContractJsonContext.Default.DiagnosticEnvelope).Length,

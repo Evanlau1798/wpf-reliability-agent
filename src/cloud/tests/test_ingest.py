@@ -81,11 +81,13 @@ def test_performance_ingest_requires_explicit_matching_app_session() -> None:
             "sample_duration_ms": 1000.0,
             "confidence": "MEDIUM",
             "visual_count": 1500,
+            "visual_scope_id": "element-session-test-1",
         },
     )
     valid, rejected = validate_telemetry_events([event])
 
     assert rejected == []
+    assert valid[0].payload["visual_scope_id"] == "element-session-test-1"
     with pytest.raises(ValueError, match="app session"):
         ingest_performance_event(object(), valid[0], "device-test", "incident-1")
 
@@ -188,6 +190,7 @@ def test_recovery_result_persists_post_snapshot_as_incident_evidence(monkeypatch
             "performance_confidence": "HIGH",
             "visual_count": 420,
             "visual_count_truncated": False,
+            "visual_scope_id": "element-session-test-1",
         },
     )
     valid, rejected = validate_telemetry_events([event])
@@ -209,6 +212,7 @@ def test_recovery_result_persists_post_snapshot_as_incident_evidence(monkeypatch
     stored = captured["evidence"]
     assert stored["correlation"]["action_id"] == "action-1"
     assert stored["payload"]["performance_confidence"] == "HIGH"
+    assert stored["payload"]["visual_scope_id"] == "element-session-test-1"
     assert payload == {
         "incident_id": "incident-1",
         "evidence_revision": 7,

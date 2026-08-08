@@ -83,6 +83,31 @@ def frame_p95_delta(
     )
 
 
+def visual_count_delta(
+    before_evidence: dict[str, object],
+    after_evidence: dict[str, object],
+) -> MetricDelta | None:
+    before_session = before_evidence.get("app_session_id")
+    after_session = after_evidence.get("app_session_id")
+    if not isinstance(before_session, str) or before_session != after_session:
+        return None
+    before_payload = _payload(before_evidence)
+    after_payload = _payload(after_evidence)
+    before_scope = before_payload.get("visual_scope_id")
+    after_scope = after_payload.get("visual_scope_id")
+    if not isinstance(before_scope, str) or not before_scope or before_scope != after_scope:
+        return None
+    if before_payload.get("visual_count_truncated") is not False:
+        return None
+    if after_payload.get("visual_count_truncated") is not False:
+        return None
+    before_count = _integer(before_payload.get("visual_count"))
+    after_count = _integer(after_payload.get("visual_count"))
+    if before_count is None or after_count is None:
+        return None
+    return MetricDelta(float(before_count), float(after_count), float(after_count - before_count))
+
+
 def _payload(evidence: dict[str, object]) -> dict[str, object]:
     payload = evidence.get("payload")
     return payload if isinstance(payload, dict) else {}

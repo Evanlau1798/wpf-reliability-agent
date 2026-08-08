@@ -36,6 +36,7 @@ public sealed record PerformanceSampleResult(
     double HeartbeatDelayMilliseconds,
     int VisualCount,
     bool VisualCountTruncated,
+    string? VisualScopeId,
     PerformanceDiagnosticError? Error);
 
 internal sealed record PerformanceFrameWindow(
@@ -377,6 +378,7 @@ public sealed partial class ReliabilitySensor
             }
 
             var visual = PerformanceVisualCounter.Count(resolvedRoot, collector.Options.MaxVisualNodes);
+            var visualScopeId = _elementIds.GetOrCreate(resolvedRoot);
             var frames = collector.GetFrameStatistics();
             var confidence = frames.SampleCount >= 90
                 ? Confidence.HIGH
@@ -389,6 +391,7 @@ public sealed partial class ReliabilitySensor
                 collector.LastHeartbeatDelay.TotalMilliseconds,
                 visual.Count,
                 visual.Truncated,
+                visualScopeId,
                 null);
         }
 
@@ -409,6 +412,7 @@ public sealed partial class ReliabilitySensor
                     heartbeat_delay_ms = result.HeartbeatDelayMilliseconds,
                     visual_count = result.VisualCount,
                     visual_count_truncated = result.VisualCountTruncated,
+                    visual_scope_id = result.VisualScopeId,
                 }),
                 out _);
         }
@@ -450,5 +454,6 @@ public sealed partial class ReliabilitySensor
             0,
             0,
             false,
+            null,
             new PerformanceDiagnosticError(code, message));
 }
