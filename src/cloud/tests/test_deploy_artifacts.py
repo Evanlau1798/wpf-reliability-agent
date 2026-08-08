@@ -164,3 +164,19 @@ def test_worker_deploy_uses_same_digest_private_identity_and_limits() -> None:
     assert "gcloud run services update $WorkerService" in script
     assert "PUBSUB_PUSH_AUDIENCE=$WorkerUrl" in script
     assert "Grant-WorkerInvoker $PubSubInvokerServiceAccountEmail" in script
+
+
+def test_push_subscription_uses_worker_url_and_oidc_invoker_identity() -> None:
+    script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
+
+    assert '[string]$PubSubSubscription = "incident-work-push"' in script
+    assert "service-$ProjectNumber@gcp-sa-pubsub.iam.gserviceaccount.com" in script
+    assert "gcloud iam service-accounts add-iam-policy-binding $PubSubInvokerServiceAccountEmail" in script
+    assert "--role=roles/iam.serviceAccountTokenCreator" in script
+    assert "gcloud pubsub subscriptions describe $PubSubSubscription" in script
+    assert "gcloud pubsub subscriptions create $PubSubSubscription" in script
+    assert "gcloud pubsub subscriptions update $PubSubSubscription" in script
+    assert '$PushEndpoint = "$WorkerUrl/v1/work:push"' in script
+    assert '--push-endpoint="$PushEndpoint"' in script
+    assert "--push-auth-service-account=$PubSubInvokerServiceAccountEmail" in script
+    assert "--push-auth-token-audience=$WorkerUrl" in script
