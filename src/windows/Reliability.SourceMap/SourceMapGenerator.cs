@@ -11,6 +11,22 @@ public static class SourceMapGenerator
             .ToArray();
     }
 
+    public static string NormalizeRepoRelativePath(string repositoryRoot, string path)
+    {
+        var root = Path.GetFullPath(repositoryRoot);
+        var fullPath = Path.GetFullPath(path);
+        var relative = Path.GetRelativePath(root, fullPath);
+        if (Path.IsPathRooted(relative)
+            || relative == ".."
+            || relative.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+            || relative.StartsWith($"..{Path.AltDirectorySeparatorChar}", StringComparison.Ordinal))
+        {
+            throw new ArgumentOutOfRangeException(nameof(path), "Path must stay inside repository root.");
+        }
+
+        return relative.Replace(Path.DirectorySeparatorChar, '/');
+    }
+
     private static bool IsBuildOutput(string root, string path)
     {
         var relative = Path.GetRelativePath(root, path);

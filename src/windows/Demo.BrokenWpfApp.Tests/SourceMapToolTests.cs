@@ -32,6 +32,20 @@ public sealed class SourceMapToolTests
             StringComparison.OrdinalIgnoreCase));
     }
 
+    [Fact]
+    public void NormalizesRepoRelativePathsAndRejectsOutsidePaths()
+    {
+        var repositoryRoot = RepositoryRoot();
+        var mainWindow = Path.Combine(repositoryRoot, "src", "windows", "Demo.BrokenWpfApp", "MainWindow.xaml");
+        var outside = Path.GetFullPath(Path.Combine(repositoryRoot, "..", "outside.xaml"));
+
+        var relative = SourceMapGenerator.NormalizeRepoRelativePath(repositoryRoot, mainWindow);
+
+        Assert.Equal("src/windows/Demo.BrokenWpfApp/MainWindow.xaml", relative);
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => SourceMapGenerator.NormalizeRepoRelativePath(repositoryRoot, outside));
+    }
+
     private static string RepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
