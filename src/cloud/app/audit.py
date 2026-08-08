@@ -87,6 +87,62 @@ def build_state_transition_audit(
     )
 
 
+def build_tool_request_audit(
+    incident: dict[str, object], *, tool: str, request_hash: str
+) -> dict[str, object]:
+    return _build_next_incident_audit(
+        incident,
+        event_type="tool.request",
+        actor_type="AGENT",
+        actor_id="investigator",
+        payload={"tool": tool, "request_hash": request_hash},
+    )
+
+
+def build_tool_result_audit(
+    incident: dict[str, object],
+    *,
+    tool: str,
+    command_id: str,
+    result_hash: str,
+    actor_id: str,
+) -> dict[str, object]:
+    return _build_next_incident_audit(
+        incident,
+        event_type="tool.result",
+        actor_type="DEVICE",
+        actor_id=actor_id,
+        payload={"command_id": command_id, "tool": tool, "result_hash": result_hash},
+    )
+
+
+def _build_next_incident_audit(
+    incident: dict[str, object],
+    *,
+    event_type: str,
+    actor_type: str,
+    actor_id: str,
+    payload: dict[str, object],
+) -> dict[str, object]:
+    audit_sequence = incident.get("audit_sequence")
+    previous_hash = incident.get("audit_entry_hash")
+    if type(audit_sequence) is not int or audit_sequence < 0:
+        raise ValueError("Incident audit sequence is invalid")
+    if previous_hash is None and audit_sequence == 0:
+        previous_hash = ZERO_HASH
+    if not isinstance(previous_hash, str):
+        raise ValueError("Incident audit entry hash is invalid")
+    return build_audit_record(
+        sequence=audit_sequence + 1,
+        event_type=event_type,
+        actor_type=actor_type,
+        actor_id=actor_id,
+        payload=payload,
+        previous_entry_hash=previous_hash,
+        timestamp_utc=datetime.now(timezone.utc),
+    )
+
+
 def verify_audit_chain(records: list[dict[str, object]]) -> bool:
     previous_hash = ZERO_HASH
     for expected_sequence, record in enumerate(records, start=1):

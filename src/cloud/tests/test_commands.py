@@ -324,6 +324,7 @@ def test_same_command_result_resubmission_is_idempotent(monkeypatch) -> None:
             "app_session_id": "session-1",
             "evidence_revision": 5,
             "pending_command_id": "command-read-1",
+            "audit_sequence": 0, "audit_entry_hash": "0" * 64,
         },
     )
     monkeypatch.setattr(commands.firestore, "transactional", lambda callback: callback)
@@ -406,6 +407,7 @@ def test_first_completion_persists_material_tool_result_evidence(monkeypatch) ->
             "app_session_id": "session-1",
             "evidence_revision": 5,
             "pending_command_id": "command-read-1",
+            "audit_sequence": 0, "audit_entry_hash": "0" * 64,
         },
     )
     monkeypatch.setattr(commands.firestore, "transactional", lambda callback: callback)
@@ -423,22 +425,15 @@ def test_first_completion_persists_material_tool_result_evidence(monkeypatch) ->
 
     assert replay == (False, 6)
     assert transaction.update.call_count == 2
-    assert transaction.update.call_args_list[1].args == (
-        incident_document,
-        {
-            "evidence_revision": 6,
-            "pending_command_id": None,
-            "updated_at": commands.firestore.SERVER_TIMESTAMP,
-        },
-    )
-    transaction.create.assert_called_once()
-    stored = transaction.create.call_args.args
-    assert stored[0] is evidence_document
-    assert stored[1]["event_type"] == "tool.result"
-    assert stored[1]["command_id"] == "command-read-1"
-    assert stored[1]["tool"] == "ui.get_subtree"
-    assert stored[1]["evidence_hash"] == result.result_hash
-    assert stored[1]["result"] == result.model_dump(mode="json")
+    incident_update = transaction.update.call_args_list[1].args[1]
+    assert incident_update["evidence_revision"] == 6
+    assert incident_update["pending_command_id"] is None
+    assert transaction.create.call_count == 2
+    stored = next(call.args[1] for call in transaction.create.call_args_list if call.args[1].get("event_type") == "tool.result")
+    assert stored["command_id"] == "command-read-1"
+    assert stored["tool"] == "ui.get_subtree"
+    assert stored["evidence_hash"] == result.result_hash
+    assert stored["result"] == result.model_dump(mode="json")
 
 
 def test_successful_mutation_completion_marks_verification_pending(monkeypatch) -> None:
@@ -495,3 +490,8 @@ def test_successful_mutation_completion_marks_verification_pending(monkeypatch) 
     incident_updates = [call.args[1] for call in transaction.update.call_args_list]
     assert any(update.get("state") == "VERIFYING" for update in incident_updates)
     assert not any(update.get("state") == "MITIGATED" for update in incident_updates)
+    audits = [call.args[1] for call in transaction.create.call_args_list if call.args[1].get("type")]
+    assert [record["type"] for record in audits] == ["state.transition", "tool.result"]
+    assert audits[1]["sequence"] == audits[0]["sequence"] + 1
+    assert audits[1]["previous_entry_hash"] == audits[0]["entry_hash"]
+    assert "result" not in audits[1]

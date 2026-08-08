@@ -3,7 +3,7 @@ from enum import StrEnum
 
 from google.cloud import firestore
 
-from app.audit import build_state_transition_audit
+from app.audit import build_state_transition_audit, build_tool_request_audit
 from app.contracts import sha256_canonical
 from app.firestore_client import (
     AUDIT_COLLECTION, COMMANDS_COLLECTION, INCIDENTS_COLLECTION, PROCESSED_RUNS_COLLECTION,
@@ -115,14 +115,18 @@ def claim_read_only_tool_request(
         if current >= MAX_READ_ONLY_TOOL_CALLS:
             raise ValueError("Read-only tool call limit reached")
         next_count = current + 1
+        audit_record = build_tool_request_audit(incident, tool=tool, request_hash=request_key)
         transaction.update(
             incident_document,
             {
                 "read_only_tool_call_count": next_count,
                 "read_only_tool_request_keys": [*request_keys, request_key],
+                "audit_sequence": audit_record["sequence"],
+                "audit_entry_hash": audit_record["entry_hash"],
                 "updated_at": firestore.SERVER_TIMESTAMP,
             },
         )
+        transaction.create(incident_document.collection(AUDIT_COLLECTION).document(str(audit_record["sequence"])), audit_record)
         return request_key
 
     return claim(client.transaction())
@@ -216,7 +220,7 @@ def transition_incident(
             expected_state=expected_state,
             expected_version=expected_version,
             target_state=target_state,
-        )
+        )[0]
 
     return transition(client.transaction())
 
@@ -228,7 +232,7 @@ def transition_incident_in_transaction(
     expected_state: IncidentState,
     expected_version: int,
     target_state: IncidentState,
-) -> int:
+) -> tuple[int, dict[str, object]]:
     if (expected_state, target_state) not in ALLOWED_TRANSITIONS:
         raise ValueError("Illegal state transition")
     snapshot = incident_document.get(transaction=transaction)
@@ -267,7 +271,7 @@ def transition_incident_in_transaction(
         },
     )
     transaction.create(audit_document, audit_record)
-    return next_version
+    return next_version, audit_record
 
 
 def acquire_incident_lease(

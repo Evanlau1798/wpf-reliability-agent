@@ -209,7 +209,7 @@ def reject_pending_approval(
 
         from app.workflow_state import IncidentState, transition_incident_in_transaction
 
-        next_version = transition_incident_in_transaction(
+        next_version, _ = transition_incident_in_transaction(
             transaction,
             incident_document=incident_document,
             expected_state=IncidentState.AWAITING_APPROVAL,

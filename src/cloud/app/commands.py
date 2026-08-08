@@ -6,8 +6,10 @@ from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 from pydantic import BaseModel, Field
 
+from app.audit import build_tool_result_audit
 from app.contracts import sha256_canonical
 from app.firestore_client import (
+    AUDIT_COLLECTION,
     COMMANDS_COLLECTION,
     EVIDENCE_COLLECTION,
     INCIDENTS_COLLECTION,
@@ -224,6 +226,7 @@ def complete_command_once(
         pending_command_id = incident.get("pending_command_id")
         if pending_command_id not in {None, command_id}:
             raise ValueError("Incident pending command mismatch")
+        transition_audit = None
         if (
             command.tool is DiagnosticTool.RECOVERY_SET_FEATURE_FLAG
             and result.status is ResultStatus.SUCCEEDED
@@ -231,7 +234,7 @@ def complete_command_once(
             state_version = incident.get("state_version")
             if incident.get("state") != IncidentState.EXECUTING.value or type(state_version) is not int:
                 raise ValueError("Mutation completion incident state is invalid")
-            transition_incident_in_transaction(
+            _, transition_audit = transition_incident_in_transaction(
                 transaction,
                 incident_document=incident_document,
                 expected_state=IncidentState.EXECUTING,
@@ -252,6 +255,17 @@ def complete_command_once(
                 else CommandStatus.FAILED.value
             )
         )
+        audit_head = incident if transition_audit is None else {
+            "audit_sequence": transition_audit["sequence"],
+            "audit_entry_hash": transition_audit["entry_hash"],
+        }
+        audit_record = build_tool_result_audit(
+            audit_head,
+            tool=command.tool.value,
+            command_id=command_id,
+            result_hash=result.result_hash,
+            actor_id=lease_owner,
+        )
         transaction.update(
             document,
             {
@@ -269,6 +283,8 @@ def complete_command_once(
             {
                 "evidence_revision": evidence_revision,
                 "pending_command_id": None,
+                "audit_sequence": audit_record["sequence"],
+                "audit_entry_hash": audit_record["entry_hash"],
                 "updated_at": firestore.SERVER_TIMESTAMP,
             },
         )
@@ -283,6 +299,10 @@ def complete_command_once(
                 "result": result.model_dump(mode="json"),
                 "created_at": firestore.SERVER_TIMESTAMP,
             },
+        )
+        transaction.create(
+            incident_document.collection(AUDIT_COLLECTION).document(str(audit_record["sequence"])),
+            audit_record,
         )
         return False, evidence_revision
 

@@ -69,6 +69,8 @@ def test_read_only_tool_call_count_is_persisted_and_capped(monkeypatch) -> None:
     snapshot.to_dict.return_value = {
         "read_only_tool_call_count": 5,
         "read_only_tool_request_keys": ["request-1", "request-2", "request-3", "request-4", "request-5"],
+        "audit_sequence": 0,
+        "audit_entry_hash": "0" * 64,
     }
     assert workflow_state.claim_read_only_tool_request(
         client,
@@ -76,21 +78,11 @@ def test_read_only_tool_call_count_is_persisted_and_capped(monkeypatch) -> None:
         tool="ui.get_subtree",
         arguments=arguments,
     ) == request_key
-    transaction.update.assert_called_once_with(
-        document,
-        {
-            "read_only_tool_call_count": 6,
-            "read_only_tool_request_keys": [
-                "request-1",
-                "request-2",
-                "request-3",
-                "request-4",
-                "request-5",
-                request_key,
-            ],
-            "updated_at": workflow_state.firestore.SERVER_TIMESTAMP,
-        },
-    )
+    update = transaction.update.call_args.args[1]
+    assert update["read_only_tool_call_count"] == 6
+    assert update["read_only_tool_request_keys"][-1] == request_key
+    assert update["audit_sequence"] == 1
+    assert update["audit_entry_hash"] == transaction.create.call_args.args[1]["entry_hash"]
 
     snapshot.to_dict.return_value = {
         "read_only_tool_call_count": 6,
@@ -138,6 +130,8 @@ def test_duplicate_canonical_tool_request_is_rejected(monkeypatch) -> None:
     snapshot.to_dict.return_value = {
         "read_only_tool_call_count": 0,
         "read_only_tool_request_keys": [],
+        "audit_sequence": 0,
+        "audit_entry_hash": "0" * 64,
     }
     assert workflow_state.claim_read_only_tool_request(
         client,
@@ -145,14 +139,10 @@ def test_duplicate_canonical_tool_request_is_rejected(monkeypatch) -> None:
         tool="ui.get_subtree",
         arguments=first_arguments,
     ) == request_key
-    transaction.update.assert_called_once_with(
-        document,
-        {
-            "read_only_tool_call_count": 1,
-            "read_only_tool_request_keys": [request_key],
-            "updated_at": workflow_state.firestore.SERVER_TIMESTAMP,
-        },
-    )
+    update = transaction.update.call_args.args[1]
+    assert update["read_only_tool_call_count"] == 1
+    assert update["read_only_tool_request_keys"] == [request_key]
+    assert update["audit_sequence"] == 1
 
     snapshot.to_dict.return_value = {
         "read_only_tool_call_count": 1,
