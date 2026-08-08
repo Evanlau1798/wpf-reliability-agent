@@ -196,15 +196,15 @@ def test_approved_decision_creates_exact_unique_mutation_command(monkeypatch) ->
         "approved_at_utc": "2026-08-08T05:00:00Z",
         "updated_at": firestore_client.firestore.SERVER_TIMESTAMP,
     })
-    transaction.update.assert_any_call(snapshot.reference.parent.parent, {
-        "audit_sequence": 9, "updated_at": firestore_client.firestore.SERVER_TIMESTAMP,
-    })
     audit_event = next(
         call.args[1]
         for call in transaction.create.call_args_list
         if call.args[1].get("type") == "approval.decision"
     )
-    assert audit_event["actor"] == "demo-operator"
+    assert any(call.args[1].get("audit_entry_hash") == audit_event["entry_hash"] for call in transaction.update.call_args_list)
+    assert audit_event["actor_type"] == "HUMAN"
+    assert audit_event["actor_id"] == "demo-operator"
+    assert audit_event["previous_entry_hash"] == "8" * 64
     assert audit_event["status"] == "APPROVED"
     assert audit_event["timestamp_utc"] == "2026-08-08T05:00:00Z"
 
@@ -251,20 +251,16 @@ def test_rejected_decision_enters_rejected_reporting_path_without_command(monkey
             "updated_at": firestore_client.firestore.SERVER_TIMESTAMP,
         },
     )
-    transaction.update.assert_any_call(
-        snapshot.reference.parent.parent,
-        {
-            "audit_sequence": 10,
-            "updated_at": firestore_client.firestore.SERVER_TIMESTAMP,
-        },
-    )
     assert transaction.create.call_count == 2
     audit_event = next(
         call.args[1]
         for call in transaction.create.call_args_list
         if call.args[1].get("type") == "approval.decision"
     )
-    assert audit_event["actor"] == "demo-operator"
+    assert any(call.args[1].get("audit_entry_hash") == audit_event["entry_hash"] for call in transaction.update.call_args_list)
+    assert audit_event["actor_type"] == "HUMAN"
+    assert audit_event["actor_id"] == "demo-operator"
+    assert audit_event["previous_entry_hash"] == state_audit["entry_hash"]
     assert audit_event["status"] == "REJECTED"
     assert audit_event["timestamp_utc"] == "2026-08-08T05:00:00Z"
     assert client.collection.call_count == 0
@@ -447,6 +443,7 @@ def _approval_client(
             "state": "AWAITING_APPROVAL",
             "state_version": 5,
             "audit_sequence": 8,
+            "audit_entry_hash": "8" * 64,
         },
     )
     client.transaction.return_value = transaction

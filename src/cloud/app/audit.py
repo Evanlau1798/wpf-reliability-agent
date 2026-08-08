@@ -87,6 +87,24 @@ def build_state_transition_audit(
     )
 
 
+def build_approval_decision_audit(
+    incident: dict[str, object],
+    *,
+    approval_id: str,
+    actor: str,
+    status: str,
+    timestamp_utc: datetime,
+) -> dict[str, object]:
+    return _build_next_incident_audit(
+        incident,
+        event_type="approval.decision",
+        actor_type="HUMAN",
+        actor_id=actor,
+        payload={"approval_id": approval_id, "status": status},
+        timestamp_utc=timestamp_utc,
+    )
+
+
 def build_tool_request_audit(
     incident: dict[str, object], *, tool: str, request_hash: str
 ) -> dict[str, object]:
@@ -123,6 +141,7 @@ def _build_next_incident_audit(
     actor_type: str,
     actor_id: str,
     payload: dict[str, object],
+    timestamp_utc: datetime | None = None,
 ) -> dict[str, object]:
     audit_sequence = incident.get("audit_sequence")
     previous_hash = incident.get("audit_entry_hash")
@@ -139,7 +158,7 @@ def _build_next_incident_audit(
         actor_id=actor_id,
         payload=payload,
         previous_entry_hash=previous_hash,
-        timestamp_utc=datetime.now(timezone.utc),
+        timestamp_utc=timestamp_utc or datetime.now(timezone.utc),
     )
 
 

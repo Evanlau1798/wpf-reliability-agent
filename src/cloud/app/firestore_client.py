@@ -6,6 +6,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
 from app.approval import validate_recovery_proposal
+from app.audit import build_approval_decision_audit
 from app.contracts import sha256_canonical
 from app.models import ApprovalRecord, ApprovalStatus, DiagnosticCommand, ProposedAction, RiskLevel
 from app.policy import POLICY_VERSION
@@ -120,9 +121,6 @@ def approve_pending_approval(
         if validated is None:
             return None
         approval, approval_document, incident_document, incident = validated
-        audit_sequence = incident.get("audit_sequence")
-        if type(audit_sequence) is not int or audit_sequence < 0:
-            raise ValueError("Incident audit sequence is invalid")
         command_identity_key = sha256_canonical({
             "incident_id": approval.incident_id, "proposal_version": approval.proposal_version,
             "tool": approval.tool.value, "arguments_hash": approval.canonical_arguments_hash,
@@ -165,7 +163,7 @@ def approve_pending_approval(
         _write_approval_decision_audit(
             transaction,
             incident_document=incident_document,
-            sequence=audit_sequence + 1,
+            incident=incident,
             approval_id=approval.approval_id,
             actor=actor,
             status=ApprovalStatus.APPROVED,
@@ -203,13 +201,10 @@ def reject_pending_approval(
         state_version = incident.get("state_version")
         if type(state_version) is not int:
             raise ValueError("Incident state version is invalid")
-        audit_sequence = incident.get("audit_sequence")
-        if type(audit_sequence) is not int or audit_sequence < 0:
-            raise ValueError("Incident audit sequence is invalid")
 
         from app.workflow_state import IncidentState, transition_incident_in_transaction
 
-        next_version, _ = transition_incident_in_transaction(
+        next_version, state_audit = transition_incident_in_transaction(
             transaction,
             incident_document=incident_document,
             expected_state=IncidentState.AWAITING_APPROVAL,
@@ -226,7 +221,7 @@ def reject_pending_approval(
         _write_approval_decision_audit(
             transaction,
             incident_document=incident_document,
-            sequence=audit_sequence + 2,
+            incident={"audit_sequence": state_audit["sequence"], "audit_entry_hash": state_audit["entry_hash"]},
             approval_id=approval_id,
             actor=actor,
             status=ApprovalStatus.REJECTED,
@@ -244,29 +239,26 @@ def _write_approval_decision_audit(
     transaction: firestore.Transaction,
     *,
     incident_document: firestore.DocumentReference,
-    sequence: int,
+    incident: dict[str, object],
     approval_id: str,
     actor: str,
     status: ApprovalStatus,
     now: datetime,
 ) -> None:
+    audit_record = build_approval_decision_audit(
+        incident, approval_id=approval_id, actor=actor, status=status.value, timestamp_utc=now
+    )
     transaction.update(
         incident_document,
         {
-            "audit_sequence": sequence,
+            "audit_sequence": audit_record["sequence"],
+            "audit_entry_hash": audit_record["entry_hash"],
             "updated_at": firestore.SERVER_TIMESTAMP,
         },
     )
     transaction.create(
-        incident_document.collection(AUDIT_COLLECTION).document(str(sequence)),
-        {
-            "sequence": sequence,
-            "type": "approval.decision",
-            "actor": actor,
-            "approval_id": approval_id,
-            "status": status.value,
-            "timestamp_utc": now.isoformat().replace("+00:00", "Z"),
-        },
+        incident_document.collection(AUDIT_COLLECTION).document(str(audit_record["sequence"])),
+        audit_record,
     )
 
 
