@@ -5,6 +5,7 @@ from google.adk.runners import InMemoryRunner
 from google.genai import types
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
+from app.firestore_client import INCIDENTS_COLLECTION, REPORTS_COLLECTION
 from app.models import (
     Confidence,
     Hash,
@@ -182,6 +183,12 @@ def build_fallback_report(
             },
         }
     )
+
+
+def persist_report_json(client: Any, report: IncidentReport, *, version: str) -> None:
+    client.collection(INCIDENTS_COLLECTION).document(report.incident_id).collection(
+        REPORTS_COLLECTION
+    ).document(version).set(report.model_dump(mode="json"))
 
 
 def build_reporter_agent(model_id: str) -> Agent:

@@ -1,5 +1,6 @@
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import asyncio
 import json
@@ -179,3 +180,27 @@ def test_reporter_repairs_schema_once_then_uses_deterministic_fallback() -> None
     assert report.claims == []
     assert report.metadata.model_id == "gemini-test"
     assert report.metadata.reuse_revision == "9" * 40
+
+
+def test_report_json_persistence_keeps_required_metadata() -> None:
+    from app.models import IncidentReport
+    from app.reporting import persist_report_json
+
+    client = Mock()
+    incident_document = Mock()
+    report_document = Mock()
+    client.collection.return_value.document.return_value = incident_document
+    incident_document.collection.return_value.document.return_value = report_document
+    report = IncidentReport.model_validate_json(
+        (FIXTURES / "incident-report-mitigated.json").read_text(encoding="utf-8")
+    )
+
+    persist_report_json(client, report, version="1")
+
+    client.collection.assert_called_once_with("incidents")
+    client.collection.return_value.document.assert_called_once_with("incident-1")
+    incident_document.collection.assert_called_once_with("reports")
+    incident_document.collection.return_value.document.assert_called_once_with("1")
+    saved = report_document.set.call_args.args[0]
+    assert saved["schema_version"] == "1.0"
+    assert saved["metadata"] == report.metadata.model_dump(mode="json")
