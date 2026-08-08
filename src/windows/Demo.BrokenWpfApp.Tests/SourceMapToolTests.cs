@@ -132,6 +132,26 @@ public sealed class SourceMapToolTests
         Assert.Equal(sourceLine.IndexOf("Binding Path=\"DisplayNmae\"", StringComparison.Ordinal) + 1, position.Column);
     }
 
+    [Fact]
+    public void FileSha256ChangesWhenSourceChanges()
+    {
+        var path = Path.GetTempFileName();
+        try
+        {
+            File.WriteAllText(path, "one");
+            var first = SourceMapGenerator.ComputeFileSha256(path);
+            File.WriteAllText(path, "two");
+            var second = SourceMapGenerator.ComputeFileSha256(path);
+
+            Assert.Matches("^[0-9a-f]{64}$", first);
+            Assert.NotEqual(first, second);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     private static string RepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

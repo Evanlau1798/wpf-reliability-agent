@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Xml;
 using System.Xml.Linq;
 
@@ -85,6 +86,12 @@ public static class SourceMapGenerator
         node is IXmlLineInfo lineInfo && lineInfo.HasLineInfo()
             ? new SourcePosition(lineInfo.LineNumber, lineInfo.LinePosition)
             : null;
+
+    public static string ComputeFileSha256(string path)
+    {
+        using var stream = File.OpenRead(path);
+        return Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+    }
 
     private static bool IsBuildOutput(string root, string path)
     {
