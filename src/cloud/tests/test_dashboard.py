@@ -304,6 +304,61 @@ def test_console_pending_approval_controls_use_existing_csrf_contract(monkeypatc
     assert ":decide" in response.text
 
 
+def test_console_incident_detail_renders_before_after_verification_metrics(monkeypatch) -> None:
+    _set_api_environment(monkeypatch)
+    incident = Mock(exists=True)
+    incident.to_dict.return_value = {"state": "MITIGATED", "summary": "Mitigation verified"}
+    verification = _snapshot(
+        {
+            "sequence": 12,
+            "timestamp_utc": "2026-08-09T01:12:00Z",
+            "type": "state.transition",
+            "verification": {
+                "outcome": "MITIGATED",
+                "metrics": {
+                    "binding_errors_per_second": {
+                        "before": 12.0,
+                        "after": 0.2,
+                        "delta": -11.8,
+                        "unit": "errors_per_second",
+                    },
+                    "frame_p95_ms": {
+                        "before": 42.5,
+                        "after": 18.0,
+                        "delta": -24.5,
+                        "unit": "milliseconds",
+                    },
+                    "visual_count": {
+                        "before": 500.0,
+                        "after": 120.0,
+                        "delta": -380.0,
+                        "unit": "nodes",
+                    },
+                },
+            },
+        }
+    )
+    client = Mock()
+    incident_document = client.collection.return_value.document.return_value
+    incident_document.get.return_value = incident
+    incident_document.collection.return_value.stream.return_value = [verification]
+    client.collection.return_value.where.return_value.stream.return_value = []
+    monkeypatch.setattr("app.main.get_firestore_client", lambda _project_id: client)
+
+    with TestClient(app, base_url="https://testserver") as test_client:
+        assert test_client.post("/console/login", json={"token": "operator-secret"}).status_code == 204
+        response = test_client.get("/console/incidents/incident-9")
+
+    assert response.status_code == 200
+    assert "Before / After" in response.text
+    assert "Binding rate" in response.text
+    assert "12.0" in response.text and "0.2" in response.text
+    assert "Frame p95" in response.text
+    assert "42.5" in response.text and "18.0" in response.text
+    assert "Visual count" in response.text
+    assert "500.0" in response.text and "120.0" in response.text
+
+
 def _snapshot(data: dict[str, object]) -> Mock:
     snapshot = Mock()
     snapshot.to_dict.return_value = data

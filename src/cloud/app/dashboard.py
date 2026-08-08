@@ -35,11 +35,13 @@ def render_incident_detail(client: firestore.Client, incident_id: str) -> str | 
     if not snapshot.exists:
         return None
     incident = snapshot.to_dict() or {}
-    timeline = _render_timeline(incident_document)
+    audit_records = _audit_records(incident_document)
+    timeline = _render_timeline(audit_records)
     evidence_index = _render_evidence_index(incident_document)
     hypotheses = _render_hypotheses(incident)
     tool_ledger = _render_tool_ledger(client, incident_id)
     approvals = _render_approvals(incident_document)
+    verification = _render_verification(audit_records)
     return (
         '<!doctype html><html lang="en"><head><meta charset="utf-8">'
         f"<title>Incident {_display(incident_id)}</title></head><body><main>"
@@ -47,16 +49,21 @@ def render_incident_detail(client: firestore.Client, incident_id: str) -> str | 
         f"<dt>State</dt><dd>{_display(incident.get('state'))}</dd>"
         f"<dt>Summary</dt><dd>{_display(incident.get('summary'))}</dd>"
         f"<dt>Updated</dt><dd>{_display(incident.get('updated_at'))}</dd>"
-        f"</dl>{timeline}{evidence_index}{hypotheses}{tool_ledger}{approvals}</main></body></html>"
+        f"</dl>{timeline}{evidence_index}{hypotheses}{tool_ledger}{approvals}{verification}"
+        "</main></body></html>"
     )
 
 
-def _render_timeline(incident_document: object) -> str:
+def _audit_records(incident_document: object) -> list[dict[str, object]]:
     records = [
         snapshot.to_dict() or {}
         for snapshot in incident_document.collection(AUDIT_COLLECTION).stream()
     ]
     records.sort(key=lambda record: (int(record["sequence"]), str(record["timestamp_utc"])))
+    return records
+
+
+def _render_timeline(records: list[dict[str, object]]) -> str:
     items = "".join(
         "<li>"
         f"{_display(record.get('sequence'))} — "
@@ -198,6 +205,45 @@ def _approval_script() -> str:
 
 def _json(value: object) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def _render_verification(records: list[dict[str, object]]) -> str:
+    verification = next(
+        (
+            value
+            for record in reversed(records)
+            if isinstance((value := record.get("verification")), dict)
+        ),
+        None,
+    )
+    if verification is None or not isinstance(verification.get("metrics"), dict):
+        return ""
+    metrics = verification["metrics"]
+    rows = "".join(
+        _metric_row(label, metrics.get(key))
+        for label, key in (
+            ("Binding rate", "binding_errors_per_second"),
+            ("Frame p95", "frame_p95_ms"),
+            ("Visual count", "visual_count"),
+        )
+    )
+    return (
+        "<section><h2>Before / After</h2>"
+        '<table><thead><tr><th scope="col">Metric</th><th scope="col">Before</th>'
+        '<th scope="col">After</th><th scope="col">Unit</th></tr></thead>'
+        f"<tbody>{rows}</tbody></table></section>"
+    )
+
+
+def _metric_row(label: str, metric: object) -> str:
+    if not isinstance(metric, dict):
+        return ""
+    return (
+        f"<tr><th scope=\"row\">{_display(label)}</th>"
+        f"<td>{_display(metric.get('before'))}</td>"
+        f"<td>{_display(metric.get('after'))}</td>"
+        f"<td>{_display(metric.get('unit'))}</td></tr>"
+    )
 
 
 def _render_incident(incident_id: str, incident: dict[str, object]) -> str:
