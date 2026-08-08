@@ -20,6 +20,26 @@ class PerformanceDelta:
     after_confidence: str
 
 
+@dataclass(frozen=True)
+class MitigationThresholds:
+    max_binding_after_errors_per_second: float
+    min_binding_reduction_ratio: float
+    min_frame_p95_reduction_ratio: float
+    min_visual_count_reduction_ratio: float
+    min_performance_sample_count: int
+    min_performance_confidence: str
+
+
+DEFAULT_MITIGATION_THRESHOLDS = MitigationThresholds(
+    max_binding_after_errors_per_second=0.5,
+    min_binding_reduction_ratio=0.9,
+    min_frame_p95_reduction_ratio=0.2,
+    min_visual_count_reduction_ratio=0.25,
+    min_performance_sample_count=30,
+    min_performance_confidence="MEDIUM",
+)
+
+
 def binding_rate_delta(
     before_evidence: dict[str, object],
     after_evidence: dict[str, object],
@@ -108,6 +128,43 @@ def visual_count_delta(
     return MetricDelta(float(before_count), float(after_count), float(after_count - before_count))
 
 
+def meets_mitigation_thresholds(
+    binding: MetricDelta,
+    performance: PerformanceDelta,
+    visual: MetricDelta,
+    thresholds: MitigationThresholds = DEFAULT_MITIGATION_THRESHOLDS,
+) -> bool:
+    binding_reduction = _reduction_ratio(binding)
+    frame_reduction = _reduction_ratio(performance.p95)
+    visual_reduction = _reduction_ratio(visual)
+    minimum_confidence = _confidence_rank(thresholds.min_performance_confidence)
+    before_confidence = _confidence_rank(performance.before_confidence)
+    after_confidence = _confidence_rank(performance.after_confidence)
+    if None in (
+        binding_reduction,
+        frame_reduction,
+        visual_reduction,
+        minimum_confidence,
+        before_confidence,
+        after_confidence,
+    ):
+        return False
+    if performance.before_sample_count < thresholds.min_performance_sample_count:
+        return False
+    if performance.after_sample_count < thresholds.min_performance_sample_count:
+        return False
+    if before_confidence < minimum_confidence:
+        return False
+    if after_confidence < minimum_confidence:
+        return False
+    return (
+        binding.after <= thresholds.max_binding_after_errors_per_second
+        and binding_reduction >= thresholds.min_binding_reduction_ratio
+        and frame_reduction >= thresholds.min_frame_p95_reduction_ratio
+        and visual_reduction >= thresholds.min_visual_count_reduction_ratio
+    )
+
+
 def _payload(evidence: dict[str, object]) -> dict[str, object]:
     payload = evidence.get("payload")
     return payload if isinstance(payload, dict) else {}
@@ -134,3 +191,13 @@ def _integer(value: object) -> int | None:
 
 def _confidence(value: object) -> str | None:
     return value if value in {"LOW", "MEDIUM", "HIGH"} else None
+
+
+def _confidence_rank(value: str) -> int | None:
+    return {"LOW": 0, "MEDIUM": 1, "HIGH": 2}.get(value)
+
+
+def _reduction_ratio(delta: MetricDelta) -> float | None:
+    if delta.before <= 0:
+        return None
+    return (delta.before - delta.after) / delta.before

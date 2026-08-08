@@ -1,4 +1,19 @@
-from app.verification import binding_rate_delta, frame_p95_delta, visual_count_delta
+import json
+from dataclasses import asdict
+from pathlib import Path
+
+from app.verification import (
+    DEFAULT_MITIGATION_THRESHOLDS,
+    MetricDelta,
+    PerformanceDelta,
+    binding_rate_delta,
+    frame_p95_delta,
+    meets_mitigation_thresholds,
+    visual_count_delta,
+)
+
+
+FIXTURES = Path(__file__).parents[3] / "contracts" / "fixtures"
 
 
 def test_binding_rate_delta_normalizes_before_and_after_to_errors_per_second() -> None:
@@ -95,3 +110,36 @@ def test_visual_count_delta_requires_same_exact_scope() -> None:
         before,
         {**after, "payload": {**after["payload"], "visual_scope_id": "element-session-1-8"}},
     ) is None
+
+
+def test_mitigation_thresholds_are_fixture_locked_and_deterministic() -> None:
+    fixture = json.loads((FIXTURES / "mitigation-thresholds.json").read_text(encoding="utf-8"))
+    metrics = fixture["passing_metrics"]
+    binding = MetricDelta(
+        metrics["binding"]["before"],
+        metrics["binding"]["after"],
+        metrics["binding"]["after"] - metrics["binding"]["before"],
+    )
+    frame = metrics["frame_p95"]
+    performance = PerformanceDelta(
+        MetricDelta(frame["before"], frame["after"], frame["after"] - frame["before"]),
+        frame["before_sample_count"],
+        frame["after_sample_count"],
+        frame["before_duration_ms"],
+        frame["after_duration_ms"],
+        frame["before_confidence"],
+        frame["after_confidence"],
+    )
+    visual = MetricDelta(
+        metrics["visual_count"]["before"],
+        metrics["visual_count"]["after"],
+        metrics["visual_count"]["after"] - metrics["visual_count"]["before"],
+    )
+
+    assert asdict(DEFAULT_MITIGATION_THRESHOLDS) == fixture["thresholds"]
+    assert meets_mitigation_thresholds(binding, performance, visual)
+    assert not meets_mitigation_thresholds(
+        MetricDelta(binding.before, 0.6, 0.6 - binding.before),
+        performance,
+        visual,
+    )
