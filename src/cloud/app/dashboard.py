@@ -20,6 +20,22 @@ def render_incident_list(client: firestore.Client) -> str:
     )
 
 
+def render_incident_detail(client: firestore.Client, incident_id: str) -> str | None:
+    snapshot = client.collection(INCIDENTS_COLLECTION).document(incident_id).get()
+    if not snapshot.exists:
+        return None
+    incident = snapshot.to_dict() or {}
+    return (
+        '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+        f"<title>Incident {_display(incident_id)}</title></head><body><main>"
+        f"<h1>Incident {_display(incident_id)}</h1><dl>"
+        f"<dt>State</dt><dd>{_display(incident.get('state'))}</dd>"
+        f"<dt>Summary</dt><dd>{_display(incident.get('summary'))}</dd>"
+        f"<dt>Updated</dt><dd>{_display(incident.get('updated_at'))}</dd>"
+        "</dl></main></body></html>"
+    )
+
+
 def _render_incident(incident_id: str, incident: dict[str, object]) -> str:
     return (
         "<tr>"

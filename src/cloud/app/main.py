@@ -26,7 +26,7 @@ from app.commands import (
     lease_next_command,
 )
 from app.config import Settings
-from app.dashboard import render_incident_list
+from app.dashboard import render_incident_detail, render_incident_list
 from app.firestore_client import claim_event_once, get_firestore_client, is_run_processed
 from app.ingest import (
     ingest_binding_event,
@@ -100,6 +100,19 @@ def console_incidents(
 ) -> str:
     client = get_firestore_client(request.app.state.settings.google_cloud_project)
     return render_incident_list(client)
+
+
+@app.get("/console/incidents/{incident_id}", response_class=HTMLResponse)
+def console_incident_detail(
+    request: Request,
+    incident_id: str,
+    _operator_id: Annotated[str, Depends(authenticate_operator_session)],
+) -> str:
+    client = get_firestore_client(request.app.state.settings.google_cloud_project)
+    rendered = render_incident_detail(client, incident_id)
+    if rendered is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    return rendered
 
 
 @app.post("/v1/approvals/{approval_id}:decide")

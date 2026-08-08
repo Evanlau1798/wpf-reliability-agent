@@ -36,6 +36,32 @@ def test_console_incident_list_requires_operator_session_and_renders_fields(monk
     assert client.collection.call_args.args == (firestore_client.INCIDENTS_COLLECTION,)
 
 
+def test_console_incident_detail_renders_incident_and_returns_404_when_missing(monkeypatch) -> None:
+    _set_api_environment(monkeypatch)
+    snapshot = Mock(exists=True)
+    snapshot.to_dict.return_value = {
+        "state": "INVESTIGATING",
+        "summary": "Binding failures",
+        "updated_at": datetime(2026, 8, 9, 1, 5, tzinfo=UTC),
+    }
+    client = Mock()
+    client.collection.return_value.document.return_value.get.return_value = snapshot
+    monkeypatch.setattr("app.main.get_firestore_client", lambda _project_id: client)
+
+    with TestClient(app, base_url="https://testserver") as test_client:
+        assert test_client.post("/console/login", json={"token": "operator-secret"}).status_code == 204
+        response = test_client.get("/console/incidents/incident-2")
+        snapshot.exists = False
+        missing = test_client.get("/console/incidents/missing")
+
+    assert response.status_code == 200
+    assert "incident-2" in response.text
+    assert "INVESTIGATING" in response.text
+    assert "Binding failures" in response.text
+    assert "2026-08-09T01:05:00+00:00" in response.text
+    assert missing.status_code == 404
+
+
 def _set_api_environment(monkeypatch) -> None:
     monkeypatch.setenv("SERVICE_ROLE", "api")
     monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "project-test")
