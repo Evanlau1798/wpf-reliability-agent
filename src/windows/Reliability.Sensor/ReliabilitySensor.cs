@@ -93,6 +93,12 @@ public sealed partial class ReliabilitySensor : IAsyncDisposable
 
     internal int SourceMapEntryCount => _sourceMap.Count;
 
+    internal IReadOnlyList<SourceMapCatalogEntry> LookupSourceBindings(
+        string? key,
+        string? bindingPath,
+        string? targetProperty) =>
+        _sourceMap.Lookup(key, bindingPath, targetProperty);
+
     public static ReliabilitySensor Start(
         ReliabilitySensorOptions? options,
         CancellationToken applicationStopping = default,

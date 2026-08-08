@@ -1,0 +1,137 @@
+using System.Text.Json;
+using Reliability.Contracts;
+
+namespace Reliability.Sensor.Tests;
+
+public sealed class SourceMapLookupTests
+{
+    [Fact]
+    public async Task SourceLookupBindingFindsExactStableKeyAndBindingPathProperty()
+    {
+        var sourceMapPath = Path.Combine(
+            Path.GetTempPath(),
+            $"wpf-reliability-source-map-{Guid.NewGuid():N}.json");
+        await File.WriteAllTextAsync(sourceMapPath, JsonSerializer.Serialize(new[]
+        {
+            new
+            {
+                key = "Demo.MainWindow/PeopleGrid/PersonName#Text|DisplayNmae",
+                file = "src/windows/Demo.BrokenWpfApp/MainWindow.xaml",
+                line = 42,
+                column = 17,
+                window_type = "Demo.MainWindow",
+                named_ancestors = new[] { "PeopleGrid" },
+                element_type = "TextBlock",
+                element_name = "PersonName",
+                target_property = "Text",
+                binding_path = "DisplayNmae",
+                unsupported_reason = (string?)null,
+                file_sha256 = new string('a', 64),
+                build_commit = new string('b', 40),
+            },
+            new
+            {
+                key = "Demo.MainWindow/PeopleGrid/PersonAge#Text|Age",
+                file = "src/windows/Demo.BrokenWpfApp/MainWindow.xaml",
+                line = 50,
+                column = 17,
+                window_type = "Demo.MainWindow",
+                named_ancestors = new[] { "PeopleGrid" },
+                element_type = "TextBlock",
+                element_name = "PersonAge",
+                target_property = "Text",
+                binding_path = "Age",
+                unsupported_reason = (string?)null,
+                file_sha256 = new string('a', 64),
+                build_commit = new string('b', 40),
+            },
+        }));
+
+        try
+        {
+            await using var sensor = ReliabilitySensor.Start(TestOptions(sourceMapPath));
+            var executor = new ReadOnlyCommandExecutor(sensor);
+            var baseCommand = (await ReadCommandAsync()) with
+            {
+                Tool = DiagnosticTool.SourceLookupBinding,
+            };
+
+            var byKey = await executor.ExecuteAsync(baseCommand with
+            {
+                Arguments = JsonSerializer.SerializeToElement(new
+                {
+                    key = "Demo.MainWindow/PeopleGrid/PersonName#Text|DisplayNmae",
+                }),
+            }, CancellationToken.None);
+            var byBinding = await executor.ExecuteAsync(baseCommand with
+            {
+                Arguments = JsonSerializer.SerializeToElement(new
+                {
+                    binding_path = "DisplayNmae",
+                    target_property = "Text",
+                }),
+            }, CancellationToken.None);
+
+            AssertMatch(byKey, "Demo.MainWindow/PeopleGrid/PersonName#Text|DisplayNmae");
+            AssertMatch(byBinding, "Demo.MainWindow/PeopleGrid/PersonName#Text|DisplayNmae");
+            Assert.Equal("\"source.lookup_binding\"", JsonSerializer.Serialize(DiagnosticTool.SourceLookupBinding));
+        }
+        finally
+        {
+            File.Delete(sourceMapPath);
+        }
+    }
+
+    [Fact]
+    public async Task SourceLookupBindingRejectsIncompleteQuery()
+    {
+        await using var sensor = ReliabilitySensor.Start(TestOptions(sourceMapPath: null));
+        var command = (await ReadCommandAsync()) with
+        {
+            Tool = DiagnosticTool.SourceLookupBinding,
+            Arguments = JsonSerializer.SerializeToElement(new { binding_path = "DisplayNmae" }),
+        };
+        var executor = new ReadOnlyCommandExecutor(sensor);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            executor.ExecuteAsync(command, CancellationToken.None));
+
+        Assert.Equal("Command arguments are invalid.", exception.Message);
+    }
+
+    private static void AssertMatch(JsonElement result, string expectedKey)
+    {
+        var matches = result.GetProperty("matches");
+        Assert.Equal(1, matches.GetArrayLength());
+        Assert.Equal(expectedKey, matches[0].GetProperty("key").GetString());
+        Assert.Equal(
+            "src/windows/Demo.BrokenWpfApp/MainWindow.xaml",
+            matches[0].GetProperty("file").GetString());
+        Assert.Equal(42, matches[0].GetProperty("line").GetInt32());
+        Assert.Equal(17, matches[0].GetProperty("column").GetInt32());
+        Assert.Equal("Text", matches[0].GetProperty("target_property").GetString());
+        Assert.Equal("DisplayNmae", matches[0].GetProperty("binding_path").GetString());
+    }
+
+    private static async Task<DiagnosticCommand> ReadCommandAsync()
+    {
+        var json = await File.ReadAllTextAsync(Path.Combine(
+            AppContext.BaseDirectory,
+            "fixtures",
+            "diagnostic-command-valid-read.json"));
+        return JsonSerializer.Deserialize(
+            json,
+            ContractJsonContext.Default.DiagnosticCommand)!;
+    }
+
+    private static ReliabilitySensorOptions TestOptions(string? sourceMapPath) => new()
+    {
+        ApiBaseUri = new Uri("https://reliability.example.test"),
+        DeviceId = "device-test",
+        DeviceToken = string.Empty,
+        ApplicationId = "demo-app",
+        ApplicationVersion = "1.2.3",
+        DisableBackgroundPersistence = true,
+        SourceMapPath = sourceMapPath ?? string.Empty,
+    };
+}

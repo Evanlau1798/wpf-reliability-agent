@@ -19,6 +19,16 @@ internal sealed class SourceMapCatalog
 
     public int Count => _entries.Count;
 
+    public IReadOnlyList<SourceMapCatalogEntry> Lookup(
+        string? key,
+        string? bindingPath,
+        string? targetProperty) =>
+        _entries.Where(entry => key is not null
+            ? string.Equals(entry.Key, key, StringComparison.Ordinal)
+            : string.Equals(entry.BindingPath, bindingPath, StringComparison.Ordinal)
+                && string.Equals(entry.TargetProperty, targetProperty, StringComparison.Ordinal))
+            .ToArray();
+
     public static SourceMapCatalog Load(string? path)
     {
         if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))

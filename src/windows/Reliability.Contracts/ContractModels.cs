@@ -33,6 +33,7 @@ public enum DiagnosticTool
     UiGetElementDetails,
     PerformanceSample,
     StateCompareSnapshots,
+    SourceLookupBinding,
     RecoverySetFeatureFlag,
 }
 

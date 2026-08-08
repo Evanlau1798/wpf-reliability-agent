@@ -89,6 +89,7 @@ internal sealed class ReadOnlyCommandExecutor
             DiagnosticTool.StateCompareSnapshots => StateSnapshotComparer.Compare(
                 RequiredObject(command.Arguments, "before"),
                 RequiredObject(command.Arguments, "after")),
+            DiagnosticTool.SourceLookupBinding => ExecuteSourceLookupBinding(command.Arguments),
             _ => throw new InvalidOperationException(
                 "Command tool is not available to the read-only executor."),
         };
@@ -111,6 +112,7 @@ internal sealed class ReadOnlyCommandExecutor
             DiagnosticTool.UiGetElementDetails => ["element_id", "fields"],
             DiagnosticTool.PerformanceSample => ["element_id"],
             DiagnosticTool.StateCompareSnapshots => ["before", "after"],
+            DiagnosticTool.SourceLookupBinding => ["key", "binding_path", "target_property"],
             _ => throw new InvalidOperationException(
                 "Command tool is not available to the read-only executor."),
         };
@@ -118,6 +120,49 @@ internal sealed class ReadOnlyCommandExecutor
         {
             throw new InvalidOperationException("Command arguments are invalid.");
         }
+    }
+
+    private JsonElement ExecuteSourceLookupBinding(JsonElement arguments)
+    {
+        var hasKey = arguments.TryGetProperty("key", out _);
+        var hasBindingPath = arguments.TryGetProperty("binding_path", out _);
+        var hasTargetProperty = arguments.TryGetProperty("target_property", out _);
+        string? key = null;
+        string? bindingPath = null;
+        string? targetProperty = null;
+        if (hasKey && !hasBindingPath && !hasTargetProperty)
+        {
+            key = RequiredString(arguments, "key");
+        }
+        else if (!hasKey && hasBindingPath && hasTargetProperty)
+        {
+            bindingPath = RequiredString(arguments, "binding_path");
+            targetProperty = RequiredString(arguments, "target_property");
+        }
+        else
+        {
+            throw new InvalidOperationException("Command arguments are invalid.");
+        }
+
+        return JsonSerializer.SerializeToElement(new
+        {
+            matches = _sensor.LookupSourceBindings(key, bindingPath, targetProperty).Select(entry => new
+            {
+                key = entry.Key,
+                file = entry.File,
+                line = entry.Line,
+                column = entry.Column,
+                window_type = entry.WindowType,
+                named_ancestors = entry.NamedAncestors,
+                element_type = entry.ElementType,
+                element_name = entry.ElementName,
+                target_property = entry.TargetProperty,
+                binding_path = entry.BindingPath,
+                unsupported_reason = entry.UnsupportedReason,
+                file_sha256 = entry.FileSha256,
+                build_commit = entry.BuildCommit,
+            }),
+        });
     }
 
     private async Task<JsonElement> ExecuteUiGetSubtreeAsync(

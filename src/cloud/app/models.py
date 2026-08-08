@@ -44,6 +44,7 @@ class DiagnosticTool(str, Enum):
     UI_GET_ELEMENT_DETAILS = "ui.get_element_details"
     PERFORMANCE_SAMPLE = "performance.sample"
     STATE_COMPARE_SNAPSHOTS = "state.compare_snapshots"
+    SOURCE_LOOKUP_BINDING = "source.lookup_binding"
     RECOVERY_SET_FEATURE_FLAG = "recovery.set_feature_flag"
 
 

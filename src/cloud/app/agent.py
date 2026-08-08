@@ -30,6 +30,7 @@ TOOL_DESCRIPTIONS = {
     DiagnosticTool.UI_GET_ELEMENT_DETAILS.value: "Allowlisted UI element properties.",
     DiagnosticTool.PERFORMANCE_SAMPLE.value: "Bounded performance sample window.",
     DiagnosticTool.STATE_COMPARE_SNAPSHOTS.value: "Pure before and after snapshot comparison.",
+    DiagnosticTool.SOURCE_LOOKUP_BINDING.value: "Build-time XAML source-map attribution.",
     DiagnosticTool.RECOVERY_SET_FEATURE_FLAG.value: "Typed ExperimentalPeopleGrid recovery proposal.",
 }
 

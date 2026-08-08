@@ -44,6 +44,7 @@ public sealed class DiagnosticToolJsonConverter : JsonConverter<DiagnosticTool>
             ["ui.get_element_details"] = DiagnosticTool.UiGetElementDetails,
             ["performance.sample"] = DiagnosticTool.PerformanceSample,
             ["state.compare_snapshots"] = DiagnosticTool.StateCompareSnapshots,
+            ["source.lookup_binding"] = DiagnosticTool.SourceLookupBinding,
             ["recovery.set_feature_flag"] = DiagnosticTool.RecoverySetFeatureFlag,
         };
 

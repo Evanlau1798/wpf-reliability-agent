@@ -339,7 +339,8 @@ public sealed partial class ReliabilitySensor
         or DiagnosticTool.UiGetSubtree
         or DiagnosticTool.UiGetElementDetails
         or DiagnosticTool.PerformanceSample
-        or DiagnosticTool.StateCompareSnapshots;
+        or DiagnosticTool.StateCompareSnapshots
+        or DiagnosticTool.SourceLookupBinding;
 
     private static bool IsMutationTool(DiagnosticTool tool) =>
         tool is DiagnosticTool.RecoverySetFeatureFlag;

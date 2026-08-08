@@ -19,6 +19,14 @@ def test_all_read_only_tools_are_low_risk() -> None:
     assert {risk_for_tool(tool) for tool in READ_ONLY_DIAGNOSTIC_TOOLS} == {RiskLevel.LOW}
 
 
+def test_source_lookup_binding_is_a_read_only_contract_tool() -> None:
+    schema_path = Path(__file__).parents[3] / "contracts" / "diagnostic-command.schema.json"
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+
+    assert DiagnosticTool.SOURCE_LOOKUP_BINDING in READ_ONLY_DIAGNOSTIC_TOOLS
+    assert DiagnosticTool.SOURCE_LOOKUP_BINDING.value in schema["properties"]["tool"]["enum"]
+
+
 def test_feature_recovery_is_high_risk_even_if_model_hints_low() -> None:
     decision = AgentDecision.model_validate(
         {

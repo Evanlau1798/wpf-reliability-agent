@@ -12,6 +12,7 @@ READ_ONLY_DIAGNOSTIC_TOOLS = frozenset(
         DiagnosticTool.UI_GET_ELEMENT_DETAILS,
         DiagnosticTool.PERFORMANCE_SAMPLE,
         DiagnosticTool.STATE_COMPARE_SNAPSHOTS,
+        DiagnosticTool.SOURCE_LOOKUP_BINDING,
     }
 )
 
