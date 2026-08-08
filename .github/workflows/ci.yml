@@ -73,7 +73,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build cloud image
-        run: docker build --file src/cloud/Dockerfile --tag reliability-agent:ci src/cloud
+        run: docker build --file src/cloud/Dockerfile --build-arg GIT_SHA=${{ github.sha }} --tag reliability-agent:ci src/cloud
       - name: Verify non-root runtime user
         run: test "$(docker run --rm reliability-agent:ci id -u)" != "0"
       - name: Smoke API role

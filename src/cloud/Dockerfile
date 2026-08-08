@@ -11,6 +11,9 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+ARG GIT_SHA=unknown
+LABEL org.opencontainers.image.revision=$GIT_SHA
+
 COPY --from=builder /install /usr/local
 
 RUN useradd --create-home --uid 10001 appuser

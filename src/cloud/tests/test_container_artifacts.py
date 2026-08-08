@@ -36,3 +36,12 @@ def test_ci_smokes_worker_role_and_worker_only_route() -> None:
     assert "--env SERVICE_ROLE=worker" in workflow
     assert "http://127.0.0.1:18081/v1/work:push" in workflow
     assert 'test "$status" = "401"' in workflow
+
+
+def test_image_records_build_git_sha() -> None:
+    dockerfile = (REPO_ROOT / "src" / "cloud" / "Dockerfile").read_text(encoding="utf-8")
+    workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+    assert "ARG GIT_SHA=unknown" in dockerfile
+    assert "LABEL org.opencontainers.image.revision=$GIT_SHA" in dockerfile
+    assert "--build-arg GIT_SHA=${{ github.sha }}" in workflow

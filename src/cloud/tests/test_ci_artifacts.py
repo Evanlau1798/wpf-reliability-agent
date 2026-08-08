@@ -47,7 +47,7 @@ def test_container_job_builds_cloud_image_on_linux_runner() -> None:
     workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
 
     assert "  container:" in workflow
-    assert "docker build --file src/cloud/Dockerfile --tag reliability-agent:ci src/cloud" in workflow
+    assert "docker build --file src/cloud/Dockerfile --build-arg GIT_SHA=${{ github.sha }} --tag reliability-agent:ci src/cloud" in workflow
 
 
 def test_cloud_job_scans_tracked_files_for_secrets() -> None:
