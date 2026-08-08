@@ -26,7 +26,12 @@ from app.commands import (
 )
 from app.config import Settings
 from app.firestore_client import claim_event_once, get_firestore_client, is_run_processed
-from app.ingest import ingest_binding_event, ingest_performance_event, validate_telemetry_events
+from app.ingest import (
+    ingest_binding_event,
+    ingest_performance_event,
+    ingest_recovery_event,
+    validate_telemetry_events,
+)
 from app.logging_config import configure_logging
 from app.models import CommandResult, EventType
 from app.pubsub import publish_work
@@ -282,6 +287,14 @@ def telemetry_batch(
             elif event.event_type is EventType.PERFORMANCE_SAMPLE:
                 performance_events.append(event)
                 continue
+            elif event.event_type is EventType.RECOVERY_RESULT:
+                try:
+                    is_new, _publish_payload = ingest_recovery_event(client, event, device_id)
+                except ValueError:
+                    rejected.append({"event_id": event.event_id, "code": "INVALID_EVENT"})
+                    continue
+                if _publish_payload is not None:
+                    _publish_after_commit(request, _publish_payload)
             else:
                 is_new = claim_event_once(client, event.event_id)
             target = accepted_event_ids if is_new else duplicate_event_ids

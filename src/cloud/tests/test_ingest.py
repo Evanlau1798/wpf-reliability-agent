@@ -153,6 +153,52 @@ def test_work_message_contains_only_durable_work_identifiers() -> None:
     }
 
 
+def test_recovery_result_persists_post_snapshot_as_incident_evidence(monkeypatch) -> None:
+    event = _event(
+        "recovery.result",
+        {
+            "incident_id": "incident-1",
+            "command_id": "command-1",
+            "action_id": "action-1",
+        },
+        {
+            "observation_window_ms": 10000,
+            "binding_occurrence_count": 2,
+            "binding_errors_per_second": 0.2,
+            "frame_statistics": {"sample_count": 90, "p95_milliseconds": 18.0},
+            "performance_sample_duration_ms": 1500.0,
+            "performance_confidence": "HIGH",
+            "visual_count": 420,
+            "visual_count_truncated": False,
+        },
+    )
+    valid, rejected = validate_telemetry_events([event])
+    captured: dict[str, object] = {}
+
+    def persist(*_args, **kwargs) -> int:
+        captured.update(kwargs)
+        return 7
+
+    monkeypatch.setattr(ingest, "persist_incident_event", persist)
+
+    accepted, payload = ingest.ingest_recovery_event(object(), valid[0], "device-test")
+
+    assert rejected == []
+    assert accepted is True
+    assert captured["incident_id"] == "incident-1"
+    assert captured["evidence_id"] == "event-1"
+    assert captured["incident"] is None
+    stored = captured["evidence"]
+    assert stored["correlation"]["action_id"] == "action-1"
+    assert stored["payload"]["performance_confidence"] == "HIGH"
+    assert payload == {
+        "incident_id": "incident-1",
+        "evidence_revision": 7,
+        "trigger": "recovery.result",
+        "event_id": "event-1",
+    }
+
+
 def _event(event_type: str, correlation: dict[str, object], payload: dict[str, object]) -> dict[str, object]:
     return {
         "schema_version": "1.0",

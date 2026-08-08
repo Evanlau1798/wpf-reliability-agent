@@ -36,6 +36,20 @@ public sealed partial class ReliabilitySensor
                     command,
                     token).ConfigureAwait(false);
                 await client.CompleteCommandAsync(result, token).ConfigureAwait(false);
+                if (result.Status is ResultStatus.SUCCEEDED)
+                {
+                    try
+                    {
+                        await CaptureAndQueuePostActionSnapshotAsync(
+                            command,
+                            root: null,
+                            token).ConfigureAwait(false);
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        // Verification remains pending when required post-action evidence is unavailable.
+                    }
+                }
             }).ConfigureAwait(false);
     }
 

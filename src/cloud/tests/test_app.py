@@ -374,6 +374,32 @@ def test_telemetry_batch_correlates_performance_to_unique_binding_candidate(monk
     assert related[0][1:] == ("device-test", "incident-1")
 
 
+def test_telemetry_batch_routes_recovery_result_to_incident_ingest(monkeypatch) -> None:
+    _set_required_environment(monkeypatch, "api")
+    client_object = object()
+    monkeypatch.setattr("app.main.get_firestore_client", lambda _project_id: client_object)
+    captured: list[tuple[object, str]] = []
+
+    def ingest_recovery(_client, event, device_id):
+        captured.append((event, device_id))
+        return True, {"incident_id": "incident-1"}
+
+    monkeypatch.setattr("app.main.ingest_recovery_event", ingest_recovery)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/telemetry:batch",
+            headers={"Authorization": "Bearer secret-token"},
+            json={"events": [_valid_recovery_event("post-1")]},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["accepted_event_ids"] == ["post-1"]
+    assert len(captured) == 1
+    assert captured[0][0].event_id == "post-1"
+    assert captured[0][1] == "device-test"
+
+
 async def _startup_role() -> str:
     async with app.router.lifespan_context(app):
         return app.state.settings.service_role
@@ -426,6 +452,32 @@ def _valid_performance_event(event_id: str) -> dict[str, object]:
                 "sample_duration_ms": 1000.0,
                 "confidence": "MEDIUM",
                 "visual_count": 1500,
+            },
+        }
+    )
+    return event
+
+
+def _valid_recovery_event(event_id: str) -> dict[str, object]:
+    event = _valid_telemetry_event(event_id)
+    event.update(
+        {
+            "event_type": "recovery.result",
+            "severity": "INFO",
+            "correlation": {
+                "incident_id": "incident-1",
+                "command_id": "command-1",
+                "action_id": "action-1",
+            },
+            "payload": {
+                "observation_window_ms": 10000,
+                "binding_occurrence_count": 1,
+                "binding_errors_per_second": 0.1,
+                "frame_statistics": {"sample_count": 90, "p95_milliseconds": 18.0},
+                "performance_sample_duration_ms": 1500.0,
+                "performance_confidence": "HIGH",
+                "visual_count": 420,
+                "visual_count_truncated": False,
             },
         }
     )

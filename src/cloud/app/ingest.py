@@ -12,7 +12,7 @@ CORRELATION_FIELDS = {
     EventType.UI_SNAPSHOT: frozenset({"root_element_id"}),
     EventType.PERFORMANCE_SAMPLE: frozenset({"app_session_id"}),
     EventType.TOOL_RESULT: frozenset(),
-    EventType.RECOVERY_RESULT: frozenset(),
+    EventType.RECOVERY_RESULT: frozenset({"incident_id", "command_id", "action_id"}),
 }
 PAYLOAD_FIELDS = {
     EventType.BINDING_AGGREGATE: frozenset(
@@ -51,7 +51,18 @@ PAYLOAD_FIELDS = {
         }
     ),
     EventType.TOOL_RESULT: frozenset(),
-    EventType.RECOVERY_RESULT: frozenset(),
+    EventType.RECOVERY_RESULT: frozenset(
+        {
+            "observation_window_ms",
+            "binding_occurrence_count",
+            "binding_errors_per_second",
+            "frame_statistics",
+            "performance_sample_duration_ms",
+            "performance_confidence",
+            "visual_count",
+            "visual_count_truncated",
+        }
+    ),
 }
 UI_NODE_FIELDS = frozenset(
     {
@@ -130,7 +141,7 @@ def sanitize_telemetry_event(event: DiagnosticEnvelope) -> DiagnosticEnvelope:
             if isinstance(nodes, list)
             else []
         )
-    elif event.event_type is EventType.PERFORMANCE_SAMPLE:
+    elif event.event_type in {EventType.PERFORMANCE_SAMPLE, EventType.RECOVERY_RESULT}:
         statistics = event.payload.get("frame_statistics")
         if isinstance(statistics, dict):
             payload["frame_statistics"] = _allowlist(statistics, FRAME_STATISTICS_FIELDS)
@@ -199,6 +210,33 @@ def ingest_performance_event(
         raise ValueError("Performance ingest requires a performance sample event")
     if event.correlation.get("app_session_id") != event.app_session_id:
         raise ValueError("Performance app session correlation must match the event")
+
+    trusted_event = event.model_copy(update={"device_id": device_id})
+    evidence_revision = persist_incident_event(
+        client,
+        event_id=event.event_id,
+        incident_id=incident_id,
+        evidence_id=event.event_id,
+        incident=None,
+        evidence=trusted_event.model_dump(mode="json"),
+    )
+    if evidence_revision is None:
+        return False, None
+    return True, build_publish_payload(incident_id, evidence_revision, trusted_event)
+
+
+def ingest_recovery_event(
+    client: object,
+    event: DiagnosticEnvelope,
+    device_id: str,
+) -> tuple[bool, dict[str, object] | None]:
+    if event.event_type is not EventType.RECOVERY_RESULT:
+        raise ValueError("Recovery ingest requires a recovery result event")
+    incident_id = event.correlation.get("incident_id")
+    command_id = event.correlation.get("command_id")
+    action_id = event.correlation.get("action_id")
+    if not all(isinstance(value, str) and value for value in (incident_id, command_id, action_id)):
+        raise ValueError("Recovery result requires incident command and action references")
 
     trusted_event = event.model_copy(update={"device_id": device_id})
     evidence_revision = persist_incident_event(
