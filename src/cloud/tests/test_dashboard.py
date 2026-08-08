@@ -130,6 +130,40 @@ def test_console_incident_detail_renders_safe_evidence_index_without_raw_secrets
     assert "private-result-secret" not in response.text
 
 
+def test_console_incident_detail_renders_hypotheses_with_evidence_and_confidence(monkeypatch) -> None:
+    _set_api_environment(monkeypatch)
+    incident = Mock(exists=True)
+    incident.to_dict.return_value = {
+        "state": "INVESTIGATING",
+        "summary": "Binding failures",
+        "current_hypotheses": [
+            {
+                "claim": "DisplayNmae is incorrect <script>alert(1)</script>",
+                "confidence": "HIGH",
+                "evidence_ids": ["binding-1", "ui-1"],
+                "counter_evidence_ids": ["performance-1"],
+            }
+        ],
+    }
+    client = Mock()
+    incident_document = client.collection.return_value.document.return_value
+    incident_document.get.return_value = incident
+    incident_document.collection.return_value.stream.return_value = []
+    monkeypatch.setattr("app.main.get_firestore_client", lambda _project_id: client)
+
+    with TestClient(app, base_url="https://testserver") as test_client:
+        assert test_client.post("/console/login", json={"token": "operator-secret"}).status_code == 204
+        response = test_client.get("/console/incidents/incident-5")
+
+    assert response.status_code == 200
+    assert "Hypotheses" in response.text
+    assert "DisplayNmae is incorrect" in response.text
+    assert "HIGH" in response.text
+    assert "binding-1, ui-1" in response.text
+    assert "performance-1" in response.text
+    assert "<script>" not in response.text
+
+
 def _snapshot(data: dict[str, object]) -> Mock:
     snapshot = Mock()
     snapshot.to_dict.return_value = data

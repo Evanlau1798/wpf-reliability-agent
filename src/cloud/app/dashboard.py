@@ -28,6 +28,7 @@ def render_incident_detail(client: firestore.Client, incident_id: str) -> str | 
     incident = snapshot.to_dict() or {}
     timeline = _render_timeline(incident_document)
     evidence_index = _render_evidence_index(incident_document)
+    hypotheses = _render_hypotheses(incident)
     return (
         '<!doctype html><html lang="en"><head><meta charset="utf-8">'
         f"<title>Incident {_display(incident_id)}</title></head><body><main>"
@@ -35,7 +36,7 @@ def render_incident_detail(client: firestore.Client, incident_id: str) -> str | 
         f"<dt>State</dt><dd>{_display(incident.get('state'))}</dd>"
         f"<dt>Summary</dt><dd>{_display(incident.get('summary'))}</dd>"
         f"<dt>Updated</dt><dd>{_display(incident.get('updated_at'))}</dd>"
-        f"</dl>{timeline}{evidence_index}</main></body></html>"
+        f"</dl>{timeline}{evidence_index}{hypotheses}</main></body></html>"
     )
 
 
@@ -66,6 +67,27 @@ def _render_evidence_index(incident_document: object) -> str:
         for snapshot in incident_document.collection(EVIDENCE_COLLECTION).stream()
     )
     return f"<section><h2>Evidence</h2><ul>{items}</ul></section>"
+
+
+def _render_hypotheses(incident: dict[str, object]) -> str:
+    hypotheses = incident.get("current_hypotheses")
+    if not isinstance(hypotheses, list):
+        hypotheses = []
+    items = "".join(
+        "<li>"
+        f"<strong>{_display(item.get('confidence'))}</strong> — "
+        f"{_display(item.get('claim'))} — "
+        f"Support: {_display(_ids(item.get('evidence_ids')))} — "
+        f"Counter: {_display(_ids(item.get('counter_evidence_ids')))}"
+        "</li>"
+        for item in hypotheses
+        if isinstance(item, dict)
+    )
+    return f"<section><h2>Hypotheses</h2><ul>{items}</ul></section>"
+
+
+def _ids(value: object) -> str:
+    return ", ".join(item for item in value if isinstance(item, str)) if isinstance(value, list) else ""
 
 
 def _render_incident(incident_id: str, incident: dict[str, object]) -> str:
