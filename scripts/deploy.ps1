@@ -56,6 +56,19 @@ function Enable-RequiredApis {
     }
 }
 
+function Ensure-ArtifactRepository {
+    & gcloud artifacts repositories describe $ArtifactRepository --location $Region --project $ProjectId --format="value(name)" 2>$null | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        return
+    }
+
+    & gcloud artifacts repositories create $ArtifactRepository --repository-format=docker --location $Region --project $ProjectId
+    if ($LASTEXITCODE -ne 0) {
+        throw "Artifact Registry repository creation failed."
+    }
+}
+
 Assert-GcloudPrerequisites
 Enable-RequiredApis
 Assert-CloudBuildPermission
+Ensure-ArtifactRepository
