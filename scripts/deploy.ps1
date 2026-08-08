@@ -138,6 +138,15 @@ function Grant-ProjectRoles {
     }
 }
 
+function Grant-WorkerInvoker {
+    param([string]$ServiceAccountEmail)
+
+    & gcloud run services add-iam-policy-binding $WorkerService --region $Region --project $ProjectId --member="serviceAccount:$ServiceAccountEmail" --role=roles/run.invoker --condition=None --quiet | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Worker invoker binding failed for '$ServiceAccountEmail'."
+    }
+}
+
 Assert-GcloudPrerequisites
 Enable-RequiredApis
 Assert-CloudBuildPermission
@@ -148,3 +157,4 @@ $ApiServiceAccountEmail = Ensure-ServiceAccount $ApiServiceAccount "WPF Reliabil
 Grant-ProjectRoles $ApiServiceAccountEmail $ApiProjectRoles
 $WorkerServiceAccountEmail = Ensure-ServiceAccount $WorkerServiceAccount "WPF Reliability Worker"
 Grant-ProjectRoles $WorkerServiceAccountEmail $WorkerProjectRoles
+$PubSubInvokerServiceAccountEmail = Ensure-ServiceAccount $PubSubInvokerServiceAccount "WPF Reliability PubSub Invoker"

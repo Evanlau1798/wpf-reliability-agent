@@ -86,3 +86,12 @@ def test_deploy_script_creates_worker_service_account_with_minimal_project_roles
     assert "Ensure-ServiceAccount $WorkerServiceAccount" in script
     assert '"roles/aiplatform.user"' in script
     assert "$WorkerProjectRoles" in script
+
+
+def test_pubsub_invoker_has_only_worker_service_invoker_binding() -> None:
+    script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
+
+    assert "Ensure-ServiceAccount $PubSubInvokerServiceAccount" in script
+    assert "gcloud run services add-iam-policy-binding $WorkerService" in script
+    assert "--role=roles/run.invoker" in script
+    assert "Grant-ProjectRoles $PubSubInvokerServiceAccountEmail" not in script
