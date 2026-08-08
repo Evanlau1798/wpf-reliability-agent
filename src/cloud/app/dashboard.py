@@ -5,6 +5,7 @@ from html import escape
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
+from app.auth import OPERATOR_CSRF_COOKIE, OPERATOR_CSRF_HEADER
 from app.firestore_client import (
     APPROVALS_COLLECTION,
     AUDIT_COLLECTION,
@@ -139,6 +140,10 @@ def _timestamp(value: object) -> datetime | None:
 
 
 def _render_approvals(incident_document: object) -> str:
+    approvals = [
+        snapshot.to_dict() or {}
+        for snapshot in incident_document.collection(APPROVALS_COLLECTION).stream()
+    ]
     cards = "".join(
         "<article>"
         f"<h3>{_display(approval.get('approval_id'))}</h3><dl>"
@@ -150,13 +155,45 @@ def _render_approvals(incident_document: object) -> str:
         f"<dt>Evidence hash</dt><dd>{_display(approval.get('evidence_snapshot_hash'))}</dd>"
         f"<dt>Rollback</dt><dd>{_display(approval.get('rollback_plan'))}</dd>"
         f"<dt>Expires</dt><dd>{_display(approval.get('expires_at_utc'))}</dd>"
-        "</dl></article>"
-        for approval in (
-            snapshot.to_dict() or {}
-            for snapshot in incident_document.collection(APPROVALS_COLLECTION).stream()
-        )
+        f"</dl>{_approval_controls(approval)}</article>"
+        for approval in approvals
     )
-    return f"<section><h2>Approval</h2>{cards}</section>"
+    script = _approval_script() if any(item.get("status") == "PENDING" for item in approvals) else ""
+    return f"<section><h2>Approval</h2>{cards}</section>{script}"
+
+
+def _approval_controls(approval: dict[str, object]) -> str:
+    if approval.get("status") != "PENDING":
+        return ""
+    approval_id = _display(approval.get("approval_id"))
+    return (
+        f'<p><button type="button" data-approval-id="{approval_id}" '
+        'data-approval-decision="approve">Approve</button> '
+        f'<button type="button" data-approval-id="{approval_id}" '
+        'data-approval-decision="reject">Reject</button></p>'
+    )
+
+
+def _approval_script() -> str:
+    cookie_name = json.dumps(f"{OPERATOR_CSRF_COOKIE}=")
+    header_name = json.dumps(OPERATOR_CSRF_HEADER)
+    return (
+        "<script>document.addEventListener('click',async(event)=>{"
+        "const button=event.target.closest?.('button[data-approval-decision]');"
+        "if(!button)return;"
+        f"const csrfName={cookie_name};"
+        "const csrf=document.cookie.split('; ').find(part=>part.startsWith(csrfName));"
+        "if(!csrf)return;"
+        "const token=decodeURIComponent(csrf.slice(csrfName.length));"
+        "const approvalId=button.dataset.approvalId;"
+        "const decision=button.dataset.approvalDecision;"
+        "const response=await fetch('/v1/approvals/'+encodeURIComponent(approvalId)+':decide',{"
+        "method:'POST',headers:{'Content-Type':'application/json',"
+        f"{header_name}:token"
+        "},body:JSON.stringify({decision})});"
+        "if(response.ok)location.reload();"
+        "});</script>"
+    )
 
 
 def _json(value: object) -> str:

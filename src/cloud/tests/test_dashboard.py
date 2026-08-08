@@ -3,7 +3,7 @@ from unittest.mock import Mock
 
 from fastapi.testclient import TestClient
 
-from app import firestore_client
+from app import auth, firestore_client
 from app.main import app
 
 
@@ -254,7 +254,54 @@ def test_console_incident_detail_renders_exact_approval_card(monkeypatch) -> Non
     assert "d" * 64 in response.text
     assert "Re-enable the feature" in response.text
     assert "2026-08-09T02:00:00Z" in response.text
-    assert "<script>" not in response.text
+    assert "<script>alert(1)</script>" not in response.text
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in response.text
+
+
+def test_console_pending_approval_controls_use_existing_csrf_contract(monkeypatch) -> None:
+    _set_api_environment(monkeypatch)
+    incident = Mock(exists=True)
+    incident.to_dict.return_value = {"state": "AWAITING_APPROVAL", "summary": "Rollback proposed"}
+    pending = _snapshot(
+        {
+            "approval_id": "approval-pending",
+            "status": "PENDING",
+            "action_id": "action-1",
+            "tool": "recovery.set_feature_flag",
+            "canonical_arguments": {"feature": "ExperimentalPeopleGrid", "enabled": False},
+            "canonical_arguments_hash": "e" * 64,
+            "evidence_snapshot_hash": "f" * 64,
+            "rollback_plan": "Re-enable the feature.",
+            "expires_at_utc": "2026-08-09T02:00:00Z",
+        }
+    )
+    approved = _snapshot({**pending.to_dict(), "approval_id": "approval-approved", "status": "APPROVED"})
+    client = Mock()
+    incident_document = client.collection.return_value.document.return_value
+    incident_document.get.return_value = incident
+    empty_collection = Mock()
+    empty_collection.stream.return_value = []
+    approval_collection = Mock()
+    approval_collection.stream.return_value = [pending, approved]
+    incident_document.collection.side_effect = lambda name: (
+        approval_collection if name == firestore_client.APPROVALS_COLLECTION else empty_collection
+    )
+    client.collection.return_value.where.return_value.stream.return_value = []
+    monkeypatch.setattr("app.main.get_firestore_client", lambda _project_id: client)
+
+    with TestClient(app, base_url="https://testserver") as test_client:
+        assert test_client.post("/console/login", json={"token": "operator-secret"}).status_code == 204
+        response = test_client.get("/console/incidents/incident-8")
+
+    assert response.status_code == 200
+    assert ">Approve</button>" in response.text
+    assert ">Reject</button>" in response.text
+    assert response.text.count('data-approval-id="approval-pending"') == 2
+    assert 'data-approval-id="approval-approved"' not in response.text
+    assert auth.OPERATOR_CSRF_COOKIE in response.text
+    assert auth.OPERATOR_CSRF_HEADER in response.text
+    assert "/v1/approvals/" in response.text
+    assert ":decide" in response.text
 
 
 def _snapshot(data: dict[str, object]) -> Mock:
