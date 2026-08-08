@@ -170,6 +170,52 @@ public sealed class SourceMapLookupTests
         }
     }
 
+    [Fact]
+    public async Task SourceLookupBindingDoesNotAttributeMalformedOrStaleMaps()
+    {
+        var staleMap = JsonSerializer.Serialize(new[]
+        {
+            new
+            {
+                key = "Demo.MainWindow/PeopleGrid/PersonName#Text|DisplayName",
+                file = "src/windows/Demo.BrokenWpfApp/MainWindow.xaml",
+                binding_path = "DisplayName",
+                target_property = "Text",
+            },
+        });
+
+        foreach (var contents in new[] { "{", staleMap })
+        {
+            var sourceMapPath = Path.Combine(
+                Path.GetTempPath(),
+                $"wpf-reliability-source-map-{Guid.NewGuid():N}.json");
+            await File.WriteAllTextAsync(sourceMapPath, contents);
+            try
+            {
+                await using var sensor = ReliabilitySensor.Start(TestOptions(sourceMapPath));
+                var executor = new ReadOnlyCommandExecutor(sensor);
+                var command = (await ReadCommandAsync()) with
+                {
+                    Tool = DiagnosticTool.SourceLookupBinding,
+                    Arguments = JsonSerializer.SerializeToElement(new
+                    {
+                        key = "Demo.MainWindow/PeopleGrid/PersonName#Text|DisplayNmae",
+                    }),
+                };
+
+                var result = await executor.ExecuteAsync(command, CancellationToken.None);
+
+                Assert.Equal(0, result.GetProperty("matches").GetArrayLength());
+                Assert.DoesNotContain("\"file\"", result.GetRawText(), StringComparison.Ordinal);
+                Assert.DoesNotContain("\"line\"", result.GetRawText(), StringComparison.Ordinal);
+            }
+            finally
+            {
+                File.Delete(sourceMapPath);
+            }
+        }
+    }
+
     private static void AssertMatch(JsonElement result, string expectedKey)
     {
         var matches = result.GetProperty("matches");
