@@ -21,3 +21,10 @@ def test_runtime_image_and_ci_use_non_root_user() -> None:
 
     assert "USER appuser" in dockerfile
     assert 'test "$(docker run --rm reliability-agent:ci id -u)" != "0"' in workflow
+
+
+def test_ci_smokes_api_role_container() -> None:
+    workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+    assert "--env SERVICE_ROLE=api" in workflow
+    assert "http://127.0.0.1:18080/healthz" in workflow
