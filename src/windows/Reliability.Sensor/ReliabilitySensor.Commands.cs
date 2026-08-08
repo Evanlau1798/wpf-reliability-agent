@@ -31,8 +31,61 @@ public sealed partial class ReliabilitySensor
                 token),
             handleMutationCommand: async (command, token) =>
             {
-                _ = await ExecuteMutationCommandAsync(command, token).ConfigureAwait(false);
+                var result = await ExecuteClaimedMutationCommandAsync(
+                    commandJournal,
+                    command,
+                    token).ConfigureAwait(false);
+                await client.CompleteCommandAsync(result, token).ConfigureAwait(false);
             }).ConfigureAwait(false);
+    }
+
+    internal async Task<CommandResult> ExecuteClaimedMutationCommandAsync(
+        SqliteOutbox commandJournal,
+        DiagnosticCommand command,
+        CancellationToken cancellationToken)
+    {
+        var startedAt = DateTimeOffset.UtcNow;
+        var recovery = await ExecuteMutationCommandAsync(command, cancellationToken)
+            .ConfigureAwait(false);
+        var completedAt = DateTimeOffset.UtcNow;
+        var payload = JsonSerializer.SerializeToElement(new
+        {
+            status = recovery.Status.ToString(),
+            before_state = recovery.BeforeState,
+            after_state = recovery.AfterState,
+            duration_ms = recovery.DurationMilliseconds,
+            error_code = recovery.ErrorCode,
+        });
+        var result = new CommandResult(
+            "1.0",
+            command.CommandId,
+            command.IncidentId,
+            command.TargetAppSessionId,
+            recovery.Status switch
+            {
+                RecoveryStatus.APPLIED or RecoveryStatus.ALREADY_APPLIED => ResultStatus.SUCCEEDED,
+                RecoveryStatus.REJECTED => ResultStatus.REJECTED,
+                _ => ResultStatus.FAILED,
+            },
+            startedAt,
+            completedAt,
+            payload,
+            new string('0', 64),
+            false,
+            recovery.ErrorCode is null ? null : new CommandError(recovery.ErrorCode, null));
+        result = result with { ResultHash = ComputeCommandResultHash(result) };
+
+        var resultJson = JsonSerializer.Serialize(
+            result,
+            ContractJsonContext.Default.CommandResult);
+        await commandJournal.CompleteCommandAsync(
+            command.CommandId,
+            command.ArgumentsHash,
+            resultJson,
+            result.ResultHash,
+            completedAt,
+            cancellationToken).ConfigureAwait(false);
+        return result;
     }
 
     private async Task ExecuteReadOnlyCommandAsync(
