@@ -1,3 +1,4 @@
+using System.Xml;
 using Reliability.SourceMap;
 
 namespace Demo.BrokenWpfApp.Tests;
@@ -44,6 +45,18 @@ public sealed class SourceMapToolTests
         Assert.Equal("src/windows/Demo.BrokenWpfApp/MainWindow.xaml", relative);
         Assert.Throws<ArgumentOutOfRangeException>(
             () => SourceMapGenerator.NormalizeRepoRelativePath(repositoryRoot, outside));
+    }
+
+    [Fact]
+    public void LoadsXamlAsXmlWithLineInformation()
+    {
+        var path = Path.Combine(RepositoryRoot(), "src", "windows", "Demo.BrokenWpfApp", "MainWindow.xaml");
+
+        var document = SourceMapGenerator.LoadXaml(path);
+        var lineInfo = Assert.IsAssignableFrom<IXmlLineInfo>(document.Root);
+
+        Assert.True(lineInfo.HasLineInfo());
+        Assert.True(lineInfo.LineNumber > 0);
     }
 
     private static string RepositoryRoot()

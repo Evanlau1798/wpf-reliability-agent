@@ -1,3 +1,5 @@
+using System.Xml.Linq;
+
 namespace Reliability.SourceMap;
 
 public static class SourceMapGenerator
@@ -26,6 +28,10 @@ public static class SourceMapGenerator
 
         return relative.Replace(Path.DirectorySeparatorChar, '/');
     }
+
+    public static XDocument LoadXaml(string path) => XDocument.Load(
+        path,
+        LoadOptions.SetLineInfo | LoadOptions.PreserveWhitespace);
 
     private static bool IsBuildOutput(string root, string path)
     {
