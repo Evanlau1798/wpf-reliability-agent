@@ -169,6 +169,24 @@ public sealed class SourceMapToolTests
         }
     }
 
+    [Fact]
+    public void GeneratesDeterministicSortedSourceMapJson()
+    {
+        var repositoryRoot = RepositoryRoot();
+        var projectRoot = Path.Combine(repositoryRoot, "src", "windows", "Demo.BrokenWpfApp");
+        var buildCommit = new string('a', 40);
+
+        var first = SourceMapGenerator.GenerateSourceMap(repositoryRoot, projectRoot, buildCommit);
+        var second = SourceMapGenerator.GenerateSourceMap(repositoryRoot, projectRoot, buildCommit);
+
+        Assert.Equal(first.Json, second.Json);
+        Assert.Equal(first.Sha256, second.Sha256);
+        Assert.NotEmpty(first.Entries);
+        Assert.Equal(
+            first.Entries.Select(entry => entry.Key).Order(StringComparer.Ordinal),
+            first.Entries.Select(entry => entry.Key));
+    }
+
     private static string RepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

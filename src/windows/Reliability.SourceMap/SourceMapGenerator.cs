@@ -1,4 +1,6 @@
 using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using System.Xml;
 using System.Xml.Linq;
 
@@ -7,6 +9,11 @@ namespace Reliability.SourceMap;
 public static class SourceMapGenerator
 {
     private static readonly XNamespace XamlNamespace = "http://schemas.microsoft.com/winfx/2006/xaml";
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+        WriteIndented = true,
+    };
 
     public static IReadOnlyList<string> DiscoverXamlFiles(string projectRoot)
     {
@@ -138,6 +145,134 @@ public static class SourceMapGenerator
 
         return null;
     }
+
+    public static string? FindRepositoryRoot(string path)
+    {
+        var directory = new DirectoryInfo(Path.GetFullPath(path));
+        while (directory is not null)
+        {
+            var gitPath = Path.Combine(directory.FullName, ".git");
+            if (Directory.Exists(gitPath) || File.Exists(gitPath))
+            {
+                return directory.FullName;
+            }
+
+            directory = directory.Parent;
+        }
+
+        return null;
+    }
+
+    public static SourceMapArtifact GenerateSourceMap(
+        string repositoryRoot,
+        string projectRoot,
+        string? buildCommit)
+    {
+        var entries = DiscoverXamlFiles(projectRoot)
+            .SelectMany(path => BuildEntries(repositoryRoot, path, buildCommit))
+            .OrderBy(entry => entry.Key, StringComparer.Ordinal)
+            .ThenBy(entry => entry.File, StringComparer.Ordinal)
+            .ThenBy(entry => entry.Line)
+            .ThenBy(entry => entry.Column)
+            .ToArray();
+        var json = JsonSerializer.Serialize(entries, JsonOptions);
+        var sha256 = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(json))).ToLowerInvariant();
+        return new SourceMapArtifact(entries, json, sha256);
+    }
+
+    private static IEnumerable<SourceMapEntry> BuildEntries(
+        string repositoryRoot,
+        string path,
+        string? buildCommit)
+    {
+        var document = LoadXaml(path);
+        if (document.Root is null)
+        {
+            yield break;
+        }
+
+        var windowType = GetXClass(document);
+        var relativePath = NormalizeRepoRelativePath(repositoryRoot, path);
+        var fileSha256 = ComputeFileSha256(path);
+
+        foreach (var element in document.Root.DescendantsAndSelf())
+        {
+            foreach (var attribute in element.Attributes().Where(IsBindingMarkup))
+            {
+                var parsed = ParseBinding(attribute.Value);
+                yield return BuildEntry(
+                    relativePath,
+                    fileSha256,
+                    buildCommit,
+                    windowType,
+                    element,
+                    attribute.Name.LocalName,
+                    parsed,
+                    attribute);
+            }
+        }
+
+        foreach (var binding in document.Root.Descendants().Where(element => element.Name.LocalName == "Binding"))
+        {
+            var target = binding.Ancestors().FirstOrDefault(element => !element.Name.LocalName.Contains('.'));
+            var targetProperty = GetTargetProperty(binding);
+            if (target is null || targetProperty is null)
+            {
+                continue;
+            }
+
+            var pathValue = (string?)binding.Attribute("Path");
+            var parsed = pathValue is null
+                ? new BindingParseResult(null, "unsupported_binding_markup")
+                : new BindingParseResult(pathValue, null);
+            yield return BuildEntry(
+                relativePath,
+                fileSha256,
+                buildCommit,
+                windowType,
+                target,
+                targetProperty,
+                parsed,
+                binding);
+        }
+    }
+
+    private static SourceMapEntry BuildEntry(
+        string relativePath,
+        string fileSha256,
+        string? buildCommit,
+        string? windowType,
+        XElement element,
+        string targetProperty,
+        BindingParseResult parsed,
+        XObject source)
+    {
+        var ancestors = GetNamedAncestorChain(element);
+        var elementName = GetXName(element) ?? element.Name.LocalName;
+        var position = GetSourcePosition(source) ?? new SourcePosition(0, 0);
+        var key = string.Join(
+            '/',
+            windowType ?? "unknown",
+            ancestors.LastOrDefault() ?? "root",
+            $"{elementName}#{targetProperty}|{parsed.Path ?? $"unsupported:{parsed.UnsupportedReason}"}");
+        return new SourceMapEntry(
+            key,
+            relativePath,
+            position.Line,
+            position.Column,
+            windowType,
+            ancestors,
+            element.Name.LocalName,
+            elementName,
+            targetProperty,
+            parsed.Path,
+            parsed.UnsupportedReason,
+            fileSha256,
+            buildCommit);
+    }
+
+    private static bool IsBindingMarkup(XAttribute attribute) =>
+        attribute.Value.TrimStart().StartsWith("{Binding", StringComparison.Ordinal);
 
     private static string? ResolveGitDirectory(string gitPath)
     {

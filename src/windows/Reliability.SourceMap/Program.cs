@@ -11,5 +11,16 @@ if (!Directory.Exists(projectRoot))
     return 2;
 }
 
-Console.WriteLine("[]");
+var repositoryRoot = Reliability.SourceMap.SourceMapGenerator.FindRepositoryRoot(projectRoot);
+if (repositoryRoot is null)
+{
+    Console.Error.WriteLine("Repository root not found.");
+    return 2;
+}
+
+var sourceMap = Reliability.SourceMap.SourceMapGenerator.GenerateSourceMap(
+    repositoryRoot,
+    projectRoot,
+    Reliability.SourceMap.SourceMapGenerator.ReadBuildCommit(repositoryRoot));
+Console.WriteLine(sourceMap.Json);
 return 0;
