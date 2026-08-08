@@ -218,3 +218,16 @@ def test_deploy_script_runs_health_and_authenticated_telemetry_smoke() -> None:
     assert 'Invoke-RestMethod -Method Post -Uri "$ApiUrl/v1/telemetry:batch"' in script
     assert "'{\"events\":[]}'" in script
     assert "$DeviceToken = $null" in script
+
+
+def test_deploy_script_smokes_pubsub_worker_and_correlates_cloud_log() -> None:
+    script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
+
+    assert "function Invoke-PubSubWorkerSmokeTest" in script
+    assert "gcloud pubsub topics publish $PubSubTopic" in script
+    assert '--message="malformed-smoke"' in script
+    assert '--format="value(messageIds[0])"' in script
+    assert "gcloud logging read" in script
+    assert 'resource.labels.service_name=`"$WorkerService`"' in script
+    assert 'textPayload:`"worker_message_rejected`"' in script
+    assert 'textPayload:`"$RunId`"' in script
