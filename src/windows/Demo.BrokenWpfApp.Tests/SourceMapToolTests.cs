@@ -152,6 +152,23 @@ public sealed class SourceMapToolTests
         }
     }
 
+    [Fact]
+    public void ReadsBuildCommitAndReturnsNullWithoutGitMetadata()
+    {
+        var repositoryCommit = SourceMapGenerator.ReadBuildCommit(RepositoryRoot());
+        var temporaryDirectory = Directory.CreateTempSubdirectory("source-map-git-");
+        try
+        {
+            Assert.NotNull(repositoryCommit);
+            Assert.Matches("^[0-9a-f]{40,64}$", repositoryCommit!);
+            Assert.Null(SourceMapGenerator.ReadBuildCommit(temporaryDirectory.FullName));
+        }
+        finally
+        {
+            temporaryDirectory.Delete(recursive: true);
+        }
+    }
+
     private static string RepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

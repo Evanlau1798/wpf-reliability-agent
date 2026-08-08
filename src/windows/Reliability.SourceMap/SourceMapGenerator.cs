@@ -93,6 +93,94 @@ public static class SourceMapGenerator
         return Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
     }
 
+    public static string? ReadBuildCommit(string repositoryRoot)
+    {
+        var gitDirectory = ResolveGitDirectory(Path.Combine(Path.GetFullPath(repositoryRoot), ".git"));
+        if (gitDirectory is null)
+        {
+            return null;
+        }
+
+        var headPath = Path.Combine(gitDirectory, "HEAD");
+        if (!File.Exists(headPath))
+        {
+            return null;
+        }
+
+        var head = File.ReadAllText(headPath).Trim();
+        if (!head.StartsWith("ref: ", StringComparison.Ordinal))
+        {
+            return NormalizeCommitHash(head);
+        }
+
+        var reference = head["ref: ".Length..].Trim();
+        var commonDirectory = ResolveCommonGitDirectory(gitDirectory);
+        var referencePath = Path.Combine(commonDirectory, reference.Replace('/', Path.DirectorySeparatorChar));
+        if (File.Exists(referencePath))
+        {
+            return NormalizeCommitHash(File.ReadAllText(referencePath));
+        }
+
+        var packedRefs = Path.Combine(commonDirectory, "packed-refs");
+        if (!File.Exists(packedRefs))
+        {
+            return null;
+        }
+
+        foreach (var line in File.ReadLines(packedRefs))
+        {
+            var parts = line.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 2 && parts[1] == reference)
+            {
+                return NormalizeCommitHash(parts[0]);
+            }
+        }
+
+        return null;
+    }
+
+    private static string? ResolveGitDirectory(string gitPath)
+    {
+        if (Directory.Exists(gitPath))
+        {
+            return Path.GetFullPath(gitPath);
+        }
+
+        if (!File.Exists(gitPath))
+        {
+            return null;
+        }
+
+        var value = File.ReadAllText(gitPath).Trim();
+        if (!value.StartsWith("gitdir: ", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        var directory = Path.GetDirectoryName(gitPath)!;
+        var resolved = Path.GetFullPath(Path.Combine(directory, value["gitdir: ".Length..].Trim()));
+        return Directory.Exists(resolved) ? resolved : null;
+    }
+
+    private static string ResolveCommonGitDirectory(string gitDirectory)
+    {
+        var commonDirPath = Path.Combine(gitDirectory, "commondir");
+        if (!File.Exists(commonDirPath))
+        {
+            return gitDirectory;
+        }
+
+        return Path.GetFullPath(Path.Combine(gitDirectory, File.ReadAllText(commonDirPath).Trim()));
+    }
+
+    private static string? NormalizeCommitHash(string value)
+    {
+        var hash = value.Trim();
+        return hash.Length is 40 or 64 && hash.All(Uri.IsHexDigit)
+            ? hash.ToLowerInvariant()
+            : null;
+    }
+
     private static bool IsBuildOutput(string root, string path)
     {
         var relative = Path.GetRelativePath(root, path);
