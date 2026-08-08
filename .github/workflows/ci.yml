@@ -58,3 +58,10 @@ jobs:
       - name: Test cloud package
         working-directory: src/cloud
         run: python -m pytest -q
+
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build cloud image
+        run: docker build --file src/cloud/Dockerfile --tag reliability-agent:ci src/cloud

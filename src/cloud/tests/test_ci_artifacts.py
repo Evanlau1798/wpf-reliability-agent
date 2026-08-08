@@ -41,3 +41,10 @@ def test_cloud_job_lints_types_and_tests_python_package() -> None:
     assert "python -m mypy --ignore-missing-imports --follow-imports=skip" in workflow
     assert "app/models.py app/config.py app/contracts.py app/policy.py app/auth.py app/worker.py" in workflow
     assert "python -m pytest -q" in workflow
+
+
+def test_container_job_builds_cloud_image_on_linux_runner() -> None:
+    workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+    assert "  container:" in workflow
+    assert "docker build --file src/cloud/Dockerfile --tag reliability-agent:ci src/cloud" in workflow
