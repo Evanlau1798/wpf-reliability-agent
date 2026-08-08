@@ -229,8 +229,8 @@ def test_markdown_renderer_is_deterministic_and_model_free(monkeypatch) -> None:
     assert first == second
     assert first.startswith("# Incident incident-1\n")
     assert "## Timeline" in first
-    assert "## Evidence" in first
-    assert "## Verification" in first
+    assert "## Evidence Index" in first
+    assert "## Before/After Verification" in first
     assert "MITIGATED" in first
 
 
@@ -265,3 +265,39 @@ def test_report_renderers_sanitize_malicious_ui_text_fixture() -> None:
     assert "[run](javascript:" not in markdown
     assert "<script>" not in html
     assert "<img " not in html
+
+
+def test_mitigated_report_markdown_matches_golden_snapshot_and_fixed_sections() -> None:
+    from app.models import IncidentReport
+    from app.reporting import render_report_markdown
+
+    report = IncidentReport.model_validate_json(
+        (FIXTURES / "incident-report-mitigated.json").read_text(encoding="utf-8")
+    )
+    rendered = render_report_markdown(report)
+    required_sections = [
+        "Incident Metadata",
+        "Executive Summary",
+        "User Impact",
+        "Detection",
+        "Timeline",
+        "Evidence Index",
+        "Root-Cause Hypotheses",
+        "Confirmed/Candidate Root Cause",
+        "Diagnostic Tools Invoked",
+        "Temporary Mitigation",
+        "Permanent Engineering Recommendation",
+        "Risk Assessment",
+        "Approval Record",
+        "Executed Action",
+        "Before/After Verification",
+        "Rollback Information",
+        "Remaining Uncertainty",
+        "Reproduction Steps",
+        "Metadata",
+    ]
+
+    for section in required_sections:
+        assert f"## {section}" in rendered
+    golden = Path(__file__).parent / "golden" / "incident-report-mitigated.md"
+    assert rendered == golden.read_text(encoding="utf-8")

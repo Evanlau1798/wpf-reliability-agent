@@ -204,13 +204,33 @@ def persist_report_json(client: Any, report: IncidentReport, *, version: str) ->
 
 def render_report_markdown(report: IncidentReport) -> str:
     md = _markdown_text
+    not_recorded = "- Not recorded in IncidentReport."
     lines = [
         f"# Incident {md(report.incident_id)}",
         "",
-        "## Summary",
+        "## Incident Metadata",
+        f"- Incident ID: {md(report.incident_id)}",
         f"- Status: {report.status.value}",
         f"- Severity: {report.severity.value}",
         f"- Confidence: {report.confidence.value}",
+        "",
+        "## Executive Summary",
+        (
+            f"- {md(report.claims[0].text)}"
+            if report.claims
+            else not_recorded
+        ),
+        "",
+        "## User Impact",
+        not_recorded,
+        "",
+        "## Detection",
+        (
+            f"- {report.timeline[0].timestamp_utc.isoformat()} | {md(report.timeline[0].kind)} | "
+            f"{md(report.timeline[0].actor)} | {md(report.timeline[0].reference)}"
+            if report.timeline
+            else not_recorded
+        ),
         "",
         "## Timeline",
     ]
@@ -219,17 +239,28 @@ def render_report_markdown(report: IncidentReport) -> str:
         f"{md(item.reference)}"
         for item in report.timeline
     )
-    lines.extend(["", "## Evidence"])
+    if not report.timeline:
+        lines.append("- None recorded.")
+    lines.extend(["", "## Evidence Index"])
     lines.extend(
         f"- {md(item.evidence_id)} | {md(item.kind)} | {md(item.summary)}"
         for item in report.evidence
     )
-    lines.extend(["", "## Claims"])
+    if not report.evidence:
+        lines.append("- None recorded.")
+    hypotheses = [
+        claim for claim in report.claims if claim.fact_or_hypothesis.value == "HYPOTHESIS"
+    ]
+    lines.extend(["", "## Root-Cause Hypotheses"])
     lines.extend(
-        f"- {claim.fact_or_hypothesis.value} | {claim.confidence.value} | {md(claim.text)} | "
+        f"- {claim.confidence.value} | {md(claim.text)} | "
         f"evidence: {', '.join(md(item) for item in claim.evidence_ids)}"
-        for claim in report.claims
+        for claim in hypotheses
     )
+    if not hypotheses:
+        lines.append("- None recorded.")
+    lines.extend(["", "## Confirmed/Candidate Root Cause", not_recorded])
+    lines.extend(["", "## Diagnostic Tools Invoked", not_recorded])
     lines.extend(["", "## Temporary Mitigation"])
     if report.temporary_mitigation is None:
         lines.append("- None")
@@ -242,7 +273,7 @@ def render_report_markdown(report: IncidentReport) -> str:
                 f"- Approval: {md(mitigation.approval_id)}",
             ]
         )
-    lines.extend(["", "## Permanent Recommendation"])
+    lines.extend(["", "## Permanent Engineering Recommendation"])
     if report.permanent_recommendation is None:
         lines.append("- None")
     else:
@@ -253,12 +284,52 @@ def render_report_markdown(report: IncidentReport) -> str:
                 f"- Source fix verified: {str(recommendation.source_fix_verified).lower()}",
             ]
         )
-    lines.extend(["", "## Verification"])
+    lines.extend(
+        [
+            "",
+            "## Risk Assessment",
+            f"- Incident severity: {report.severity.value}",
+            "- Action risk: Not recorded in IncidentReport.",
+            "",
+            "## Approval Record",
+        ]
+    )
+    if report.temporary_mitigation is None:
+        lines.append("- None")
+    else:
+        lines.append(f"- Approval ID: {md(report.temporary_mitigation.approval_id)}")
+    lines.extend(["", "## Executed Action"])
+    if report.temporary_mitigation is None:
+        lines.append("- None")
+    else:
+        lines.extend(
+            [
+                f"- Action ID: {md(report.temporary_mitigation.action_id)}",
+                f"- Tool: {report.temporary_mitigation.tool.value}",
+            ]
+        )
+    lines.extend(["", "## Before/After Verification"])
     lines.extend(
         f"- {md(metric.metric_name)}: {metric.before} -> {metric.after} {md(metric.unit)} | "
         f"evidence: {', '.join(md(item) for item in metric.evidence_ids)}"
         for metric in report.verification
     )
+    if not report.verification:
+        lines.append("- None recorded.")
+    lines.extend(["", "## Rollback Information", not_recorded])
+    lines.extend(
+        [
+            "",
+            "## Remaining Uncertainty",
+            f"- Overall confidence: {report.confidence.value}",
+        ]
+    )
+    lines.extend(
+        f"- Hypothesis: {md(claim.text)} | evidence: "
+        f"{', '.join(md(item) for item in claim.evidence_ids)}"
+        for claim in hypotheses
+    )
+    lines.extend(["", "## Reproduction Steps", not_recorded])
     metadata = report.metadata
     lines.extend(
         [
