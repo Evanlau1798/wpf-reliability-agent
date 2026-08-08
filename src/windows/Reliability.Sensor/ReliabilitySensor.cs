@@ -10,50 +10,6 @@ using Reliability.Contracts;
 
 namespace Reliability.Sensor;
 
-public sealed record ReliabilitySensorOptions
-{
-    public required Uri ApiBaseUri { get; init; }
-
-    public required string DeviceId { get; init; }
-
-    public required string DeviceToken { get; init; }
-
-    public required string ApplicationId { get; init; }
-
-    public required string ApplicationVersion { get; init; }
-
-    public int EventChannelCapacity { get; init; } = 500;
-
-    public int MaxEventBytes { get; init; } = 65_536;
-
-    public TimeSpan ShutdownTimeout { get; init; } = TimeSpan.FromSeconds(5);
-
-    public TimeSpan BindingAggregationWindow { get; init; } = TimeSpan.FromSeconds(10);
-
-    public int BindingBurstThreshold { get; init; } = 10;
-
-    public int MaxBindingFingerprints { get; init; } = 500;
-
-    internal string? OutboxPath { get; init; }
-
-    internal bool DisableBackgroundPersistence { get; init; }
-
-    internal HttpMessageHandler? TelemetryHandler { get; init; }
-
-    internal TimeSpan RelayPollInterval { get; init; } = TimeSpan.FromSeconds(1);
-}
-
-public enum SensorDiagnostic
-{
-    Started,
-    MissingDeviceToken,
-    InitializationFailed,
-    EventDropped,
-    ShutdownTimedOut,
-    OutboxPersistenceFailed,
-    BindingAggregateQueued,
-}
-
 public sealed partial class ReliabilitySensor : IAsyncDisposable
 {
     private const string RedactionProfile = "metadata-only-v1";
@@ -66,6 +22,7 @@ public sealed partial class ReliabilitySensor : IAsyncDisposable
     private readonly string _applicationId;
     private readonly string _applicationVersion;
     private readonly int _maxEventBytes;
+    private readonly SourceMapCatalog _sourceMap;
     private readonly object _bindingLifecycleLock = new();
     private readonly BindingDiagnosticAggregator? _bindingAggregator;
     private readonly TimeSpan _bindingMaintenanceInterval;
@@ -99,6 +56,7 @@ public sealed partial class ReliabilitySensor : IAsyncDisposable
         _deviceId = options?.DeviceId ?? string.Empty;
         _applicationId = options?.ApplicationId ?? string.Empty;
         _applicationVersion = options?.ApplicationVersion ?? string.Empty;
+        _sourceMap = SourceMapCatalog.Load(options?.SourceMapPath);
         _bindingAggregator = options is null
             ? null
             : new BindingDiagnosticAggregator(
@@ -132,6 +90,8 @@ public sealed partial class ReliabilitySensor : IAsyncDisposable
     internal string ApplicationVersion => _applicationVersion;
 
     internal int QueuedEventCount => _events.Reader.CanCount ? _events.Reader.Count : 0;
+
+    internal int SourceMapEntryCount => _sourceMap.Count;
 
     public static ReliabilitySensor Start(
         ReliabilitySensorOptions? options,

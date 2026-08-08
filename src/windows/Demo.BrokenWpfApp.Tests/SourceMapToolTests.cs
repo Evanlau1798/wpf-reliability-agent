@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Xml;
+using Reliability.Sensor;
 using Reliability.SourceMap;
 
 namespace Demo.BrokenWpfApp.Tests;
@@ -209,6 +210,35 @@ public sealed class SourceMapToolTests
         Assert.Equal(expected!.File, entry.File);
         Assert.Equal(expected.Line, entry.Line);
         Assert.Equal(expected.Key, entry.Key);
+    }
+
+    [Fact]
+    public async Task DemoBuildOutputContainsSourceMapReadableAtSensorStartup()
+    {
+        var repositoryRoot = RepositoryRoot();
+        var sourceMapPath = Path.Combine(
+            repositoryRoot,
+            "src",
+            "windows",
+            "Demo.BrokenWpfApp",
+            "bin",
+            "Debug",
+            "net8.0-windows",
+            "source-map.json");
+
+        Assert.True(File.Exists(sourceMapPath), $"Missing source-map artifact: {sourceMapPath}");
+        await using var sensor = ReliabilitySensor.Start(new ReliabilitySensorOptions
+        {
+            ApiBaseUri = new Uri("https://localhost"),
+            DeviceId = "demo-test-device",
+            DeviceToken = string.Empty,
+            ApplicationId = "demo-broken-wpf-app",
+            ApplicationVersion = "0.1.0",
+            DisableBackgroundPersistence = true,
+            SourceMapPath = sourceMapPath,
+        });
+
+        Assert.True(sensor.SourceMapEntryCount > 0);
     }
 
     private static string RepositoryRoot()

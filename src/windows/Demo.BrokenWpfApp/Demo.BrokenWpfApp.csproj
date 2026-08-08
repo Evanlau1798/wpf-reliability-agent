@@ -8,6 +8,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Reliability.Sensor\Reliability.Sensor.csproj" />
+    <ProjectReference Include="..\Reliability.SourceMap\Reliability.SourceMap.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
+
+  <Target Name="GenerateReliabilitySourceMap" AfterTargets="Build">
+    <Exec Command="dotnet &quot;$(MSBuildProjectDirectory)\..\Reliability.SourceMap\bin\$(Configuration)\net8.0\Reliability.SourceMap.dll&quot; --project-root &quot;$(MSBuildProjectDirectory)&quot; --output &quot;$(TargetDir)source-map.json&quot;" />
+  </Target>
 
 </Project>
