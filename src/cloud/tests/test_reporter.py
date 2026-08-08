@@ -1,5 +1,9 @@
 from pathlib import Path
 
+import json
+import pytest
+from pydantic import ValidationError
+
 
 FIXTURES = Path(__file__).parents[3] / "contracts" / "fixtures"
 
@@ -16,9 +20,6 @@ def test_reporter_instruction_forbids_side_effects_and_new_evidence() -> None:
 
 
 def test_reporter_input_contains_only_compact_finalized_records() -> None:
-    import pytest
-    from pydantic import ValidationError
-
     from app.reporting import ReporterInput
 
     record = {
@@ -52,3 +53,13 @@ def test_reporter_agent_binds_incident_report_schema_and_valid_output_parses() -
 
     assert agent.output_schema is IncidentReport
     assert report.status.value == "MITIGATED"
+
+
+def test_reporter_rejects_claim_with_unknown_evidence_id() -> None:
+    from app.models import IncidentReport
+
+    payload = json.loads((FIXTURES / "incident-report-mitigated.json").read_text(encoding="utf-8"))
+    payload["claims"][0]["evidence_ids"] = ["missing-evidence"]
+
+    with pytest.raises(ValidationError, match="unknown evidence IDs"):
+        IncidentReport.model_validate(payload)
