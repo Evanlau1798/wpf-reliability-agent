@@ -117,6 +117,21 @@ public sealed class SourceMapToolTests
         Assert.Equal("unsupported_binding_markup", result.UnsupportedReason);
     }
 
+    [Fact]
+    public void ReportsBindingLineAndColumnFromSource()
+    {
+        var path = Path.Combine(RepositoryRoot(), "src", "windows", "Demo.BrokenWpfApp", "MainWindow.xaml");
+        var document = SourceMapGenerator.LoadXaml(path);
+        var binding = document.Descendants().Single(element =>
+            element.Name.LocalName == "Binding" && (string?)element.Attribute("Path") == "DisplayNmae");
+
+        var position = SourceMapGenerator.GetSourcePosition(binding);
+
+        Assert.NotNull(position);
+        var sourceLine = File.ReadAllLines(path)[position!.Line - 1];
+        Assert.Equal(sourceLine.IndexOf("Binding Path=\"DisplayNmae\"", StringComparison.Ordinal) + 1, position.Column);
+    }
+
     private static string RepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

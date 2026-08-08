@@ -1,3 +1,4 @@
+using System.Xml;
 using System.Xml.Linq;
 
 namespace Reliability.SourceMap;
@@ -79,6 +80,11 @@ public static class SourceMapGenerator
             ? new BindingParseResult(null, "unsupported_binding_markup")
             : new BindingParseResult(path, null);
     }
+
+    public static SourcePosition? GetSourcePosition(XObject node) =>
+        node is IXmlLineInfo lineInfo && lineInfo.HasLineInfo()
+            ? new SourcePosition(lineInfo.LineNumber, lineInfo.LinePosition)
+            : null;
 
     private static bool IsBuildOutput(string root, string path)
     {
