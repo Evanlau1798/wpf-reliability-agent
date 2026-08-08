@@ -153,80 +153,9 @@ def test_mitigation_thresholds_are_fixture_locked_and_deterministic() -> None:
     )
 
 
-def test_post_action_verification_pairs_durable_pre_action_evidence() -> None:
-    evidence = [
-        {
-            "evidence_id": "binding-before",
-            "event_type": "binding.aggregate",
-            "app_session_id": "session-1",
-            "timestamp_utc": "2026-08-08T01:00:00Z",
-            "payload": {
-                "occurrence_count": 50,
-                "aggregation_window_ms": 10_000,
-                "last_seen_utc": "2026-08-08T00:59:59Z",
-            },
-        },
-        {
-            "evidence_id": "performance-before",
-            "event_type": "performance.sample",
-            "app_session_id": "session-1",
-            "timestamp_utc": "2026-08-08T01:00:01Z",
-            "payload": {
-                "frame_statistics": {"sample_count": 120, "p95_milliseconds": 48.0},
-                "sample_duration_ms": 2_000.0,
-                "confidence": "HIGH",
-                "visual_count": 1_500,
-                "visual_count_truncated": False,
-                "visual_scope_id": "element-session-1-7",
-            },
-        },
-        {
-            "evidence_id": "command-1",
-            "event_type": "tool.result",
-            "command_id": "command-1",
-            "tool": "recovery.set_feature_flag",
-            "app_session_id": "session-1",
-            "result": {
-                "status": "SUCCEEDED",
-                "started_at_utc": "2026-08-08T01:00:02Z",
-                "completed_at_utc": "2026-08-08T01:00:03Z",
-                "result": {"status": "APPLIED"},
-            },
-        },
-        {
-            "evidence_id": "binding-too-late",
-            "event_type": "binding.aggregate",
-            "app_session_id": "session-1",
-            "timestamp_utc": "2026-08-08T01:00:04Z",
-            "payload": {
-                "occurrence_count": 100,
-                "aggregation_window_ms": 10_000,
-                "last_seen_utc": "2026-08-08T01:00:04Z",
-            },
-        },
-        {
-            "evidence_id": "post-1",
-            "event_type": "recovery.result",
-            "app_session_id": "session-1",
-            "timestamp_utc": "2026-08-08T01:00:13Z",
-            "correlation": {
-                "incident_id": "incident-1",
-                "command_id": "command-1",
-                "action_id": "action-1",
-            },
-            "payload": {
-                "observation_window_ms": 10_000,
-                "binding_occurrence_count": 2,
-                "binding_errors_per_second": 0.2,
-                "frame_statistics": {"sample_count": 90, "p95_milliseconds": 18.0},
-                "performance_sample_duration_ms": 1_500.0,
-                "performance_confidence": "HIGH",
-                "visual_count": 420,
-                "visual_count_truncated": False,
-                "visual_scope_id": "element-session-1-7",
-            },
-        },
-    ]
+def test_main_before_after_fixture_verifies_mitigation() -> None:
+    fixture = json.loads((FIXTURES / "post-action-mitigation.json").read_text(encoding="utf-8"))
+    evidence = fixture["evidence"]
 
     result = evaluate_post_action_verification(evidence, "post-1")
 
@@ -239,6 +168,7 @@ def test_post_action_verification_pairs_durable_pre_action_evidence() -> None:
     assert result.before_performance_evidence_id == "performance-before"
     assert meets_mitigation_thresholds(result.binding, result.performance, result.visual)
     audit = build_verification_audit(result, "MITIGATED")
+    assert audit["outcome"] == fixture["expected_outcome"] == "MITIGATED"
     assert audit["post_evidence_id"] == "post-1"
     assert audit["metrics"]["binding_errors_per_second"]["delta"] == -4.8
 
