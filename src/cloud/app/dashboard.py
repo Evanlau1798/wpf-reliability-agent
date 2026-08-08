@@ -101,7 +101,8 @@ def _render_timeline(records: list[dict[str, object]]) -> str:
         "<li>"
         f"{_display(record.get('sequence'))} — "
         f"<time>{_display(record.get('timestamp_utc'))}</time> — "
-        f"{_display(record.get('type'))}"
+        f"{_display(record.get('type'))} — "
+        f"Hash: {_display(record.get('entry_hash'))}"
         "</li>"
         for record in records
     )
