@@ -95,3 +95,16 @@ def test_pubsub_invoker_has_only_worker_service_invoker_binding() -> None:
     assert "gcloud run services add-iam-policy-binding $WorkerService" in script
     assert "--role=roles/run.invoker" in script
     assert "Grant-ProjectRoles $PubSubInvokerServiceAccountEmail" not in script
+
+
+def test_deploy_script_creates_secret_placeholders_without_secret_values() -> None:
+    script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
+
+    assert "gcloud secrets describe $Name" in script
+    assert "gcloud secrets create $Name" in script
+    assert "Ensure-Secret $DeviceTokenSecret" in script
+    assert "Ensure-Secret $OperatorTokenSecret" in script
+    assert "--role=roles/secretmanager.secretAccessor" in script
+    assert "gcloud secrets versions add $DeviceTokenSecret" in script
+    assert "gcloud secrets versions add $OperatorTokenSecret" in script
+    assert "--data-file=-" in script

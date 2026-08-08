@@ -10,7 +10,9 @@ param(
     [string]$ApiServiceAccount = "reliability-api-sa",
     [string]$WorkerServiceAccount = "reliability-worker-sa",
     [string]$PubSubInvokerServiceAccount = "pubsub-invoker-sa",
-    [string]$BuildServiceAccount = "reliability-build-sa"
+    [string]$BuildServiceAccount = "reliability-build-sa",
+    [string]$DeviceTokenSecret = "reliability-device-token",
+    [string]$OperatorTokenSecret = "reliability-operator-token"
 )
 
 Set-StrictMode -Version Latest
@@ -147,6 +149,32 @@ function Grant-WorkerInvoker {
     }
 }
 
+function Ensure-Secret {
+    param([string]$Name)
+
+    & gcloud secrets describe $Name --project $ProjectId --format="value(name)" 2>$null | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        return
+    }
+
+    & gcloud secrets create $Name --replication-policy=automatic --project $ProjectId | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Secret placeholder creation failed for '$Name'."
+    }
+}
+
+function Grant-SecretAccess {
+    param(
+        [string]$Name,
+        [string]$ServiceAccountEmail
+    )
+
+    & gcloud secrets add-iam-policy-binding $Name --project $ProjectId --member="serviceAccount:$ServiceAccountEmail" --role=roles/secretmanager.secretAccessor --condition=None --quiet | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Secret access binding failed for '$Name'."
+    }
+}
+
 Assert-GcloudPrerequisites
 Enable-RequiredApis
 Assert-CloudBuildPermission
@@ -158,3 +186,10 @@ Grant-ProjectRoles $ApiServiceAccountEmail $ApiProjectRoles
 $WorkerServiceAccountEmail = Ensure-ServiceAccount $WorkerServiceAccount "WPF Reliability Worker"
 Grant-ProjectRoles $WorkerServiceAccountEmail $WorkerProjectRoles
 $PubSubInvokerServiceAccountEmail = Ensure-ServiceAccount $PubSubInvokerServiceAccount "WPF Reliability PubSub Invoker"
+Ensure-Secret $DeviceTokenSecret
+Ensure-Secret $OperatorTokenSecret
+Grant-SecretAccess $DeviceTokenSecret $ApiServiceAccountEmail
+Grant-SecretAccess $OperatorTokenSecret $ApiServiceAccountEmail
+Write-Host "Provision Secret Manager values through stdin before deployment:"
+Write-Host "  gcloud secrets versions add $DeviceTokenSecret --project $ProjectId --data-file=-"
+Write-Host "  gcloud secrets versions add $OperatorTokenSecret --project $ProjectId --data-file=-"
