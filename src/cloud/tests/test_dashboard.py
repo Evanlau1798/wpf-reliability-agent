@@ -45,7 +45,9 @@ def test_console_incident_detail_renders_incident_and_returns_404_when_missing(m
         "updated_at": datetime(2026, 8, 9, 1, 5, tzinfo=UTC),
     }
     client = Mock()
-    client.collection.return_value.document.return_value.get.return_value = snapshot
+    incident_document = client.collection.return_value.document.return_value
+    incident_document.get.return_value = snapshot
+    incident_document.collection.return_value.stream.return_value = []
     monkeypatch.setattr("app.main.get_firestore_client", lambda _project_id: client)
 
     with TestClient(app, base_url="https://testserver") as test_client:
@@ -60,6 +62,39 @@ def test_console_incident_detail_renders_incident_and_returns_404_when_missing(m
     assert "Binding failures" in response.text
     assert "2026-08-09T01:05:00+00:00" in response.text
     assert missing.status_code == 404
+
+
+def test_console_incident_detail_sorts_timeline_by_sequence_and_time(monkeypatch) -> None:
+    _set_api_environment(monkeypatch)
+    incident = Mock(exists=True)
+    incident.to_dict.return_value = {"state": "MITIGATED", "summary": "Recovered"}
+    audit = [
+        _snapshot({"sequence": 3, "timestamp_utc": "2026-08-09T01:03:00Z", "type": "mutation.verification"}),
+        _snapshot({"sequence": 1, "timestamp_utc": "2026-08-09T01:01:00Z", "type": "state.transition"}),
+        _snapshot({"sequence": 2, "timestamp_utc": "2026-08-09T01:02:00Z", "type": "tool.request"}),
+    ]
+    client = Mock()
+    incident_document = client.collection.return_value.document.return_value
+    incident_document.get.return_value = incident
+    incident_document.collection.return_value.stream.return_value = audit
+    monkeypatch.setattr("app.main.get_firestore_client", lambda _project_id: client)
+
+    with TestClient(app, base_url="https://testserver") as test_client:
+        assert test_client.post("/console/login", json={"token": "operator-secret"}).status_code == 204
+        response = test_client.get("/console/incidents/incident-3")
+
+    assert response.status_code == 200
+    first = response.text.index("state.transition")
+    second = response.text.index("tool.request")
+    third = response.text.index("mutation.verification")
+    assert first < second < third
+    assert response.text.index("2026-08-09T01:01:00Z") < response.text.index("2026-08-09T01:03:00Z")
+
+
+def _snapshot(data: dict[str, object]) -> Mock:
+    snapshot = Mock()
+    snapshot.to_dict.return_value = data
+    return snapshot
 
 
 def _set_api_environment(monkeypatch) -> None:

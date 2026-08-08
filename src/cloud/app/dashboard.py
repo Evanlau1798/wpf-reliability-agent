@@ -3,7 +3,7 @@ from html import escape
 
 from google.cloud import firestore
 
-from app.firestore_client import INCIDENTS_COLLECTION
+from app.firestore_client import AUDIT_COLLECTION, INCIDENTS_COLLECTION
 
 
 def render_incident_list(client: firestore.Client) -> str:
@@ -21,10 +21,12 @@ def render_incident_list(client: firestore.Client) -> str:
 
 
 def render_incident_detail(client: firestore.Client, incident_id: str) -> str | None:
-    snapshot = client.collection(INCIDENTS_COLLECTION).document(incident_id).get()
+    incident_document = client.collection(INCIDENTS_COLLECTION).document(incident_id)
+    snapshot = incident_document.get()
     if not snapshot.exists:
         return None
     incident = snapshot.to_dict() or {}
+    timeline = _render_timeline(incident_document)
     return (
         '<!doctype html><html lang="en"><head><meta charset="utf-8">'
         f"<title>Incident {_display(incident_id)}</title></head><body><main>"
@@ -32,8 +34,25 @@ def render_incident_detail(client: firestore.Client, incident_id: str) -> str | 
         f"<dt>State</dt><dd>{_display(incident.get('state'))}</dd>"
         f"<dt>Summary</dt><dd>{_display(incident.get('summary'))}</dd>"
         f"<dt>Updated</dt><dd>{_display(incident.get('updated_at'))}</dd>"
-        "</dl></main></body></html>"
+        f"</dl>{timeline}</main></body></html>"
     )
+
+
+def _render_timeline(incident_document: object) -> str:
+    records = [
+        snapshot.to_dict() or {}
+        for snapshot in incident_document.collection(AUDIT_COLLECTION).stream()
+    ]
+    records.sort(key=lambda record: (int(record["sequence"]), str(record["timestamp_utc"])))
+    items = "".join(
+        "<li>"
+        f"{_display(record.get('sequence'))} — "
+        f"<time>{_display(record.get('timestamp_utc'))}</time> — "
+        f"{_display(record.get('type'))}"
+        "</li>"
+        for record in records
+    )
+    return f"<section><h2>Timeline</h2><ol>{items}</ol></section>"
 
 
 def _render_incident(incident_id: str, incident: dict[str, object]) -> str:
