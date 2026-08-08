@@ -52,3 +52,11 @@ def test_deploy_script_creates_artifact_repository_only_when_missing() -> None:
     assert "gcloud artifacts repositories describe $ArtifactRepository" in script
     assert "gcloud artifacts repositories create $ArtifactRepository" in script
     assert "--repository-format=docker" in script
+
+
+def test_deploy_script_preserves_existing_firestore_database() -> None:
+    script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
+
+    assert 'gcloud firestore databases describe --database="(default)"' in script
+    assert 'gcloud firestore databases create --database="(default)"' in script
+    assert "--type=firestore-native" in script

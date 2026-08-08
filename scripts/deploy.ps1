@@ -68,7 +68,20 @@ function Ensure-ArtifactRepository {
     }
 }
 
+function Ensure-FirestoreDatabase {
+    & gcloud firestore databases describe --database="(default)" --project $ProjectId --format="value(name)" 2>$null | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        return
+    }
+
+    & gcloud firestore databases create --database="(default)" --location=$Region --type=firestore-native --project $ProjectId
+    if ($LASTEXITCODE -ne 0) {
+        throw "Firestore database creation failed."
+    }
+}
+
 Assert-GcloudPrerequisites
 Enable-RequiredApis
 Assert-CloudBuildPermission
 Ensure-ArtifactRepository
+Ensure-FirestoreDatabase
