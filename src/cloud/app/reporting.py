@@ -37,6 +37,15 @@ class ReporterInput(BaseModel):
     verification: list[FinalizedReporterRecord] = Field(max_length=10)
 
 
+def validate_reporter_output(reporter_input: ReporterInput, report: IncidentReport) -> IncidentReport:
+    mitigation = report.temporary_mitigation
+    if mitigation is not None and mitigation.approval_id not in {
+        record.reference for record in reporter_input.approvals
+    }:
+        raise ValueError("report references unknown approval ID")
+    return report
+
+
 def build_reporter_agent(model_id: str) -> Agent:
     return Agent(
         name="reliability_reporter",

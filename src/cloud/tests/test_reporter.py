@@ -73,3 +73,16 @@ def test_reporter_rejects_reverse_timeline_order() -> None:
 
     with pytest.raises(ValidationError, match="timeline must be ordered"):
         IncidentReport.model_validate(payload)
+
+
+def test_reporter_rejects_temporary_mitigation_without_finalized_approval() -> None:
+    from app.models import IncidentReport
+    from app.reporting import ReporterInput, validate_reporter_output
+
+    report = IncidentReport.model_validate_json(
+        (FIXTURES / "incident-report-mitigated.json").read_text(encoding="utf-8")
+    )
+    reporter_input = ReporterInput(evidence=[], tools=[], approvals=[], verification=[])
+
+    with pytest.raises(ValueError, match="unknown approval ID"):
+        validate_reporter_output(reporter_input, report)
