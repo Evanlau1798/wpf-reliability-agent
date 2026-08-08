@@ -1,3 +1,4 @@
+from html import escape
 from typing import Annotated, Any
 
 from google.adk.agents import Agent
@@ -29,6 +30,12 @@ Return only the requested structured report.
 REPORTER_REPAIR_INSTRUCTION = """Repair your previous response as valid IncidentReport JSON.
 Do not change evidence references, tool facts, approval, action, verification, or meaning.
 Return one corrected report only.
+"""
+REPORT_HTML_TEMPLATE = """<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Incident report</title></head>
+<body><pre>{content}</pre></body>
+</html>
 """
 
 
@@ -258,6 +265,10 @@ def render_report_markdown(report: IncidentReport) -> str:
         ]
     )
     return "\n".join(lines) + "\n"
+
+
+def render_report_html(report: IncidentReport) -> str:
+    return REPORT_HTML_TEMPLATE.format(content=escape(render_report_markdown(report), quote=True))
 
 
 def build_reporter_agent(model_id: str) -> Agent:

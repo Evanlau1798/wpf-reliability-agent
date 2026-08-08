@@ -228,3 +228,19 @@ def test_markdown_renderer_is_deterministic_and_model_free(monkeypatch) -> None:
     assert "## Evidence" in first
     assert "## Verification" in first
     assert "MITIGATED" in first
+
+
+def test_html_renderer_escapes_untrusted_report_text() -> None:
+    from app.models import IncidentReport
+    from app.reporting import render_report_html
+
+    payload = json.loads((FIXTURES / "incident-report-mitigated.json").read_text(encoding="utf-8"))
+    payload["evidence"][0]["summary"] = '<script>alert("unsafe")</script>'
+    report = IncidentReport.model_validate(payload)
+
+    rendered = render_report_html(report)
+
+    assert rendered.startswith("<!doctype html>\n")
+    assert "<script>" not in rendered
+    assert "&lt;script&gt;" in rendered
+    assert "incident-1" in rendered
