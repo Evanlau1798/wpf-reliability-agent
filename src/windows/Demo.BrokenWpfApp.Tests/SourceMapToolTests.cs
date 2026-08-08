@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Xml;
 using Reliability.SourceMap;
 
@@ -187,6 +188,29 @@ public sealed class SourceMapToolTests
             first.Entries.Select(entry => entry.Key));
     }
 
+    [Fact]
+    public void DisplayNmaeSourceMapEntryMatchesGoldenSnapshot()
+    {
+        var repositoryRoot = RepositoryRoot();
+        var projectRoot = Path.Combine(repositoryRoot, "src", "windows", "Demo.BrokenWpfApp");
+        var goldenPath = Path.Combine(
+            repositoryRoot,
+            "src",
+            "windows",
+            "Demo.BrokenWpfApp.Tests",
+            "Golden",
+            "source-map-displaynmae.json");
+        var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
+        var expected = JsonSerializer.Deserialize<SourceMapGolden>(File.ReadAllText(goldenPath), options);
+        var entry = SourceMapGenerator.GenerateSourceMap(repositoryRoot, projectRoot, new string('a', 40))
+            .Entries.Single(item => item.BindingPath == "DisplayNmae");
+
+        Assert.NotNull(expected);
+        Assert.Equal(expected!.File, entry.File);
+        Assert.Equal(expected.Line, entry.Line);
+        Assert.Equal(expected.Key, entry.Key);
+    }
+
     private static string RepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
@@ -197,4 +221,6 @@ public sealed class SourceMapToolTests
 
         return directory?.FullName ?? throw new DirectoryNotFoundException("Repository root not found.");
     }
+
+    private sealed record SourceMapGolden(string File, int Line, string Key);
 }
