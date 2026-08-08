@@ -189,9 +189,12 @@ def test_console_incident_detail_renders_tool_ledger_with_hashed_args_and_durati
     client = Mock()
     incident_collection = Mock()
     command_collection = Mock()
+    run_collection = Mock()
+    run_collection.where.return_value.stream.return_value = []
     client.collection.side_effect = lambda name: {
         firestore_client.INCIDENTS_COLLECTION: incident_collection,
         firestore_client.COMMANDS_COLLECTION: command_collection,
+        firestore_client.PROCESSED_RUNS_COLLECTION: run_collection,
     }[name]
     incident_document = incident_collection.document.return_value
     incident_document.get.return_value = incident

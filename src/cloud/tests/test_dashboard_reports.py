@@ -73,10 +73,13 @@ def _report_client() -> tuple[Mock, IncidentReport]:
     incident_collection.document.return_value = incident_document
     command_collection = Mock()
     command_collection.where.return_value.stream.return_value = []
+    run_collection = Mock()
+    run_collection.where.return_value.stream.return_value = []
     client = Mock()
     client.collection.side_effect = lambda name: {
         firestore_client.INCIDENTS_COLLECTION: incident_collection,
         firestore_client.COMMANDS_COLLECTION: command_collection,
+        firestore_client.PROCESSED_RUNS_COLLECTION: run_collection,
     }[name]
     return client, report
 

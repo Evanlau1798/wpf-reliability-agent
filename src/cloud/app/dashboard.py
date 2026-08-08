@@ -13,6 +13,7 @@ from app.firestore_client import (
     COMMANDS_COLLECTION,
     EVIDENCE_COLLECTION,
     INCIDENTS_COLLECTION,
+    PROCESSED_RUNS_COLLECTION,
     REPORTS_COLLECTION,
 )
 from app.models import IncidentReport
@@ -42,10 +43,12 @@ def render_incident_detail(client: firestore.Client, incident_id: str) -> str | 
     timeline = _render_timeline(audit_records)
     evidence_index = _render_evidence_index(incident_document)
     hypotheses = _render_hypotheses(incident)
-    tool_ledger = _render_tool_ledger(client, incident_id)
+    commands = _incident_commands(client, incident_id)
+    tool_ledger = _render_tool_ledger(commands)
     approvals = _render_approvals(incident_document)
     verification = _render_verification(audit_records)
     reports = _render_reports(incident_document, incident_id)
+    workflow_ids = _render_workflow_ids(client, incident_id, commands)
     return (
         '<!doctype html><html lang="en"><head><meta charset="utf-8">'
         f"<title>Incident {_display(incident_id)}</title></head><body><main>"
@@ -54,6 +57,7 @@ def render_incident_detail(client: firestore.Client, incident_id: str) -> str | 
         f"<dt>Summary</dt><dd>{_display(incident.get('summary'))}</dd>"
         f"<dt>Updated</dt><dd>{_display(incident.get('updated_at'))}</dd>"
         f"</dl>{timeline}{evidence_index}{hypotheses}{tool_ledger}{approvals}{verification}{reports}"
+        f"{workflow_ids}"
         "</main></body></html>"
     )
 
@@ -137,10 +141,20 @@ def _ids(value: object) -> str:
     return ", ".join(item for item in value if isinstance(item, str)) if isinstance(value, list) else ""
 
 
-def _render_tool_ledger(client: firestore.Client, incident_id: str) -> str:
+def _incident_commands(
+    client: firestore.Client,
+    incident_id: str,
+) -> list[tuple[str, dict[str, object]]]:
     query = client.collection(COMMANDS_COLLECTION).where(
         filter=FieldFilter("incident_id", "==", incident_id)
     )
+    return sorted(
+        ((str(snapshot.id), snapshot.to_dict() or {}) for snapshot in query.stream()),
+        key=lambda item: item[0],
+    )
+
+
+def _render_tool_ledger(commands: list[tuple[str, dict[str, object]]]) -> str:
     items = "".join(
         "<li>"
         f"{_display(command.get('tool'))} — "
@@ -148,7 +162,7 @@ def _render_tool_ledger(client: firestore.Client, incident_id: str) -> str:
         f"Status: {_display(command.get('status'))} — "
         f"Duration: {_display(_command_duration(command))}"
         "</li>"
-        for command in (snapshot.to_dict() or {} for snapshot in query.stream())
+        for _document_id, command in commands
     )
     return f"<section><h2>Tool Ledger</h2><ul>{items}</ul></section>"
 
@@ -298,6 +312,30 @@ def _report_item(incident_id: str, version: str, report: dict[str, object]) -> s
         f"<li>Version {_display(version)} — SHA-256: {_display(report_hash)} — "
         f'<a href="{_display(base)}.md" download>Markdown</a> — '
         f'<a href="{_display(base)}.html" download>HTML</a></li>'
+    )
+
+
+def _render_workflow_ids(
+    client: firestore.Client,
+    incident_id: str,
+    commands: list[tuple[str, dict[str, object]]],
+) -> str:
+    runs = client.collection(PROCESSED_RUNS_COLLECTION).where(
+        filter=FieldFilter("incident_id", "==", incident_id)
+    )
+    run_ids = sorted(str(snapshot.id) for snapshot in runs.stream())
+    command_ids = sorted(
+        {
+            str(command.get("command_id") or document_id)
+            for document_id, command in commands
+        }
+    )
+    return (
+        "<section><h2>Workflow IDs</h2><dl>"
+        f"<dt>Incident ID</dt><dd><code>{_display(incident_id)}</code></dd>"
+        f"<dt>Run IDs</dt><dd><code>{_display(', '.join(run_ids) or 'None')}</code></dd>"
+        f"<dt>Command IDs</dt><dd><code>{_display(', '.join(command_ids) or 'None')}</code></dd>"
+        "</dl></section>"
     )
 
 
