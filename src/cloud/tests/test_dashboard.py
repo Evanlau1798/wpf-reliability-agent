@@ -117,6 +117,7 @@ def test_console_incident_detail_renders_safe_evidence_index_without_raw_secrets
         firestore_client.AUDIT_COLLECTION: audit_collection,
         firestore_client.EVIDENCE_COLLECTION: evidence_collection,
         firestore_client.APPROVALS_COLLECTION: audit_collection,
+        firestore_client.REPORTS_COLLECTION: audit_collection,
     }[name]
     client.collection.return_value.where.return_value.stream.return_value = []
     monkeypatch.setattr("app.main.get_firestore_client", lambda _project_id: client)

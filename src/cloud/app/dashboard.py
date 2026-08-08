@@ -1,6 +1,7 @@
 import json
 from datetime import datetime
 from html import escape
+from urllib.parse import quote
 
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
@@ -12,7 +13,9 @@ from app.firestore_client import (
     COMMANDS_COLLECTION,
     EVIDENCE_COLLECTION,
     INCIDENTS_COLLECTION,
+    REPORTS_COLLECTION,
 )
+from app.models import IncidentReport
 
 
 def render_incident_list(client: firestore.Client) -> str:
@@ -42,6 +45,7 @@ def render_incident_detail(client: firestore.Client, incident_id: str) -> str | 
     tool_ledger = _render_tool_ledger(client, incident_id)
     approvals = _render_approvals(incident_document)
     verification = _render_verification(audit_records)
+    reports = _render_reports(incident_document, incident_id)
     return (
         '<!doctype html><html lang="en"><head><meta charset="utf-8">'
         f"<title>Incident {_display(incident_id)}</title></head><body><main>"
@@ -49,9 +53,34 @@ def render_incident_detail(client: firestore.Client, incident_id: str) -> str | 
         f"<dt>State</dt><dd>{_display(incident.get('state'))}</dd>"
         f"<dt>Summary</dt><dd>{_display(incident.get('summary'))}</dd>"
         f"<dt>Updated</dt><dd>{_display(incident.get('updated_at'))}</dd>"
-        f"</dl>{timeline}{evidence_index}{hypotheses}{tool_ledger}{approvals}{verification}"
+        f"</dl>{timeline}{evidence_index}{hypotheses}{tool_ledger}{approvals}{verification}{reports}"
         "</main></body></html>"
     )
+
+
+def render_report_download(
+    client: firestore.Client,
+    incident_id: str,
+    version: str,
+    report_format: str,
+) -> tuple[str, str] | None:
+    if report_format not in {"md", "html"}:
+        return None
+    snapshot = (
+        client.collection(INCIDENTS_COLLECTION)
+        .document(incident_id)
+        .collection(REPORTS_COLLECTION)
+        .document(version)
+        .get()
+    )
+    if not snapshot.exists:
+        return None
+    report = IncidentReport.model_validate(snapshot.to_dict() or {})
+    from app.reporting import render_report_html, render_report_markdown
+
+    if report_format == "md":
+        return render_report_markdown(report), "text/markdown"
+    return render_report_html(report), "text/html"
 
 
 def _audit_records(incident_document: object) -> list[dict[str, object]]:
@@ -243,6 +272,32 @@ def _metric_row(label: str, metric: object) -> str:
         f"<td>{_display(metric.get('before'))}</td>"
         f"<td>{_display(metric.get('after'))}</td>"
         f"<td>{_display(metric.get('unit'))}</td></tr>"
+    )
+
+
+def _render_reports(incident_document: object, incident_id: str) -> str:
+    reports = sorted(
+        (
+            (str(snapshot.id), snapshot.to_dict() or {})
+            for snapshot in incident_document.collection(REPORTS_COLLECTION).stream()
+        ),
+        key=lambda item: item[0],
+    )
+    items = "".join(_report_item(incident_id, version, report) for version, report in reports)
+    return f"<section><h2>Reports</h2><ul>{items}</ul></section>"
+
+
+def _report_item(incident_id: str, version: str, report: dict[str, object]) -> str:
+    metadata = report.get("metadata")
+    report_hash = metadata.get("report_sha256") if isinstance(metadata, dict) else None
+    base = (
+        f"/console/incidents/{quote(incident_id, safe='')}/reports/"
+        f"{quote(version, safe='')}"
+    )
+    return (
+        f"<li>Version {_display(version)} — SHA-256: {_display(report_hash)} — "
+        f'<a href="{_display(base)}.md" download>Markdown</a> — '
+        f'<a href="{_display(base)}.html" download>HTML</a></li>'
     )
 
 

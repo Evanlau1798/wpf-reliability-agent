@@ -26,7 +26,7 @@ from app.commands import (
     lease_next_command,
 )
 from app.config import Settings
-from app.dashboard import render_incident_detail, render_incident_list
+from app.dashboard import render_incident_detail, render_incident_list, render_report_download
 from app.firestore_client import claim_event_once, get_firestore_client, is_run_processed
 from app.ingest import (
     ingest_binding_event,
@@ -113,6 +113,26 @@ def console_incident_detail(
     if rendered is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     return rendered
+
+
+@app.get("/console/incidents/{incident_id}/reports/{version}.{report_format}", response_model=None)
+def console_report_download(
+    request: Request,
+    incident_id: str,
+    version: str,
+    report_format: str,
+    _operator_id: Annotated[str, Depends(authenticate_operator_session)],
+) -> Response:
+    client = get_firestore_client(request.app.state.settings.google_cloud_project)
+    rendered = render_report_download(client, incident_id, version, report_format)
+    if rendered is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    content, media_type = rendered
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="incident-report.{report_format}"'},
+    )
 
 
 @app.post("/v1/approvals/{approval_id}:decide")
