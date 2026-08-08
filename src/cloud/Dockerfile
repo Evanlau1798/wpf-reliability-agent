@@ -1,10 +1,16 @@
-FROM python:3.12-slim
+FROM python:3.12-slim AS builder
 
-WORKDIR /app
+WORKDIR /build
 
 COPY pyproject.toml ./
 COPY app ./app
 
-RUN pip install --no-cache-dir .
+RUN pip install --no-cache-dir --prefix=/install .
 
-CMD ["python", "-c", "import app; print(app.__version__)"]
+FROM python:3.12-slim
+
+WORKDIR /app
+
+COPY --from=builder /install /usr/local
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
