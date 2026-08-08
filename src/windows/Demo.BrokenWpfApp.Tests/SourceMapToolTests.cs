@@ -1,3 +1,5 @@
+using Reliability.SourceMap;
+
 namespace Demo.BrokenWpfApp.Tests;
 
 public sealed class SourceMapToolTests
@@ -14,6 +16,20 @@ public sealed class SourceMapToolTests
 
         Assert.True(File.Exists(project), $"Missing source-map project: {project}");
         Assert.Contains("<OutputType>Exe</OutputType>", File.ReadAllText(project), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DiscoversOnlyXamlFilesInsideDemoProjectRoot()
+    {
+        var projectRoot = Path.Combine(RepositoryRoot(), "src", "windows", "Demo.BrokenWpfApp");
+
+        var files = SourceMapGenerator.DiscoverXamlFiles(projectRoot);
+
+        Assert.Equal(new[] { "App.xaml", "MainWindow.xaml" }, files.Select(Path.GetFileName));
+        Assert.All(files, path => Assert.StartsWith(
+            Path.GetFullPath(projectRoot) + Path.DirectorySeparatorChar,
+            Path.GetFullPath(path),
+            StringComparison.OrdinalIgnoreCase));
     }
 
     private static string RepositoryRoot()

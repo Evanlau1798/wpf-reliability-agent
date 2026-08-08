@@ -17,6 +17,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Demo.BrokenWpfApp\Demo.BrokenWpfApp.csproj" />
     <ProjectReference Include="..\Reliability.Sensor\Reliability.Sensor.csproj" />
+    <ProjectReference Include="..\Reliability.SourceMap\Reliability.SourceMap.csproj" />
   </ItemGroup>
 
   <ItemGroup>
