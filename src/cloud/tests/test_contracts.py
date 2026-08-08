@@ -6,12 +6,31 @@ from pathlib import Path
 import pytest
 from jsonschema import Draft202012Validator
 
+from app import models
 from app.contracts import CONTRACTS, canonical_json, sha256_canonical, validate_fixture
 from app.models import DiagnosticCommand, DiagnosticEnvelope, IncidentReport
 
 
 FIXTURES = Path(__file__).parents[3] / "contracts" / "fixtures"
 MANIFEST = json.loads((FIXTURES / "manifest.json").read_text(encoding="utf-8"))["cases"]
+
+
+def test_patch_proposal_binds_source_target_diff_and_evidence() -> None:
+    proposal = models.PatchProposal.model_validate(
+        {
+            "target_file": "src/windows/Demo.BrokenWpfApp/MainWindow.xaml",
+            "target_file_sha256": "a" * 64,
+            "target_line": 42,
+            "unified_diff": "- Text=\"{Binding DisplayNmae}\"\n+ Text=\"{Binding DisplayName}\"",
+            "evidence_ids": ["source-command-1"],
+        }
+    )
+
+    assert proposal.target_file.endswith("MainWindow.xaml")
+    assert proposal.target_file_sha256 == "a" * 64
+    assert proposal.target_line == 42
+    assert "DisplayNmae" in proposal.unified_diff
+    assert proposal.evidence_ids == ["source-command-1"]
 
 
 @pytest.mark.parametrize(

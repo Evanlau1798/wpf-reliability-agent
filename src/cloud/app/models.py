@@ -306,6 +306,15 @@ class TemporaryMitigation(BaseModel):
     approval_id: Identifier
 
 
+class PatchProposal(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    target_file: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1024)]
+    target_file_sha256: Hash
+    target_line: int = Field(ge=1)
+    unified_diff: Annotated[str, StringConstraints(min_length=1, max_length=32_768)]
+    evidence_ids: list[Identifier] = Field(min_length=1, max_length=20)
+
+
 class PermanentRecommendation(BaseModel):
     model_config = ConfigDict(extra="ignore")
     summary: Annotated[str, StringConstraints(min_length=1, max_length=4096)]
