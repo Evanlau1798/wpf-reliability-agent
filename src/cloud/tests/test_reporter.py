@@ -1,3 +1,9 @@
+from pathlib import Path
+
+
+FIXTURES = Path(__file__).parents[3] / "contracts" / "fixtures"
+
+
 def test_reporter_instruction_forbids_side_effects_and_new_evidence() -> None:
     from app.reporting import REPORTER_INSTRUCTION
 
@@ -33,3 +39,16 @@ def test_reporter_input_contains_only_compact_finalized_records() -> None:
         ReporterInput.model_validate(
             {"evidence": [], "tools": [], "approvals": [], "verification": [], "raw_events": []}
         )
+
+
+def test_reporter_agent_binds_incident_report_schema_and_valid_output_parses() -> None:
+    from app.models import IncidentReport
+    from app.reporting import build_reporter_agent
+
+    agent = build_reporter_agent("gemini-test")
+    report = IncidentReport.model_validate_json(
+        (FIXTURES / "incident-report-mitigated.json").read_text(encoding="utf-8")
+    )
+
+    assert agent.output_schema is IncidentReport
+    assert report.status.value == "MITIGATED"

@@ -1,8 +1,9 @@
 from typing import Annotated
 
+from google.adk.agents import Agent
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
-from app.models import Hash, Identifier, UtcDateTime
+from app.models import Hash, Identifier, IncidentReport, UtcDateTime
 
 
 REPORTER_INSTRUCTION = """You write the final report for one WPF reliability incident.
@@ -34,3 +35,12 @@ class ReporterInput(BaseModel):
     tools: list[FinalizedReporterRecord] = Field(max_length=20)
     approvals: list[FinalizedReporterRecord] = Field(max_length=5)
     verification: list[FinalizedReporterRecord] = Field(max_length=10)
+
+
+def build_reporter_agent(model_id: str) -> Agent:
+    return Agent(
+        name="reliability_reporter",
+        model=model_id,
+        instruction=REPORTER_INSTRUCTION,
+        output_schema=IncidentReport,
+    )
