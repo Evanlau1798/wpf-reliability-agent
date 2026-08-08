@@ -24,3 +24,17 @@ jobs:
         run: dotnet build src/windows/Reliability.Sensor.Tests/Reliability.Sensor.Tests.csproj -c Release
       - name: Verify cross-language contract fixtures
         run: dotnet test src/windows/Reliability.Sensor.Tests/Reliability.Sensor.Tests.csproj -c Release --no-build --filter FullyQualifiedName~ContractFixtureTests
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Restore Windows tests
+        run: dotnet restore src/windows/Reliability.Sensor.Tests/Reliability.Sensor.Tests.csproj
+      - name: Build Windows tests
+        run: dotnet build src/windows/Reliability.Sensor.Tests/Reliability.Sensor.Tests.csproj -c Release --no-restore
+      - name: Test Windows sensor
+        run: dotnet test src/windows/Reliability.Sensor.Tests/Reliability.Sensor.Tests.csproj -c Release --no-build

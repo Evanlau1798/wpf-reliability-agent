@@ -19,3 +19,14 @@ def test_contracts_job_validates_python_and_dotnet_fixtures() -> None:
     assert "python -m pytest tests/test_contracts.py -q" in workflow
     assert "FullyQualifiedName~ContractFixtureTests" in workflow
     assert "-c Release --no-build" in workflow
+
+
+def test_windows_job_builds_and_tests_release_without_container_prerequisites() -> None:
+    workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+    assert "  windows:" in workflow
+    assert "dotnet restore src/windows/Reliability.Sensor.Tests/Reliability.Sensor.Tests.csproj" in workflow
+    assert "dotnet build src/windows/Reliability.Sensor.Tests/Reliability.Sensor.Tests.csproj -c Release --no-restore" in workflow
+    assert "dotnet test src/windows/Reliability.Sensor.Tests/Reliability.Sensor.Tests.csproj -c Release --no-build" in workflow
+    assert "Docker Desktop" not in workflow
+    assert "wsl" not in workflow.lower()
