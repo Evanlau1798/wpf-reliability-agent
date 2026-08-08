@@ -3,7 +3,7 @@ from enum import StrEnum
 
 from google.cloud import firestore
 
-from app.audit import build_state_transition_audit, build_tool_request_audit
+from app.audit import build_mutation_verification_audit, build_state_transition_audit, build_tool_request_audit
 from app.contracts import sha256_canonical
 from app.firestore_client import (
     AUDIT_COLLECTION, COMMANDS_COLLECTION, INCIDENTS_COLLECTION, PROCESSED_RUNS_COLLECTION,
@@ -457,43 +457,38 @@ def commit_verification_run(
             or command.get("action_id") != action_id
             or command.get("tool") != "recovery.set_feature_flag"
             or command.get("status") != "COMPLETED"
+            or not all(isinstance(command.get(field), str) for field in ("arguments_hash", "result_hash"))
         ):
             raise ValueError("Verification command binding mismatch")
 
         next_version = state_version + 1
         next_audit_sequence = audit_sequence + 1
-        audit_document = incident_document.collection(AUDIT_COLLECTION).document(
-            str(next_audit_sequence)
-        )
         audit_record = build_state_transition_audit(
-            incident,
-            sequence=next_audit_sequence,
-            from_state=IncidentState.VERIFYING.value,
-            to_state=target_state.value,
-            state_version=next_version,
-            extra={"verification": verification},
+            incident, sequence=next_audit_sequence, from_state=IncidentState.VERIFYING.value,
+            to_state=target_state.value, state_version=next_version, extra={"verification": verification},
+        )
+        verification_audit = build_mutation_verification_audit(
+            {"audit_sequence": next_audit_sequence, "audit_entry_hash": audit_record["entry_hash"]},
+            command_id=command_id, action_id=action_id, arguments_hash=command["arguments_hash"],
+            result_hash=command["result_hash"], verification=verification,
         )
         transaction.update(
             incident_document,
             {
                 "state": target_state.value,
                 "state_version": next_version,
-                "audit_sequence": next_audit_sequence,
-                "audit_entry_hash": audit_record["entry_hash"],
+                "audit_sequence": verification_audit["sequence"],
+                "audit_entry_hash": verification_audit["entry_hash"],
                 "updated_at": firestore.SERVER_TIMESTAMP,
             },
         )
-        transaction.create(audit_document, audit_record)
-        transaction.create(
-            processed_document,
-            {
-                "incident_id": incident_id,
-                "evidence_revision": evidence_revision,
-                "trigger": "recovery.result",
-                "processor": "deterministic-verification-v1",
-                "processed_at": firestore.SERVER_TIMESTAMP,
-            },
-        )
+        transaction.create(incident_document.collection(AUDIT_COLLECTION).document(str(next_audit_sequence)), audit_record)
+        transaction.create(incident_document.collection(AUDIT_COLLECTION).document(str(verification_audit["sequence"])), verification_audit)
+        transaction.create(processed_document, {
+            "incident_id": incident_id, "evidence_revision": evidence_revision,
+            "trigger": "recovery.result", "processor": "deterministic-verification-v1",
+            "processed_at": firestore.SERVER_TIMESTAMP,
+        })
         return True
 
     return commit(client.transaction())

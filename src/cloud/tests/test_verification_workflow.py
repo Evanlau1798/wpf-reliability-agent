@@ -42,6 +42,8 @@ def test_verification_run_atomically_commits_mitigated_state_and_metrics(monkeyp
             "action_id": "action-1",
             "tool": "recovery.set_feature_flag",
             "status": "COMPLETED",
+            "arguments_hash": "b" * 64,
+            "result_hash": "c" * 64,
         },
     )
     monkeypatch.setattr(workflow_state.firestore, "transactional", lambda callback: callback)
@@ -64,13 +66,14 @@ def test_verification_run_atomically_commits_mitigated_state_and_metrics(monkeyp
 
     assert committed is True
     audit_record = transaction.create.call_args_list[0].args[1]
+    verification_audit = transaction.create.call_args_list[1].args[1]
     transaction.update.assert_called_once_with(
         incident_document,
         {
             "state": "MITIGATED",
             "state_version": 10,
-            "audit_sequence": 13,
-            "audit_entry_hash": audit_record["entry_hash"],
+            "audit_sequence": 14,
+            "audit_entry_hash": verification_audit["entry_hash"],
             "updated_at": firestore_client.firestore.SERVER_TIMESTAMP,
         },
     )
@@ -78,4 +81,7 @@ def test_verification_run_atomically_commits_mitigated_state_and_metrics(monkeyp
     assert audit_record["previous_entry_hash"] == "a" * 64
     assert audit_record["verification"] == verification
     assert audit_record["entry_hash"] != audit.ZERO_HASH
-    assert transaction.create.call_args_list[1].args[0] is processed_document
+    assert verification_audit["type"] == "mutation.verification"
+    assert verification_audit["previous_entry_hash"] == audit_record["entry_hash"]
+    assert (verification_audit["arguments_hash"], verification_audit["result_hash"]) == ("b" * 64, "c" * 64)
+    assert transaction.create.call_args_list[2].args[0] is processed_document

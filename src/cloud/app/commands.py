@@ -6,7 +6,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 from pydantic import BaseModel, Field
 
-from app.audit import build_tool_result_audit
+from app.audit import build_mutation_execution_audit, build_tool_result_audit
 from app.contracts import sha256_canonical
 from app.firestore_client import (
     AUDIT_COLLECTION,
@@ -266,6 +266,18 @@ def complete_command_once(
             result_hash=result.result_hash,
             actor_id=lease_owner,
         )
+        execution_audit = None
+        if command.tool is DiagnosticTool.RECOVERY_SET_FEATURE_FLAG:
+            execution_audit = build_mutation_execution_audit(
+                {"audit_sequence": audit_record["sequence"], "audit_entry_hash": audit_record["entry_hash"]},
+                command_id=command_id,
+                action_id=command.action_id or "",
+                arguments_hash=command.arguments_hash,
+                result_hash=result.result_hash,
+                status=result.status.value,
+                actor_id=lease_owner,
+            )
+        final_audit = execution_audit or audit_record
         transaction.update(
             document,
             {
@@ -283,8 +295,8 @@ def complete_command_once(
             {
                 "evidence_revision": evidence_revision,
                 "pending_command_id": None,
-                "audit_sequence": audit_record["sequence"],
-                "audit_entry_hash": audit_record["entry_hash"],
+                "audit_sequence": final_audit["sequence"],
+                "audit_entry_hash": final_audit["entry_hash"],
                 "updated_at": firestore.SERVER_TIMESTAMP,
             },
         )
@@ -304,6 +316,11 @@ def complete_command_once(
             incident_document.collection(AUDIT_COLLECTION).document(str(audit_record["sequence"])),
             audit_record,
         )
+        if execution_audit is not None:
+            transaction.create(
+                incident_document.collection(AUDIT_COLLECTION).document(str(execution_audit["sequence"])),
+                execution_audit,
+            )
         return False, evidence_revision
 
     return complete(client.transaction())

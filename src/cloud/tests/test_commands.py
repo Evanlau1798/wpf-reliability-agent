@@ -491,7 +491,8 @@ def test_successful_mutation_completion_marks_verification_pending(monkeypatch) 
     assert any(update.get("state") == "VERIFYING" for update in incident_updates)
     assert not any(update.get("state") == "MITIGATED" for update in incident_updates)
     audits = [call.args[1] for call in transaction.create.call_args_list if call.args[1].get("type")]
-    assert [record["type"] for record in audits] == ["state.transition", "tool.result"]
+    assert [record["type"] for record in audits] == ["state.transition", "tool.result", "mutation.execution"]
     assert audits[1]["sequence"] == audits[0]["sequence"] + 1
     assert audits[1]["previous_entry_hash"] == audits[0]["entry_hash"]
-    assert "result" not in audits[1]
+    assert audits[2]["previous_entry_hash"] == audits[1]["entry_hash"]
+    assert (audits[2]["arguments_hash"], audits[2]["result_hash"]) == (command["arguments_hash"], result.result_hash)

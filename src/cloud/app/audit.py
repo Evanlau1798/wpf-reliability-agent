@@ -134,6 +134,56 @@ def build_tool_result_audit(
     )
 
 
+def build_mutation_execution_audit(
+    incident: dict[str, object],
+    *,
+    command_id: str,
+    action_id: str,
+    arguments_hash: str,
+    result_hash: str,
+    status: str,
+    actor_id: str,
+) -> dict[str, object]:
+    return _build_next_incident_audit(
+        incident,
+        event_type="mutation.execution",
+        actor_type="DEVICE",
+        actor_id=actor_id,
+        payload={
+            "command_id": command_id,
+            "action_id": action_id,
+            "arguments_hash": arguments_hash,
+            "result_hash": result_hash,
+            "status": status,
+        },
+    )
+
+
+def build_mutation_verification_audit(
+    incident: dict[str, object],
+    *,
+    command_id: str,
+    action_id: str,
+    arguments_hash: str,
+    result_hash: str,
+    verification: dict[str, object],
+) -> dict[str, object]:
+    return _build_next_incident_audit(
+        incident,
+        event_type="mutation.verification",
+        actor_type="SYSTEM",
+        actor_id="deterministic-verifier",
+        payload={
+            "command_id": command_id,
+            "action_id": action_id,
+            "arguments_hash": arguments_hash,
+            "result_hash": result_hash,
+            "verification_hash": sha256_canonical(verification),
+            "outcome": verification.get("outcome"),
+        },
+    )
+
+
 def _build_next_incident_audit(
     incident: dict[str, object],
     *,
