@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
+from fastapi.responses import HTMLResponse
 from pydantic import SecretStr
 
 from app import firestore_client
@@ -25,6 +26,7 @@ from app.commands import (
     lease_next_command,
 )
 from app.config import Settings
+from app.dashboard import render_incident_list
 from app.firestore_client import claim_event_once, get_firestore_client, is_run_processed
 from app.ingest import (
     ingest_binding_event,
@@ -89,6 +91,15 @@ def operator_login(
         path="/",
     )
     return response
+
+
+@app.get("/console/incidents", response_class=HTMLResponse)
+def console_incidents(
+    request: Request,
+    _operator_id: Annotated[str, Depends(authenticate_operator_session)],
+) -> str:
+    client = get_firestore_client(request.app.state.settings.google_cloud_project)
+    return render_incident_list(client)
 
 
 @app.post("/v1/approvals/{approval_id}:decide")
