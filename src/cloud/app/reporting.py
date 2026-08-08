@@ -6,6 +6,7 @@ from google.adk.runners import InMemoryRunner
 from google.genai import types
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
+from app.contracts import sha256_canonical
 from app.firestore_client import INCIDENTS_COLLECTION, REPORTS_COLLECTION
 from app.models import (
     Confidence,
@@ -194,9 +195,11 @@ def build_fallback_report(
 
 
 def persist_report_json(client: Any, report: IncidentReport, *, version: str) -> None:
+    payload = report.model_dump(mode="json")
+    payload["metadata"]["report_sha256"] = sha256_canonical(payload)
     client.collection(INCIDENTS_COLLECTION).document(report.incident_id).collection(
         REPORTS_COLLECTION
-    ).document(version).set(report.model_dump(mode="json"))
+    ).document(version).set(payload)
 
 
 def render_report_markdown(report: IncidentReport) -> str:

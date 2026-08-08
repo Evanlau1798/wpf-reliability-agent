@@ -183,6 +183,7 @@ def test_reporter_repairs_schema_once_then_uses_deterministic_fallback() -> None
 
 
 def test_report_json_persistence_keeps_required_metadata() -> None:
+    from app.contracts import sha256_canonical
     from app.models import IncidentReport
     from app.reporting import persist_report_json
 
@@ -203,7 +204,10 @@ def test_report_json_persistence_keeps_required_metadata() -> None:
     incident_document.collection.return_value.document.assert_called_once_with("1")
     saved = report_document.set.call_args.args[0]
     assert saved["schema_version"] == "1.0"
-    assert saved["metadata"] == report.metadata.model_dump(mode="json")
+    assert saved["metadata"] == {
+        **report.metadata.model_dump(mode="json"),
+        "report_sha256": sha256_canonical(report.model_dump(mode="json")),
+    }
 
 
 def test_markdown_renderer_is_deterministic_and_model_free(monkeypatch) -> None:
