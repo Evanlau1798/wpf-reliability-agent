@@ -7,6 +7,52 @@ namespace Reliability.Sensor.Tests;
 public sealed class MutationCommandSafetyTests
 {
     [Fact]
+    public async Task StaleSessionMutationLeavesFeatureStateUnchanged()
+    {
+        var databasePath = TestDatabasePath();
+        var outbox = await SqliteOutbox.OpenAsync(databasePath);
+        using var cancellation = new CancellationTokenSource();
+        using var handler = new SingleMutationThenBlockHandler(json => json
+            .Replace(
+                "\"target_app_session_id\": \"session-1\"",
+                "\"target_app_session_id\": \"session-stale\"",
+                StringComparison.Ordinal)
+            .Replace("2026-08-07T00:00:00Z", "2099-01-01T00:00:00Z", StringComparison.Ordinal)
+            .Replace("2026-08-07T00:01:00Z", "2099-01-01T00:01:00Z", StringComparison.Ordinal));
+        using var client = CreateClient(handler);
+        var featureEnabled = true;
+
+        try
+        {
+            var poller = ReliabilitySensor.RunCommandPollerAsync(
+                client,
+                "device-test",
+                "session-1",
+                (_, _) => Task.CompletedTask,
+                cancellation.Token,
+                outbox,
+                handleMutationCommand: (_, _) =>
+                {
+                    featureEnabled = false;
+                    cancellation.Cancel();
+                    return Task.CompletedTask;
+                });
+
+            await Task.WhenAny(handler.SecondRequestStarted.Task, poller)
+                .WaitAsync(TimeSpan.FromSeconds(1));
+            cancellation.Cancel();
+            await poller.WaitAsync(TimeSpan.FromSeconds(1));
+
+            Assert.True(featureEnabled);
+        }
+        finally
+        {
+            await outbox.DisposeAsync();
+            DeleteDatabase(databasePath);
+        }
+    }
+
+    [Fact]
     public async Task MutationWithoutApprovalLeavesFeatureStateUnchanged()
     {
         var databasePath = TestDatabasePath();
