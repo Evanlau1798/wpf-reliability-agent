@@ -66,6 +66,30 @@ public sealed class CommandPollingTests
     }
 
     [Fact]
+    public async Task LongPollTimeoutBacksOffAndPollsAgain()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var handler = new TimeoutThenBlockingLeaseHandler();
+        using var client = new TelemetryApiClient(
+            new Uri("https://reliability.example.test"),
+            "test-token",
+            handler,
+            TimeSpan.FromMilliseconds(50));
+        var poller = ReliabilitySensor.RunCommandPollerAsync(
+            client,
+            "device-test",
+            "session-1",
+            (_, _) => Task.CompletedTask,
+            cancellation.Token);
+
+        await handler.SecondRequestStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        cancellation.Cancel();
+        await poller.WaitAsync(TimeSpan.FromSeconds(1));
+
+        Assert.Equal(2, handler.RequestCount);
+    }
+
+    [Fact]
     public async Task InvalidCommandSchemaIsRejectedBeforeDispatch()
     {
         using var cancellation = new CancellationTokenSource();
@@ -246,6 +270,31 @@ public sealed class CommandPollingTests
                 var content = new ByteArrayContent(Encoding.UTF8.GetBytes(invalid));
                 content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
                 return new HttpResponseMessage(HttpStatusCode.OK) { Content = content };
+            }
+
+            SecondRequestStarted.TrySetResult();
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            throw new InvalidOperationException("Lease request unexpectedly completed.");
+        }
+    }
+
+    private sealed class TimeoutThenBlockingLeaseHandler : HttpMessageHandler
+    {
+        private int _requests;
+
+        public int RequestCount => Volatile.Read(ref _requests);
+
+        public TaskCompletionSource SecondRequestStarted { get; } = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            if (Interlocked.Increment(ref _requests) == 1)
+            {
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+                throw new InvalidOperationException("Timed-out lease request unexpectedly completed.");
             }
 
             SecondRequestStarted.TrySetResult();

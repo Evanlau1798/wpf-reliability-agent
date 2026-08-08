@@ -324,7 +324,8 @@ public sealed partial class ReliabilitySensor
             {
                 return;
             }
-            catch (Exception exception) when (exception is HttpRequestException or JsonException)
+            catch (Exception exception) when (
+                exception is HttpRequestException or JsonException or OperationCanceledException)
             {
                 await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken).ConfigureAwait(false);
             }
