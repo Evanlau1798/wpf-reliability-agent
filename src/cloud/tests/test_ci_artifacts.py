@@ -30,3 +30,14 @@ def test_windows_job_builds_and_tests_release_without_container_prerequisites() 
     assert "dotnet test src/windows/Reliability.Sensor.Tests/Reliability.Sensor.Tests.csproj -c Release --no-build" in workflow
     assert "Docker Desktop" not in workflow
     assert "wsl" not in workflow.lower()
+
+
+def test_cloud_job_lints_types_and_tests_python_package() -> None:
+    workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+    assert "  cloud:" in workflow
+    assert "runs-on: ubuntu-latest" in workflow
+    assert "python -m ruff check --select E9,F63,F7,F82 app tests" in workflow
+    assert "python -m mypy --ignore-missing-imports --follow-imports=skip" in workflow
+    assert "app/models.py app/config.py app/contracts.py app/policy.py app/auth.py app/worker.py" in workflow
+    assert "python -m pytest -q" in workflow

@@ -19,7 +19,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = ["httpx2>=2,<3", "pytest==8.3.5"]
+test = [
+  "httpx2>=2,<3",
+  "mypy>=1.14,<2",
+  "pytest==8.3.5",
+  "ruff>=0.9,<1",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

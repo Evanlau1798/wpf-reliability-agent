@@ -38,3 +38,23 @@ jobs:
         run: dotnet build src/windows/Reliability.Sensor.Tests/Reliability.Sensor.Tests.csproj -c Release --no-restore
       - name: Test Windows sensor
         run: dotnet test src/windows/Reliability.Sensor.Tests/Reliability.Sensor.Tests.csproj -c Release --no-build
+
+  cloud:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install cloud test dependencies
+        working-directory: src/cloud
+        run: python -m pip install -e ".[test]"
+      - name: Lint cloud package
+        working-directory: src/cloud
+        run: python -m ruff check --select E9,F63,F7,F82 app tests
+      - name: Type-check stable cloud boundaries
+        working-directory: src/cloud
+        run: python -m mypy --ignore-missing-imports --follow-imports=skip app/models.py app/config.py app/contracts.py app/policy.py app/auth.py app/worker.py
+      - name: Test cloud package
+        working-directory: src/cloud
+        run: python -m pytest -q
