@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from app.audit import AuditEvent
+from app.audit import AuditEvent, build_audit_record, verify_audit_chain
 from app.contracts import sha256_canonical
 
 
@@ -52,3 +52,28 @@ def test_audit_payload_hash_uses_canonical_json_golden_fixture() -> None:
     fixture = json.loads((FIXTURES / "hash-reordered.json").read_text(encoding="utf-8"))
 
     assert sha256_canonical(fixture["input"]) == fixture["sha256"]
+
+
+def test_entry_hash_chain_detects_changed_payload() -> None:
+    first = build_audit_record(
+        sequence=1,
+        event_type="state.transition",
+        actor_type="SYSTEM",
+        actor_id="reliability-worker",
+        payload={"from_state": "VERIFYING", "to_state": "MITIGATED"},
+        previous_entry_hash="0" * 64,
+        timestamp_utc=datetime(2026, 8, 8, 6, 0, tzinfo=timezone.utc),
+    )
+    second = build_audit_record(
+        sequence=2,
+        event_type="verification.completed",
+        actor_type="SYSTEM",
+        actor_id="reliability-worker",
+        payload={"outcome": "MITIGATED", "command_id": "command-1"},
+        previous_entry_hash=first["entry_hash"],
+        timestamp_utc=datetime(2026, 8, 8, 6, 0, 1, tzinfo=timezone.utc),
+    )
+
+    assert verify_audit_chain([first, second])
+    changed = {**second, "outcome": "FAILED_SAFE"}
+    assert not verify_audit_chain([first, changed])
