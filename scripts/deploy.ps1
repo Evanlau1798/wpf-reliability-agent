@@ -12,11 +12,17 @@ param(
     [string]$PubSubInvokerServiceAccount = "pubsub-invoker-sa",
     [string]$BuildServiceAccount = "reliability-build-sa",
     [string]$DeviceTokenSecret = "reliability-device-token",
-    [string]$OperatorTokenSecret = "reliability-operator-token"
+    [string]$OperatorTokenSecret = "reliability-operator-token",
+    [string]$BuildSourceBucket = ""
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+if (-not $BuildSourceBucket) {
+    $BuildSourceBucket = "$ProjectId-reliability-build-source"
+}
+$BuildSourceBucketUri = "gs://$BuildSourceBucket"
 
 $RequiredApis = @(
     "aiplatform.googleapis.com",
@@ -27,7 +33,8 @@ $RequiredApis = @(
     "logging.googleapis.com",
     "pubsub.googleapis.com",
     "run.googleapis.com",
-    "secretmanager.googleapis.com"
+    "secretmanager.googleapis.com",
+    "storage.googleapis.com"
 )
 $ApiProjectRoles = @(
     "roles/datastore.user",
@@ -37,6 +44,9 @@ $ApiProjectRoles = @(
 $WorkerProjectRoles = @(
     "roles/aiplatform.user",
     "roles/datastore.user",
+    "roles/logging.logWriter"
+)
+$BuildProjectRoles = @(
     "roles/logging.logWriter"
 )
 
@@ -175,6 +185,32 @@ function Grant-SecretAccess {
     }
 }
 
+function Ensure-BuildSourceBucket {
+    & gcloud storage buckets describe $BuildSourceBucketUri --project $ProjectId 2>$null | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        return
+    }
+
+    & gcloud storage buckets create $BuildSourceBucketUri --location=$Region --uniform-bucket-level-access --project=$ProjectId | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Cloud Build source bucket creation failed."
+    }
+}
+
+function Grant-BuildResourceAccess {
+    param([string]$ServiceAccountEmail)
+
+    & gcloud artifacts repositories add-iam-policy-binding $ArtifactRepository --location=$Region --project=$ProjectId --member="serviceAccount:$ServiceAccountEmail" --role=roles/artifactregistry.writer --condition=None --quiet | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Artifact Registry writer binding failed for build identity."
+    }
+
+    & gcloud storage buckets add-iam-policy-binding $BuildSourceBucketUri --member="serviceAccount:$ServiceAccountEmail" --role=roles/storage.objectViewer --condition=None --quiet | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Build source bucket viewer binding failed."
+    }
+}
+
 Assert-GcloudPrerequisites
 Enable-RequiredApis
 Assert-CloudBuildPermission
@@ -193,3 +229,23 @@ Grant-SecretAccess $OperatorTokenSecret $ApiServiceAccountEmail
 Write-Host "Provision Secret Manager values through stdin before deployment:"
 Write-Host "  gcloud secrets versions add $DeviceTokenSecret --project $ProjectId --data-file=-"
 Write-Host "  gcloud secrets versions add $OperatorTokenSecret --project $ProjectId --data-file=-"
+$BuildServiceAccountEmail = Ensure-ServiceAccount $BuildServiceAccount "WPF Reliability Cloud Build"
+Grant-ProjectRoles $BuildServiceAccountEmail $BuildProjectRoles
+Ensure-BuildSourceBucket
+Grant-BuildResourceAccess $BuildServiceAccountEmail
+Get-Command git -ErrorAction Stop | Out-Null
+$GitSha = (& git rev-parse HEAD).Trim()
+if ($LASTEXITCODE -ne 0 -or $GitSha -notmatch "^[0-9a-f]{40}$") {
+    throw "Unable to resolve the current Git SHA."
+}
+$ImageBase = "$Region-docker.pkg.dev/$ProjectId/$ArtifactRepository/$ImageName"
+$ImageTag = "${ImageBase}:$GitSha"
+$BuildId = (& gcloud builds submit src/cloud --config=src/cloud/cloudbuild.yaml --substitutions="_IMAGE_URI=$ImageTag,_GIT_SHA=$GitSha" --service-account="projects/$ProjectId/serviceAccounts/$BuildServiceAccountEmail" --gcs-source-staging-dir="$BuildSourceBucketUri/source" --project $ProjectId --region $Region --format="value(id)").Trim()
+if ($LASTEXITCODE -ne 0 -or -not $BuildId) {
+    throw "Cloud Build submission failed."
+}
+$ImageDigest = (& gcloud artifacts docker images describe $ImageTag --project $ProjectId --format="value(image_summary.digest)").Trim()
+if ($LASTEXITCODE -ne 0 -or -not $ImageDigest) {
+    throw "Unable to resolve immutable image digest."
+}
+$ImageDigestRef = "${ImageBase}@$ImageDigest"
