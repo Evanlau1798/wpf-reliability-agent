@@ -286,6 +286,82 @@ def test_recovery_work_returns_inconclusive_evidence_to_investigating(monkeypatc
     assert committed[0]["verification"] == {"outcome": "INCONCLUSIVE"}
 
 
+def test_recovery_regression_enters_failed_safe_with_rollback_guidance(monkeypatch) -> None:
+    _set_environment(monkeypatch, "worker")
+    _allow_identity(monkeypatch)
+    firestore_client = object()
+    verification = Mock(
+        binding=Mock(),
+        performance=Mock(),
+        visual=Mock(),
+        command_id="command-1",
+        action_id="action-1",
+    )
+    committed: list[dict[str, object]] = []
+    monkeypatch.setattr(main, "get_firestore_client", lambda _project_id: firestore_client)
+    monkeypatch.setattr(main, "is_run_processed", lambda *_args: False)
+    monkeypatch.setattr(main, "load_incident_evidence", lambda *_args: [{"evidence_id": "post-1"}])
+    monkeypatch.setattr(main, "evaluate_post_action_verification", lambda *_args: verification)
+    monkeypatch.setattr(main, "meets_mitigation_thresholds", lambda *_args: False)
+    monkeypatch.setattr(main, "is_regression", lambda *_args: True, raising=False)
+    monkeypatch.setattr(
+        main,
+        "load_rollback_guidance",
+        lambda *_args: "Re-enable the feature.",
+        raising=False,
+    )
+    monkeypatch.setattr(
+        main,
+        "build_regression_verification_audit",
+        lambda *_args: {"outcome": "FAILED_SAFE", "rollback_guidance": "Re-enable the feature."},
+        raising=False,
+    )
+
+    def commit(*_args, **kwargs):
+        committed.append(kwargs)
+        return True
+
+    monkeypatch.setattr(main, "commit_verification_run", commit)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/work:push",
+            headers={"Authorization": "Bearer signed-token"},
+            json=_push_envelope(trigger="recovery.result", evidence_revision=7, event_id="post-1"),
+        )
+
+    assert response.status_code == 204
+    assert committed[0]["target_state"] is main.IncidentState.FAILED_SAFE
+    assert committed[0]["verification"]["rollback_guidance"] == "Re-enable the feature."
+
+
+def test_rollback_guidance_is_loaded_from_the_command_approval() -> None:
+    client = Mock()
+    command_collection = Mock()
+    incident_collection = Mock()
+    command_document = Mock()
+    incident_document = Mock()
+    approval_document = Mock()
+    client.collection.side_effect = lambda name: {
+        main.firestore_client.COMMANDS_COLLECTION: command_collection,
+        main.firestore_client.INCIDENTS_COLLECTION: incident_collection,
+    }[name]
+    command_collection.document.return_value = command_document
+    incident_collection.document.return_value = incident_document
+    incident_document.collection.return_value.document.return_value = approval_document
+    command_document.get.return_value = Mock(
+        exists=True,
+        to_dict=lambda: {"approval_id": "approval-1"},
+    )
+    approval_document.get.return_value = Mock(
+        exists=True,
+        to_dict=lambda: {"rollback_plan": "Re-enable the feature."},
+    )
+
+    assert main.load_rollback_guidance(client, "incident-1", "command-1") == "Re-enable the feature."
+    incident_document.collection.assert_called_once_with(main.firestore_client.APPROVALS_COLLECTION)
+
+
 def _set_environment(monkeypatch, role: str) -> None:
     monkeypatch.setenv("SERVICE_ROLE", role)
     monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "project-test")

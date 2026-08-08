@@ -43,6 +43,14 @@ class PostActionVerification:
     action_id: str
 
 
+@dataclass(frozen=True)
+class RegressionThresholds:
+    min_binding_after_errors_per_second: float
+    min_binding_increase_ratio: float
+    min_frame_p95_increase_ratio: float
+    min_visual_count_increase_ratio: float
+
+
 DEFAULT_MITIGATION_THRESHOLDS = MitigationThresholds(
     max_binding_after_errors_per_second=0.5,
     min_binding_reduction_ratio=0.9,
@@ -50,6 +58,12 @@ DEFAULT_MITIGATION_THRESHOLDS = MitigationThresholds(
     min_visual_count_reduction_ratio=0.25,
     min_performance_sample_count=30,
     min_performance_confidence="MEDIUM",
+)
+DEFAULT_REGRESSION_THRESHOLDS = RegressionThresholds(
+    min_binding_after_errors_per_second=1.0,
+    min_binding_increase_ratio=0.25,
+    min_frame_p95_increase_ratio=0.2,
+    min_visual_count_increase_ratio=0.25,
 )
 
 
@@ -150,31 +164,55 @@ def meets_mitigation_thresholds(
     binding_reduction = _reduction_ratio(binding)
     frame_reduction = _reduction_ratio(performance.p95)
     visual_reduction = _reduction_ratio(visual)
-    minimum_confidence = _confidence_rank(thresholds.min_performance_confidence)
-    before_confidence = _confidence_rank(performance.before_confidence)
-    after_confidence = _confidence_rank(performance.after_confidence)
-    if None in (
-        binding_reduction,
-        frame_reduction,
-        visual_reduction,
-        minimum_confidence,
-        before_confidence,
-        after_confidence,
-    ):
+    if None in (binding_reduction, frame_reduction, visual_reduction):
         return False
-    if performance.before_sample_count < thresholds.min_performance_sample_count:
-        return False
-    if performance.after_sample_count < thresholds.min_performance_sample_count:
-        return False
-    if before_confidence < minimum_confidence:
-        return False
-    if after_confidence < minimum_confidence:
+    if not has_sufficient_performance_evidence(performance, thresholds):
         return False
     return (
         binding.after <= thresholds.max_binding_after_errors_per_second
         and binding_reduction >= thresholds.min_binding_reduction_ratio
         and frame_reduction >= thresholds.min_frame_p95_reduction_ratio
         and visual_reduction >= thresholds.min_visual_count_reduction_ratio
+    )
+
+
+def has_sufficient_performance_evidence(
+    performance: PerformanceDelta,
+    thresholds: MitigationThresholds = DEFAULT_MITIGATION_THRESHOLDS,
+) -> bool:
+    minimum_confidence = _confidence_rank(thresholds.min_performance_confidence)
+    before_confidence = _confidence_rank(performance.before_confidence)
+    after_confidence = _confidence_rank(performance.after_confidence)
+    if None in (minimum_confidence, before_confidence, after_confidence):
+        return False
+    return (
+        performance.before_sample_count >= thresholds.min_performance_sample_count
+        and performance.after_sample_count >= thresholds.min_performance_sample_count
+        and before_confidence >= minimum_confidence
+        and after_confidence >= minimum_confidence
+    )
+
+
+def is_regression(
+    binding: MetricDelta,
+    performance: PerformanceDelta,
+    visual: MetricDelta,
+    thresholds: RegressionThresholds = DEFAULT_REGRESSION_THRESHOLDS,
+) -> bool:
+    if not has_sufficient_performance_evidence(performance):
+        return False
+    binding_increase = _increase_ratio(binding)
+    frame_increase = _increase_ratio(performance.p95)
+    visual_increase = _increase_ratio(visual)
+    if None in (binding_increase, frame_increase, visual_increase):
+        return False
+    return (
+        (
+            binding.after >= thresholds.min_binding_after_errors_per_second
+            and binding_increase >= thresholds.min_binding_increase_ratio
+        )
+        or frame_increase >= thresholds.min_frame_p95_increase_ratio
+        or visual_increase >= thresholds.min_visual_count_increase_ratio
     )
 
 
@@ -313,6 +351,19 @@ def build_inconclusive_verification_audit(
     }
 
 
+def build_regression_verification_audit(
+    verification: PostActionVerification,
+    rollback_guidance: str,
+) -> dict[str, object]:
+    if not rollback_guidance.strip():
+        raise ValueError("Rollback guidance is required")
+    audit = build_verification_audit(verification, "FAILED_SAFE")
+    audit["reason"] = "regression_detected"
+    audit["rollback_guidance"] = rollback_guidance
+    audit["regression_thresholds"] = asdict(DEFAULT_REGRESSION_THRESHOLDS)
+    return audit
+
+
 def _payload(evidence: dict[str, object]) -> dict[str, object]:
     payload = evidence.get("payload")
     return payload if isinstance(payload, dict) else {}
@@ -349,6 +400,14 @@ def _reduction_ratio(delta: MetricDelta) -> float | None:
     if delta.before <= 0:
         return None
     return (delta.before - delta.after) / delta.before
+
+
+def _increase_ratio(delta: MetricDelta) -> float | None:
+    if delta.before < 0 or delta.after < 0:
+        return None
+    if delta.before == 0:
+        return math.inf if delta.after > 0 else 0.0
+    return (delta.after - delta.before) / delta.before
 
 
 def _find_evidence(

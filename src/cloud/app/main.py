@@ -39,8 +39,10 @@ from app.worker import build_run_key, decode_pubsub_envelope, pubsub_message_id
 from app.worker_auth import authenticate_pubsub_push
 from app.verification import (
     build_inconclusive_verification_audit,
+    build_regression_verification_audit,
     build_verification_audit,
     evaluate_post_action_verification,
+    is_regression,
     meets_mitigation_thresholds,
     recovery_evidence_binding,
 )
@@ -227,6 +229,20 @@ async def worker_push(request: Request) -> None:
             action_id = verification.action_id
             target_state = IncidentState.MITIGATED
             audit = build_verification_audit(verification, target_state.value)
+        elif is_regression(
+            verification.binding,
+            verification.performance,
+            verification.visual,
+        ):
+            command_id = verification.command_id
+            action_id = verification.action_id
+            rollback_guidance = load_rollback_guidance(
+                client, work["incident_id"], command_id
+            )
+            if rollback_guidance is None:
+                raise ValueError("Rollback guidance is unavailable")
+            target_state = IncidentState.FAILED_SAFE
+            audit = build_regression_verification_audit(verification, rollback_guidance)
         else:
             command_id = verification.command_id
             action_id = verification.action_id
@@ -266,6 +282,21 @@ def load_incident_evidence(client: object, incident_id: str) -> list[dict[str, o
         {"evidence_id": snapshot.id, **(snapshot.to_dict() or {})}
         for snapshot in snapshots
     ]
+
+
+def load_rollback_guidance(client: object, incident_id: str, command_id: str) -> str | None:
+    command = client.collection(firestore_client.COMMANDS_COLLECTION).document(command_id).get()
+    if not command.exists:
+        return None
+    approval_id = (command.to_dict() or {}).get("approval_id")
+    if not isinstance(approval_id, str) or not approval_id:
+        return None
+    incident = client.collection(firestore_client.INCIDENTS_COLLECTION).document(incident_id)
+    approval = incident.collection(firestore_client.APPROVALS_COLLECTION).document(approval_id).get()
+    if not approval.exists:
+        return None
+    rollback_guidance = (approval.to_dict() or {}).get("rollback_plan")
+    return rollback_guidance if isinstance(rollback_guidance, str) and rollback_guidance else None
 
 
 async def enforce_telemetry_body_limit(request: Request) -> None:

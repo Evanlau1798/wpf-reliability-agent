@@ -4,13 +4,17 @@ from pathlib import Path
 
 from app.verification import (
     DEFAULT_MITIGATION_THRESHOLDS,
+    DEFAULT_REGRESSION_THRESHOLDS,
     MetricDelta,
+    PostActionVerification,
     PerformanceDelta,
     binding_rate_delta,
     build_inconclusive_verification_audit,
+    build_regression_verification_audit,
     build_verification_audit,
     evaluate_post_action_verification,
     frame_p95_delta,
+    is_regression,
     meets_mitigation_thresholds,
     recovery_evidence_binding,
     visual_count_delta,
@@ -264,3 +268,44 @@ def test_inconclusive_audit_keeps_post_and_action_binding_without_success_metric
         "evidence_ids": ["post-1", "command-1"],
         "metrics": {},
     }
+
+
+def test_regression_thresholds_are_fixture_locked_and_keep_rollback_guidance() -> None:
+    fixture = json.loads((FIXTURES / "regression-thresholds.json").read_text(encoding="utf-8"))
+    metrics = fixture["regression_metrics"]
+    binding = MetricDelta(
+        metrics["binding"]["before"],
+        metrics["binding"]["after"],
+        metrics["binding"]["after"] - metrics["binding"]["before"],
+    )
+    frame = metrics["frame_p95"]
+    performance = PerformanceDelta(
+        MetricDelta(frame["before"], frame["after"], frame["after"] - frame["before"]),
+        frame["before_sample_count"],
+        frame["after_sample_count"],
+        frame["before_duration_ms"],
+        frame["after_duration_ms"],
+        frame["before_confidence"],
+        frame["after_confidence"],
+    )
+    visual = MetricDelta(
+        metrics["visual_count"]["before"],
+        metrics["visual_count"]["after"],
+        metrics["visual_count"]["after"] - metrics["visual_count"]["before"],
+    )
+
+    assert asdict(DEFAULT_REGRESSION_THRESHOLDS) == fixture["thresholds"]
+    assert is_regression(binding, performance, visual)
+    verification = PostActionVerification(
+        binding,
+        performance,
+        visual,
+        "binding-before",
+        "performance-before",
+        "post-1",
+        "command-1",
+        "action-1",
+    )
+    audit = build_regression_verification_audit(verification, "Re-enable the feature.")
+    assert audit["outcome"] == "FAILED_SAFE"
+    assert audit["rollback_guidance"] == "Re-enable the feature."

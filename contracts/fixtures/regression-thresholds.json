@@ -1,0 +1,22 @@
+{
+  "thresholds": {
+    "min_binding_after_errors_per_second": 1.0,
+    "min_binding_increase_ratio": 0.25,
+    "min_frame_p95_increase_ratio": 0.2,
+    "min_visual_count_increase_ratio": 0.25
+  },
+  "regression_metrics": {
+    "binding": { "before": 2.0, "after": 3.0 },
+    "frame_p95": {
+      "before": 40.0,
+      "after": 50.0,
+      "before_sample_count": 90,
+      "after_sample_count": 90,
+      "before_duration_ms": 1500.0,
+      "after_duration_ms": 1500.0,
+      "before_confidence": "HIGH",
+      "after_confidence": "HIGH"
+    },
+    "visual_count": { "before": 400.0, "after": 520.0 }
+  }
+}
