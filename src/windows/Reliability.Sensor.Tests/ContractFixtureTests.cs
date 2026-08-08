@@ -42,10 +42,12 @@ public sealed class ContractFixtureTests
         }
     }
 
-    [Fact]
-    public void UnknownCommandToolIsRejected()
+    [Theory]
+    [InlineData("diagnostic-command-blocked-tool.json")]
+    [InlineData("diagnostic-command-patch-tool.json")]
+    public void UnknownCommandToolIsRejected(string name)
     {
-        var json = File.ReadAllText(FixturePath("diagnostic-command-blocked-tool.json"));
+        var json = File.ReadAllText(FixturePath(name));
 
         Assert.Throws<JsonException>(() => JsonSerializer.Deserialize(json, ContractJsonContext.Default.DiagnosticCommand));
     }

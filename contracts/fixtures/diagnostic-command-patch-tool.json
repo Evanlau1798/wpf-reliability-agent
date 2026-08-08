@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0",
+  "command_id": "command-patch-1",
+  "incident_id": "incident-1",
+  "target_app_session_id": "session-1",
+  "tool": "patch.propose",
+  "arguments": {
+    "target_file": "src/windows/Demo.BrokenWpfApp/MainWindow.xaml",
+    "unified_diff": "- DisplayNmae\n+ DisplayName"
+  },
+  "arguments_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+  "risk_level": "BLOCKED",
+  "approval_id": null,
+  "idempotency_key": "patch-1",
+  "issued_at_utc": "2026-08-09T00:00:00Z",
+  "expires_at_utc": "2026-08-09T00:01:00Z",
+  "timeout_ms": 10000
+}

@@ -3,6 +3,7 @@ import pytest
 from app import models
 from app.agent import INVESTIGATOR_INSTRUCTION, validate_decision_evidence_ids
 from app.correlation import AgentCorrelationContext, NormalizedEvidenceSummary
+from app.policy import risk_for_tool
 from app.reporting import REPORTER_INSTRUCTION
 
 
@@ -84,3 +85,9 @@ def test_model_instructions_keep_patch_proposals_non_executing() -> None:
     assert "never a command" in INVESTIGATOR_INSTRUCTION.lower()
     assert "patch proposal" in REPORTER_INSTRUCTION.lower()
     assert "non-executed artifact" in REPORTER_INSTRUCTION.lower()
+
+
+def test_patch_proposal_is_not_an_executable_diagnostic_tool() -> None:
+    with pytest.raises(ValueError):
+        models.DiagnosticTool("patch.propose")
+    assert risk_for_tool("patch.propose") is models.RiskLevel.BLOCKED

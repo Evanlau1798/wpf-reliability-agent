@@ -8,6 +8,7 @@
     { "file": "diagnostic-command-valid-read.json", "contract": "diagnostic-command", "valid": true },
     { "file": "diagnostic-command-valid-mutation.json", "contract": "diagnostic-command", "valid": true },
     { "file": "diagnostic-command-blocked-tool.json", "contract": "diagnostic-command", "valid": false },
+    { "file": "diagnostic-command-patch-tool.json", "contract": "diagnostic-command", "valid": false },
     { "file": "command-result-success.json", "contract": "command-result", "valid": true },
     { "file": "command-result-conflicting.json", "contract": "command-result", "valid": true },
     { "file": "command-result-invalid-time.json", "contract": "command-result", "valid": false },
