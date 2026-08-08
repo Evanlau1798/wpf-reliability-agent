@@ -59,6 +59,16 @@ public sealed class SourceMapToolTests
         Assert.True(lineInfo.LineNumber > 0);
     }
 
+    [Fact]
+    public void ReadsMainWindowXClass()
+    {
+        var path = Path.Combine(RepositoryRoot(), "src", "windows", "Demo.BrokenWpfApp", "MainWindow.xaml");
+
+        var xClass = SourceMapGenerator.GetXClass(SourceMapGenerator.LoadXaml(path));
+
+        Assert.Equal("Demo.BrokenWpfApp.MainWindow", xClass);
+    }
+
     private static string RepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

@@ -4,6 +4,8 @@ namespace Reliability.SourceMap;
 
 public static class SourceMapGenerator
 {
+    private static readonly XNamespace XamlNamespace = "http://schemas.microsoft.com/winfx/2006/xaml";
+
     public static IReadOnlyList<string> DiscoverXamlFiles(string projectRoot)
     {
         var root = Path.GetFullPath(projectRoot);
@@ -32,6 +34,9 @@ public static class SourceMapGenerator
     public static XDocument LoadXaml(string path) => XDocument.Load(
         path,
         LoadOptions.SetLineInfo | LoadOptions.PreserveWhitespace);
+
+    public static string? GetXClass(XDocument document) =>
+        document.Root?.Attribute(XamlNamespace + "Class")?.Value;
 
     private static bool IsBuildOutput(string root, string path)
     {
