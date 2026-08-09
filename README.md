@@ -123,9 +123,13 @@ This is a new independent repository, not a fork of `wpf-devtools-mcp`. Reuse is
 
 See the full [reuse disclosure](REUSE_DISCLOSURE.md) and machine-readable [reuse manifest](reuse-manifest.json) for exact source paths, destination paths, reuse types, and adaptation summaries.
 
-## Security
+## Security boundaries
 
-P0 exposes bounded read-only diagnostics and one typed mutation, `recovery.set_feature_flag`, which requires exact human approval. Arbitrary shell, file, process, injection, screenshot, OCR, and source-write capabilities are excluded.
+The WPF sensor runs in-process and can execute only recovery handlers explicitly registered by the host app. Device traffic leaves Windows over HTTPS with a bearer token; Pub/Sub invokes the private worker with OIDC; worker-to-Gemini input is bounded and redacted; operator actions require the demo operator token, a signed HTTP-only session cookie, and CSRF validation.
+
+The deterministic policy allowlists nine LOW-risk read-only tools: `health.get_snapshot`, `binding.get_errors`, `binding.get_live_candidates`, `exception.get_recent`, `ui.get_subtree`, `ui.get_element_details`, `performance.sample`, `state.compare_snapshots`, and `source.lookup_binding`. The only mutation is HIGH-risk `recovery.set_feature_flag`, bound to the exact approved arguments and evidence. Unknown tools are `BLOCKED`.
+
+The following command classes are permanently blocked and have no P0 executor: `shell.execute`, `powershell.execute`, `file.write`, `source.apply_patch`, `process.kill`, `process.restart`, `dll.inject`, `memory.read`, `credential.read`, `registry.write`, `git.commit`, and `git.push`. Screenshot/OCR capture, arbitrary source reads/writes, environment dumps, and arbitrary process control are also outside the P0 surface. UI text, binding paths, exceptions, source snippets, tool results, and application logs are treated as untrusted evidence data, never as instructions.
 
 ## Demo
 
