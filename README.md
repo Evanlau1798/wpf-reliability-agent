@@ -4,7 +4,7 @@ An evidence-driven reliability agent that turns WPF binding, UI, and performance
 
 ## Problem
 
-WPF binding, UI, exception, and rendering signals are fragmented. Traditional monitoring can report symptoms but does not safely correlate evidence, request targeted diagnostics, obtain human approval, execute a typed mitigation, and verify the result.
+WPF binding, UI, exception, and rendering signals are fragmented across trace output and runtime state that ordinary logs and APM metrics do not correlate into a WPF-specific diagnosis. Traditional monitoring can report symptoms but does not safely request targeted diagnostics, bind a proposed action to the exact evidence and human approval, execute the typed mitigation once, and verify the result.
 
 ## Architecture
 
