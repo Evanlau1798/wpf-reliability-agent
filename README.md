@@ -112,3 +112,25 @@ P0 exposes bounded read-only diagnostics and one typed mutation, `recovery.set_f
 ## Demo
 
 The primary scenario is an `ExperimentalPeopleGrid` binding storm with rendering degradation. A verified feature rollback is reported as `MITIGATED`, never `RESOLVED`.
+
+### Run the deployed demo
+
+1. Reset the scenario. In the PowerShell session where the three `WPF_RELIABILITY_*` variables above are set, launch the app:
+
+   ```powershell
+   dotnet run --project .\src\windows\Demo.BrokenWpfApp\Demo.BrokenWpfApp.csproj -c Release
+   ```
+
+   If the safe fallback is already visible, click **Reset Demo**. The status must read `Feature: ENABLED (broken)` and the experimental grid must be visible.
+2. Trigger the incident by leaving the broken grid enabled. No load generator or manual fault injection is required: app startup installs the in-process sensor, and the deliberate `DisplayNmae` binding automatically emits bounded binding telemetry while the grid supplies rendering/performance evidence.
+3. Observe the cloud workflow with an operator session. Keep the operator token in memory rather than printing or writing it to disk:
+
+   ```powershell
+   $OperatorToken = (gcloud secrets versions access latest --secret reliability-operator-token --project $ProjectId).Trim()
+   $ConsoleSession = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+   $LoginBody = @{ token = $OperatorToken } | ConvertTo-Json -Compress
+   Invoke-WebRequest -Method Post -Uri "$env:WPF_RELIABILITY_API_BASE_URI/console/login" -WebSession $ConsoleSession -ContentType "application/json" -Body $LoginBody | Out-Null
+   (Invoke-WebRequest -Uri "$env:WPF_RELIABILITY_API_BASE_URI/console/incidents" -WebSession $ConsoleSession).Content
+   ```
+
+   The incident list shows the incident ID, state, summary, and update time. Request `/console/incidents/<incident-id>` with the same `$ConsoleSession` to inspect the timeline, evidence, hypotheses, tool ledger, approval, verification, and report. After the exact HIGH-risk recovery action is approved and verified, the WPF app switches to the safe fallback and the incident is reported as `MITIGATED`. Click **Reset Demo** to restore the broken grid for the next rehearsal.
