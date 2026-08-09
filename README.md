@@ -65,6 +65,21 @@ dotnet test src\windows\Demo.BrokenWpfApp.Tests\Demo.BrokenWpfApp.Tests.csproj -
 
 No Cloud emulator or live Google Cloud project is required for these tests. Cloud boundaries use FastAPI `TestClient` plus deterministic fakes/stubs for Firestore, Pub/Sub, authentication, and model interactions, so the normal unit/integration loop does not make billable cloud calls.
 
+### Google Cloud deployment
+
+Use a dedicated Google Cloud project with billing enabled and an authenticated `gcloud` account that can enable APIs, create service accounts/IAM bindings, use Cloud Build, and deploy Cloud Run. From an empty project, deployment is intentionally two-stage because runtime tokens must not be generated or stored by the repository:
+
+```powershell
+$ProjectId = "your-project-id"
+gcloud auth login
+gcloud config set project $ProjectId
+
+# First pass: create project-scoped prerequisites and Secret Manager placeholders.
+.\scripts\deploy.ps1 -ProjectId $ProjectId
+```
+
+On a new project the first pass stops once it confirms that the two Secret Manager placeholders do not yet have enabled versions. Provision those values as described below, then rerun the same command. The second pass is idempotent for existing prerequisites, submits the cloud image build, deploys `reliability-api` and `reliability-worker`, configures authenticated Pub/Sub push and the dead-letter topic, runs deployment smoke checks, and prints the API URL plus the three Windows configuration variables.
+
 ## Reuse
 
 Selected WPF diagnostic concepts and primitives are adapted from `Evanlau1798/wpf-devtools-mcp` at pinned upstream source revision `900ac97cf9b69b4a3c1f4899b08c9b1e78212af3`. See `REUSE_DISCLOSURE.md` and `reuse-manifest.json`.
