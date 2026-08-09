@@ -21,7 +21,22 @@ Gemini, orchestrated through Google ADK, chooses the next bounded read-only diag
 
 ## Architecture
 
-The P0 design uses one in-process WPF sensor, HTTPS telemetry batches and command long-polling, one Python package deployed as two Cloud Run services, Pub/Sub, Firestore, Google ADK, and Gemini.
+The P0 design uses one in-process WPF sensor, HTTPS telemetry batches and command long-polling, one Python package deployed from one image as two Cloud Run services, Pub/Sub, Firestore, Google ADK, and Gemini.
+
+```mermaid
+flowchart LR
+    App["Demo.BrokenWpfApp + Reliability.Sensor"] -->|"HTTPS telemetry / command polling"| Api["Cloud Run: reliability-api"]
+    Api --> Db["Firestore"]
+    Api --> Topic["Pub/Sub: incident-work"]
+    Topic -->|"authenticated push"| Worker["Cloud Run: reliability-worker"]
+    Worker --> Db
+    Worker --> Agent["Google ADK + Gemini"]
+    Agent --> Worker
+    Api -->|"bounded commands"| App
+    Operator["Human operator"] -->|"session + exact approval"| Api
+```
+
+`reliability-api` is the public HTTPS ingress, command, approval, dashboard, and report surface. `reliability-worker` is private and advances one durable incident step per authenticated Pub/Sub invocation. Both roles run the same immutable container image; Firestore is the durable source of incident, evidence, proposal, approval, command, audit, and report state.
 
 ## Quickstart
 
