@@ -80,6 +80,27 @@ gcloud config set project $ProjectId
 
 On a new project the first pass stops once it confirms that the two Secret Manager placeholders do not yet have enabled versions. Provision those values as described below, then rerun the same command. The second pass is idempotent for existing prerequisites, submits the cloud image build, deploys `reliability-api` and `reliability-worker`, configures authenticated Pub/Sub push and the dead-letter topic, runs deployment smoke checks, and prints the API URL plus the three Windows configuration variables.
 
+### Secret and token provisioning
+
+Generate both demo tokens locally and stream them directly into Secret Manager without writing a token file into the repository. The Python commands intentionally omit a trailing newline so the stored secret exactly matches the bearer token:
+
+```powershell
+.\.venv\Scripts\python.exe -c "import secrets,sys; sys.stdout.write(secrets.token_urlsafe(32))" | gcloud secrets versions add reliability-device-token --project $ProjectId --data-file=-
+.\.venv\Scripts\python.exe -c "import secrets,sys; sys.stdout.write(secrets.token_urlsafe(32))" | gcloud secrets versions add reliability-operator-token --project $ProjectId --data-file=-
+
+.\scripts\deploy.ps1 -ProjectId $ProjectId
+```
+
+Do not place either token in `.env`, source files, test fixtures, shell history arguments, or committed documentation. For a demo shell, populate the WPF process environment from Secret Manager without printing the value:
+
+```powershell
+$env:WPF_RELIABILITY_API_BASE_URI = (gcloud run services describe reliability-api --region asia-east1 --project $ProjectId --format="value(status.url)").Trim()
+$env:WPF_RELIABILITY_DEVICE_ID = "demo-device"
+$env:WPF_RELIABILITY_DEVICE_TOKEN = (gcloud secrets versions access latest --secret reliability-device-token --project $ProjectId).Trim()
+```
+
+The operator token is separate from the device token and is accepted only by the operator login flow; retrieve it from Secret Manager only for the operator session that needs it.
+
 ## Reuse
 
 Selected WPF diagnostic concepts and primitives are adapted from `Evanlau1798/wpf-devtools-mcp` at pinned upstream source revision `900ac97cf9b69b4a3c1f4899b08c9b1e78212af3`. See `REUSE_DISCLOSURE.md` and `reuse-manifest.json`.
