@@ -6,6 +6,10 @@ An evidence-driven reliability agent that turns WPF binding, UI, and performance
 
 WPF binding, UI, exception, and rendering signals are fragmented across trace output and runtime state that ordinary logs and APM metrics do not correlate into a WPF-specific diagnosis. Traditional monitoring can report symptoms but does not safely request targeted diagnostics, bind a proposed action to the exact evidence and human approval, execute the typed mitigation once, and verify the result.
 
+## Why an Agent
+
+Gemini, orchestrated through Google ADK, chooses the next bounded read-only diagnostic from the evidence already collected and produces schema-validated hypotheses or proposals. Deterministic code owns every trust boundary: event validation, tool allowlists, budgets, state transitions, idempotency, risk classification, exact approval binding, command execution, post-action verification, and report validation. The model can recommend; it cannot bypass policy or directly mutate Windows, files, processes, or source code.
+
 ## Architecture
 
 The P0 design uses one in-process WPF sensor, HTTPS telemetry batches and command long-polling, one Python package deployed as two Cloud Run services, Pub/Sub, Firestore, Google ADK, and Gemini.
