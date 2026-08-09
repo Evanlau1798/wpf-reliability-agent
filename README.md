@@ -10,6 +10,15 @@ WPF binding, UI, exception, and rendering signals are fragmented across trace ou
 
 Gemini, orchestrated through Google ADK, chooses the next bounded read-only diagnostic from the evidence already collected and produces schema-validated hypotheses or proposals. Deterministic code owns every trust boundary: event validation, tool allowlists, budgets, state transitions, idempotency, risk classification, exact approval binding, command execution, post-action verification, and report validation. The model can recommend; it cannot bypass policy or directly mutate Windows, files, processes, or source code.
 
+## Features
+
+- In-process WPF binding, exception, UI-tree, and rendering/performance diagnostics with bounded payloads and a durable SQLite relay.
+- Authenticated HTTPS telemetry ingestion, Firestore incident/evidence state, Pub/Sub work dispatch, and one durable workflow step per worker invocation.
+- Google ADK and Gemini investigation that can request only the registered read-only diagnostic tools and must cite collected evidence.
+- Deterministic LOW/MEDIUM/HIGH/BLOCKED policy with exact human approval for the single P0 mutation, `recovery.set_feature_flag`.
+- Exactly-once command completion plus binding, performance, and visual post-action evidence before an incident can become `MITIGATED`.
+- Authenticated incident dashboard and schema-validated JSON, Markdown, and HTML reports.
+
 ## Architecture
 
 The P0 design uses one in-process WPF sensor, HTTPS telemetry batches and command long-polling, one Python package deployed as two Cloud Run services, Pub/Sub, Firestore, Google ADK, and Gemini.
