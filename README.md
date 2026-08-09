@@ -1,6 +1,6 @@
 # WPF Reliability Agent
 
-An evidence-driven reliability agent that turns WPF runtime failures into a bounded, approval-gated mitigation workflow.
+An evidence-driven reliability agent that turns WPF binding, UI, and performance signals into a cloud incident where Gemini requests bounded diagnostics, a human approves the single typed mitigation, and before/after evidence verifies the result.
 
 ## Problem
 
