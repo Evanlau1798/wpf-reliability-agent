@@ -40,7 +40,11 @@ flowchart LR
 
 ## Quickstart
 
-Implementation and reproducible setup instructions will be added as each verified Gate is completed.
+### Prerequisites
+
+The repository is verified on Windows with .NET SDK `8.0.319`, Python `3.12.10`, and Google Cloud SDK `579.0.0`. Use a .NET 8 SDK, Python 3.12, Git, and a current `gcloud` CLI. PowerShell is required for the deployment and cleanup scripts.
+
+Docker Desktop and WSL are not local prerequisites. Container builds run on GitHub-hosted Linux CI or Google Cloud Build.
 
 ## Reuse
 
