@@ -101,6 +101,22 @@ $env:WPF_RELIABILITY_DEVICE_TOKEN = (gcloud secrets versions access latest --sec
 
 The operator token is separate from the device token and is accepted only by the operator login flow; retrieve it from Secret Manager only for the operator session that needs it.
 
+### Cleanup Google Cloud resources
+
+When the demo is finished, remove project resources so Cloud Run, Pub/Sub, Artifact Registry, Secret Manager, and build-staging storage do not keep accumulating usage. The cleanup script requires the project ID twice and refuses a non-exact confirmation:
+
+```powershell
+.\scripts\cleanup-cloud.ps1 -ProjectId $ProjectId -ConfirmProjectId $ProjectId
+```
+
+The default cleanup preserves the Firestore database so incident evidence remains available. For a disposable demo project, delete Firestore too once that evidence is no longer needed:
+
+```powershell
+.\scripts\cleanup-cloud.ps1 -ProjectId $ProjectId -ConfirmProjectId $ProjectId -DeleteFirestore
+```
+
+The script is project-scoped and does not delete the Google Cloud project itself.
+
 ## Reuse
 
 Selected WPF diagnostic concepts and primitives are adapted from `Evanlau1798/wpf-devtools-mcp` at pinned upstream source revision `900ac97cf9b69b4a3c1f4899b08c9b1e78212af3`. See `REUSE_DISCLOSURE.md` and `reuse-manifest.json`.
