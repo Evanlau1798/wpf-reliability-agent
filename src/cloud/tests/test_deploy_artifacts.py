@@ -232,8 +232,9 @@ def test_deploy_script_smokes_pubsub_worker_and_correlates_cloud_log() -> None:
     assert '--format="value(messageIds[0])"' in script
     assert "gcloud logging read" in script
     assert 'resource.labels.service_name=`"$WorkerService`"' in script
-    assert 'textPayload:`"worker_message_rejected`"' in script
-    assert 'textPayload:`"$RunId`"' in script
+    assert 'jsonPayload.message:`"worker_message_rejected`"' in script
+    assert 'jsonPayload.message:`"$RunId`"' in script
+    assert '--format="value(jsonPayload.message)"' in script
 
 
 def test_cleanup_script_is_confirmed_parameterized_and_project_scoped() -> None:
