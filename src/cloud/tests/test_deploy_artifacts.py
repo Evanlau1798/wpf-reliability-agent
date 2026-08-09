@@ -12,6 +12,7 @@ def test_deploy_script_parameterizes_project_region_and_resource_names() -> None
 
     assert "[string]$ProjectId" in script
     assert '[string]$Region = "asia-east1"' in script
+    assert '[string]$VertexLocation = "global"' in script
     assert '[string]$ApiService = "reliability-api"' in script
     assert '[string]$WorkerService = "reliability-worker"' in script
     assert '[string]$ArtifactRepository = "reliability-agent"' in script
@@ -163,6 +164,7 @@ def test_worker_deploy_uses_same_digest_private_identity_and_limits() -> None:
     assert "--no-allow-unauthenticated" in script
     assert "SERVICE_ROLE=worker" in script
     assert "PUBSUB_INVOKER_EMAIL=$PubSubInvokerServiceAccountEmail" in script
+    assert "GOOGLE_CLOUD_LOCATION=$VertexLocation" in script
     assert "gcloud run services update $WorkerService" in script
     assert "PUBSUB_PUSH_AUDIENCE=$WorkerUrl" in script
     assert "Grant-WorkerInvoker $PubSubInvokerServiceAccountEmail" in script
