@@ -46,6 +46,25 @@ The repository is verified on Windows with .NET SDK `8.0.319`, Python `3.12.10`,
 
 Docker Desktop and WSL are not local prerequisites. Container builds run on GitHub-hosted Linux CI or Google Cloud Build.
 
+### Local test environment
+
+Create the repository-local Python environment once, install only the cloud test extras into it, then run the Windows and cloud suites independently:
+
+```powershell
+py -3.12 -m venv .venv
+Push-Location src\cloud
+..\..\.venv\Scripts\python.exe -m pip install -e ".[test]"
+Pop-Location
+
+dotnet restore WpfReliabilityAgent.sln
+dotnet build WpfReliabilityAgent.sln -c Release --no-restore
+.\.venv\Scripts\python.exe -m pytest src\cloud\tests -q
+dotnet test src\windows\Reliability.Sensor.Tests\Reliability.Sensor.Tests.csproj -c Release --no-build
+dotnet test src\windows\Demo.BrokenWpfApp.Tests\Demo.BrokenWpfApp.Tests.csproj -c Release
+```
+
+No Cloud emulator or live Google Cloud project is required for these tests. Cloud boundaries use FastAPI `TestClient` plus deterministic fakes/stubs for Firestore, Pub/Sub, authentication, and model interactions, so the normal unit/integration loop does not make billable cloud calls.
+
 ## Reuse
 
 Selected WPF diagnostic concepts and primitives are adapted from `Evanlau1798/wpf-devtools-mcp` at pinned upstream source revision `900ac97cf9b69b4a3c1f4899b08c9b1e78212af3`. See `REUSE_DISCLOSURE.md` and `reuse-manifest.json`.
