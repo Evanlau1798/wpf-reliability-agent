@@ -269,7 +269,7 @@ function Grant-BuildResourceAccess {
 }
 
 function Invoke-DeploymentSmokeTests {
-    $health = Invoke-RestMethod -Method Get -Uri "$ApiUrl/healthz"
+    $health = Invoke-RestMethod -Method Get -Uri "$ApiUrl/health"
     if ($health.status -ne "ok") {
         throw "API health smoke test failed."
     }

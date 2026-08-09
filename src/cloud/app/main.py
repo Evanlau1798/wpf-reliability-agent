@@ -64,6 +64,7 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title="WPF Reliability Agent", lifespan=lifespan)
 
 
+@app.get("/health", include_in_schema=False)
 @app.get("/healthz", include_in_schema=False)
 def healthz() -> dict[str, str]:
     return {"status": "ok"}
