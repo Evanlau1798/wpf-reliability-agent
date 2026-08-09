@@ -131,6 +131,13 @@ The deterministic policy allowlists nine LOW-risk read-only tools: `health.get_s
 
 The following command classes are permanently blocked and have no P0 executor: `shell.execute`, `powershell.execute`, `file.write`, `source.apply_patch`, `process.kill`, `process.restart`, `dll.inject`, `memory.read`, `credential.read`, `registry.write`, `git.commit`, and `git.push`. Screenshot/OCR capture, arbitrary source reads/writes, environment dumps, and arbitrary process control are also outside the P0 surface. UI text, binding paths, exceptions, source snippets, tool results, and application logs are treated as untrusted evidence data, never as instructions.
 
+## Known limitations
+
+- The P0 sensor is in-process and targets one WPF application instance; it is not a sidecar, machine-wide collector, or multi-app fleet.
+- Device and operator authentication use demo bearer tokens. They are intentionally simple credentials for the single-project demo, not production workforce/device identity.
+- `recovery.set_feature_flag` is a temporary, reversible mitigation. Successful verification reports `MITIGATED`, not `RESOLVED`, because the underlying source defect remains.
+- Source-map evidence may produce a patch proposal as a report artifact, but P0 never applies that diff and never writes source, builds, restarts, commits, pushes, or opens a pull request.
+
 ## Demo
 
 The primary scenario is an `ExperimentalPeopleGrid` binding storm with rendering degradation. A verified feature rollback is reported as `MITIGATED`, never `RESOLVED`.
