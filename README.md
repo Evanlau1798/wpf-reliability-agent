@@ -119,7 +119,9 @@ The script is project-scoped and does not delete the Google Cloud project itself
 
 ## Reuse
 
-Selected WPF diagnostic concepts and primitives are adapted from `Evanlau1798/wpf-devtools-mcp` at pinned upstream source revision `900ac97cf9b69b4a3c1f4899b08c9b1e78212af3`. See `REUSE_DISCLOSURE.md` and `reuse-manifest.json`.
+This is a new independent repository, not a fork of `wpf-devtools-mcp`. Reuse is limited to a design reference for instance-level WPF binding trace capture and an adapted binding-correlation regression trace, both pinned to upstream revision `900ac97cf9b69b4a3c1f4899b08c9b1e78212af3` under Apache-2.0. The complete MCP server, Inspector transport, Injector, Bootstrapper, Composer, installer, release, and signing infrastructure are not reused.
+
+See the full [reuse disclosure](REUSE_DISCLOSURE.md) and machine-readable [reuse manifest](reuse-manifest.json) for exact source paths, destination paths, reuse types, and adaptation summaries.
 
 ## Security
 
