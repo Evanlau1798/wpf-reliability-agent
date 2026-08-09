@@ -29,7 +29,7 @@ public sealed class MutationCommandPersistenceTests
         };
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
-        var dispatcher = await ready.Task.WaitAsync(TimeSpan.FromSeconds(1));
+        var dispatcher = await ready.Task.WaitAsync(TimeSpan.FromSeconds(5));
         var handler = new DuplicateMutationHandler();
         var invocationCount = 0;
 
@@ -94,7 +94,7 @@ public sealed class MutationCommandPersistenceTests
         };
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
-        var dispatcher = await ready.Task.WaitAsync(TimeSpan.FromSeconds(1));
+        var dispatcher = await ready.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
         try
         {

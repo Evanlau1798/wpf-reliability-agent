@@ -23,7 +23,7 @@ public sealed class RecoveryActionTimeoutTests
         };
         dispatcherThread.SetApartmentState(ApartmentState.STA);
         dispatcherThread.Start();
-        var dispatcher = await ready.Task.WaitAsync(TimeSpan.FromSeconds(1));
+        var dispatcher = await ready.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
         try
         {

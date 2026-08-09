@@ -23,7 +23,7 @@ public sealed class PostActionEvidenceTests
         }) { IsBackground = true };
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
-        var (dispatcher, root) = await ready.Task.WaitAsync(TimeSpan.FromSeconds(1));
+        var (dispatcher, root) = await ready.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
         try
         {

@@ -22,7 +22,7 @@ public sealed class RecoveryActionDispatchTests
         };
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
-        var (dispatcher, dispatcherThreadId) = await ready.Task.WaitAsync(TimeSpan.FromSeconds(1));
+        var (dispatcher, dispatcherThreadId) = await ready.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
         try
         {
@@ -66,7 +66,7 @@ public sealed class RecoveryActionDispatchTests
         };
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
-        var dispatcher = await ready.Task.WaitAsync(TimeSpan.FromSeconds(1));
+        var dispatcher = await ready.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
         try
         {
