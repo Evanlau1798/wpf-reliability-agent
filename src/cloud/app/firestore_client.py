@@ -121,6 +121,14 @@ def approve_pending_approval(
         if validated is None:
             return None
         approval, approval_document, incident_document, incident = validated
+        state_version = incident.get("state_version")
+        if type(state_version) is not int:
+            raise ValueError("Incident state version is invalid")
+        from app.workflow_state import IncidentState, transition_incident_in_transaction
+        _, state_audit = transition_incident_in_transaction(
+            transaction, incident_document=incident_document,
+            expected_state=IncidentState.AWAITING_APPROVAL, expected_version=state_version, target_state=IncidentState.EXECUTING,
+        )
         command_identity_key = sha256_canonical({
             "incident_id": approval.incident_id, "proposal_version": approval.proposal_version,
             "tool": approval.tool.value, "arguments_hash": approval.canonical_arguments_hash,
@@ -163,7 +171,7 @@ def approve_pending_approval(
         _write_approval_decision_audit(
             transaction,
             incident_document=incident_document,
-            incident=incident,
+            incident={"audit_sequence": state_audit["sequence"], "audit_entry_hash": state_audit["entry_hash"]},
             approval_id=approval.approval_id,
             actor=actor,
             status=ApprovalStatus.APPROVED,

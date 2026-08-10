@@ -173,7 +173,7 @@ def test_approved_decision_creates_exact_unique_mutation_command(monkeypatch) ->
     assert command_id == f"cmd-{command_identity_key}"
     client.collection.assert_called_once_with(firestore_client.COMMANDS_COLLECTION)
     client.collection.return_value.document.assert_called_once_with(command_id)
-    assert transaction.create.call_count == 2
+    assert transaction.create.call_count == 3
     command_document = next(
         call.args[1]
         for call in transaction.create.call_args_list
@@ -196,6 +196,11 @@ def test_approved_decision_creates_exact_unique_mutation_command(monkeypatch) ->
         "approved_at_utc": "2026-08-08T05:00:00Z",
         "updated_at": firestore_client.firestore.SERVER_TIMESTAMP,
     })
+    state_audit = next(call.args[1] for call in transaction.create.call_args_list if call.args[1].get("type") == "state.transition")
+    assert state_audit["from_state"] == "AWAITING_APPROVAL"
+    assert state_audit["to_state"] == "EXECUTING"
+    assert any(call.args[1].get("state") == "EXECUTING"
+               for call in transaction.update.call_args_list)
     audit_event = next(
         call.args[1]
         for call in transaction.create.call_args_list
@@ -204,7 +209,7 @@ def test_approved_decision_creates_exact_unique_mutation_command(monkeypatch) ->
     assert any(call.args[1].get("audit_entry_hash") == audit_event["entry_hash"] for call in transaction.update.call_args_list)
     assert audit_event["actor_type"] == "HUMAN"
     assert audit_event["actor_id"] == "demo-operator"
-    assert audit_event["previous_entry_hash"] == "8" * 64
+    assert audit_event["previous_entry_hash"] == state_audit["entry_hash"]
     assert audit_event["status"] == "APPROVED"
     assert audit_event["timestamp_utc"] == "2026-08-08T05:00:00Z"
 
