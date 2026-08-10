@@ -4,14 +4,10 @@ import json
 from pathlib import Path
 from unittest.mock import Mock
 
-from fastapi.testclient import TestClient
-
-from app import main
-from app import worker
-from app import worker_auth
+from app import main, worker, worker_auth
 from app.logging_config import configure_logging
 from app.main import app
-
+from fastapi.testclient import TestClient
 
 FIXTURES = Path(__file__).parents[3] / "contracts" / "fixtures"
 
@@ -145,7 +141,7 @@ def test_malformed_pubsub_message_is_audited_and_acked(monkeypatch) -> None:
     assert "not-base64!" not in log
 
 
-def test_duplicate_work_delivery_checks_processed_run_and_noops(monkeypatch) -> None:
+def test_duplicate_work_delivery_republishes_durable_continuation(monkeypatch) -> None:
     _set_environment(monkeypatch, "worker")
     _allow_identity(monkeypatch)
     firestore_client = object()
@@ -157,6 +153,13 @@ def test_duplicate_work_delivery_checks_processed_run_and_noops(monkeypatch) -> 
         return True
 
     monkeypatch.setattr(main, "is_run_processed", is_processed, raising=False)
+    monkeypatch.setattr(
+        main,
+        "load_incident_workflow_state",
+        lambda *_args: {"state": "TRIAGING", "pending_command_id": None},
+    )
+    published: list[dict[str, object]] = []
+    monkeypatch.setattr(main, "publish_work", lambda _project, _topic, payload: published.append(payload))
 
     with TestClient(app) as client:
         response = client.post(
@@ -167,6 +170,7 @@ def test_duplicate_work_delivery_checks_processed_run_and_noops(monkeypatch) -> 
 
     assert response.status_code == 204
     assert checked == [(firestore_client, "incident-1:2:binding.aggregate")]
+    assert published[0]["trigger"] == "workflow.triaging"
 
 
 def test_new_work_commits_durable_step_before_ack(monkeypatch) -> None:
@@ -176,6 +180,8 @@ def test_new_work_commits_durable_step_before_ack(monkeypatch) -> None:
     committed: list[tuple[object, str, str, int, str, str]] = []
     monkeypatch.setattr(main, "get_firestore_client", lambda _project_id: firestore_client)
     monkeypatch.setattr(main, "is_run_processed", lambda *_args: False)
+    monkeypatch.setattr(main, "load_incident_workflow_state", lambda *_args: {"state": "NEW"})
+    monkeypatch.setattr(main, "publish_work", lambda *_args: "message-1")
 
     def commit(client, *, run_key, incident_id, evidence_revision, trigger, model_id):
         committed.append((client, run_key, incident_id, evidence_revision, trigger, model_id))
@@ -215,6 +221,7 @@ def test_recovery_work_uses_deterministic_verification_path(monkeypatch) -> None
         action_id="action-1",
     )
     committed: list[dict[str, object]] = []
+    published: list[dict[str, object]] = []
     monkeypatch.setattr(main, "get_firestore_client", lambda _project_id: firestore_client)
     monkeypatch.setattr(main, "is_run_processed", lambda *_args: False)
     monkeypatch.setattr(main, "load_incident_evidence", lambda *_args: [{"evidence_id": "post-1"}])
@@ -222,6 +229,7 @@ def test_recovery_work_uses_deterministic_verification_path(monkeypatch) -> None
     monkeypatch.setattr(main, "meets_mitigation_thresholds", lambda *_args: True)
     monkeypatch.setattr(main, "build_verification_audit", lambda *_args: {"outcome": "MITIGATED"})
     monkeypatch.setattr(main, "commit_new_incident_run", Mock(side_effect=AssertionError("wrong path")))
+    monkeypatch.setattr(main, "publish_work", lambda _project, _topic, payload: published.append(payload))
 
     def commit(*_args, **kwargs):
         committed.append(kwargs)
@@ -248,6 +256,12 @@ def test_recovery_work_uses_deterministic_verification_path(monkeypatch) -> None
             "verification": {"outcome": "MITIGATED"},
         }
     ]
+    assert published == [{
+        "incident_id": "incident-1",
+        "evidence_revision": 7,
+        "trigger": "workflow.reporting",
+        "event_id": "post-1",
+    }]
 
 
 def test_recovery_work_returns_inconclusive_evidence_to_investigating(monkeypatch) -> None:
@@ -255,6 +269,7 @@ def test_recovery_work_returns_inconclusive_evidence_to_investigating(monkeypatc
     _allow_identity(monkeypatch)
     firestore_client = object()
     committed: list[dict[str, object]] = []
+    published: list[dict[str, object]] = []
     monkeypatch.setattr(main, "get_firestore_client", lambda _project_id: firestore_client)
     monkeypatch.setattr(main, "is_run_processed", lambda *_args: False)
     monkeypatch.setattr(main, "load_incident_evidence", lambda *_args: [{"evidence_id": "post-1"}])
@@ -277,6 +292,7 @@ def test_recovery_work_returns_inconclusive_evidence_to_investigating(monkeypatc
         return True
 
     monkeypatch.setattr(main, "commit_verification_run", commit)
+    monkeypatch.setattr(main, "publish_work", lambda _project, _topic, payload: published.append(payload))
 
     with TestClient(app) as client:
         response = client.post(
@@ -288,6 +304,7 @@ def test_recovery_work_returns_inconclusive_evidence_to_investigating(monkeypatc
     assert response.status_code == 204
     assert committed[0]["target_state"] is main.IncidentState.INVESTIGATING
     assert committed[0]["verification"] == {"outcome": "INCONCLUSIVE"}
+    assert published[0]["trigger"] == "workflow.investigating"
 
 
 def test_recovery_work_without_post_snapshot_never_commits_success_state(monkeypatch) -> None:
@@ -328,6 +345,7 @@ def test_recovery_regression_enters_failed_safe_with_rollback_guidance(monkeypat
         action_id="action-1",
     )
     committed: list[dict[str, object]] = []
+    published: list[dict[str, object]] = []
     monkeypatch.setattr(main, "get_firestore_client", lambda _project_id: firestore_client)
     monkeypatch.setattr(main, "is_run_processed", lambda *_args: False)
     monkeypatch.setattr(main, "load_incident_evidence", lambda *_args: [{"evidence_id": "post-1"}])
@@ -352,6 +370,7 @@ def test_recovery_regression_enters_failed_safe_with_rollback_guidance(monkeypat
         return True
 
     monkeypatch.setattr(main, "commit_verification_run", commit)
+    monkeypatch.setattr(main, "publish_work", lambda _project, _topic, payload: published.append(payload))
 
     with TestClient(app) as client:
         response = client.post(
@@ -363,6 +382,7 @@ def test_recovery_regression_enters_failed_safe_with_rollback_guidance(monkeypat
     assert response.status_code == 204
     assert committed[0]["target_state"] is main.IncidentState.FAILED_SAFE
     assert committed[0]["verification"]["rollback_guidance"] == "Re-enable the feature."
+    assert published[0]["trigger"] == "workflow.reporting"
 
 
 def test_rollback_guidance_is_loaded_from_the_command_approval() -> None:

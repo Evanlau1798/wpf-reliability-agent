@@ -10,6 +10,7 @@ from fastapi.responses import HTMLResponse
 from pydantic import SecretStr
 
 from app import firestore_client
+from app.approval import ApprovalDecisionRequest
 from app.auth import (
     OPERATOR_CSRF_COOKIE,
     OPERATOR_SESSION_COOKIE,
@@ -19,7 +20,6 @@ from app.auth import (
     create_operator_session_value,
     validate_operator_csrf,
 )
-from app.approval import ApprovalDecisionRequest
 from app.commands import (
     CommandLeaseRequest,
     complete_command_once,
@@ -37,8 +37,6 @@ from app.ingest import (
 from app.logging_config import configure_logging
 from app.models import CommandResult, EventType
 from app.pubsub import publish_work
-from app.worker import build_run_key, decode_pubsub_envelope, pubsub_message_id
-from app.worker_auth import authenticate_pubsub_push
 from app.verification import (
     build_inconclusive_verification_audit,
     build_regression_verification_audit,
@@ -48,8 +46,11 @@ from app.verification import (
     meets_mitigation_thresholds,
     recovery_evidence_binding,
 )
+from app.worker import build_run_key, decode_pubsub_envelope, pubsub_message_id
+from app.worker_auth import authenticate_pubsub_push
+from app.workflow import INVESTIGATING_TRIGGER, REPORTING_TRIGGER, REPORT_TRIGGER, WORKFLOW_TRANSITIONS, commit_transition_run, continuation_payload, load_incident_evidence, load_incident_workflow_state, load_rollback_guidance, run_investigation_step
+from app.workflow_reporting import commit_terminal_reporting_run, run_reporting_step
 from app.workflow_state import IncidentState, commit_new_incident_run, commit_verification_run
-
 
 MAX_TELEMETRY_BATCH_BYTES = 512 * 1024
 
@@ -154,12 +155,13 @@ def decide_approval(
                 now=datetime.now(UTC),
             )
         else:
-            firestore_client.reject_pending_approval(
+            _, incident_id, evidence_revision = firestore_client.reject_pending_approval(
                 client,
                 approval_id=approval_id,
                 actor=operator_id,
                 now=datetime.now(UTC),
             )
+            _publish_worker_continuation(request, {"incident_id": incident_id, "evidence_revision": evidence_revision, "event_id": approval_id}, {"state": IncidentState.REJECTED.value})
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -251,6 +253,7 @@ async def worker_push(request: Request) -> None:
     )
     client = get_firestore_client(request.app.state.settings.google_cloud_project)
     if is_run_processed(client, run_key):
+        _publish_worker_continuation(request, work, load_incident_workflow_state(client, work["incident_id"]))
         request.app.state.logger.info("worker_duplicate_run run_key=%s", run_key)
         return
     if work["trigger"] == EventType.RECOVERY_RESULT.value:
@@ -305,8 +308,45 @@ async def worker_push(request: Request) -> None:
             target_state=target_state,
             verification=audit,
         )
-        if not committed:
+        if committed:
+            _publish_worker_continuation(request, work, {"state": target_state.value})
+        else:
             request.app.state.logger.info("worker_duplicate_run run_key=%s", run_key)
+        return
+    transition = WORKFLOW_TRANSITIONS.get(work["trigger"])
+    if transition is not None:
+        expected_state, target_state = transition
+        committed = commit_transition_run(
+            client, run_key=run_key, incident_id=work["incident_id"], evidence_revision=work["evidence_revision"],
+            trigger=work["trigger"], model_id=request.app.state.settings.gemini_model,
+            expected_state=expected_state, target_state=target_state,
+        )
+        if committed:
+            _publish_worker_continuation(request, work, {"state": target_state.value})
+        return
+    if work["trigger"] == INVESTIGATING_TRIGGER:
+        target_state = await run_investigation_step(client, work=work, run_key=run_key, model_id=request.app.state.settings.gemini_model)
+        if target_state is not None:
+            _publish_worker_continuation(request, work, {"state": target_state.value})
+        return
+    if work["trigger"] == REPORTING_TRIGGER:
+        committed = commit_terminal_reporting_run(
+            client,
+            run_key=run_key,
+            incident_id=work["incident_id"],
+            evidence_revision=work["evidence_revision"],
+            trigger=work["trigger"],
+            model_id=request.app.state.settings.gemini_model,
+        )
+        if committed:
+            _publish_worker_continuation(request, work, {"state": IncidentState.REPORTING.value})
+        return
+    if work["trigger"] == REPORT_TRIGGER:
+        await run_reporting_step(client, work=work, run_key=run_key, model_id=request.app.state.settings.gemini_model)
+        return
+    incident = load_incident_workflow_state(client, work["incident_id"])
+    if incident.get("state") != IncidentState.NEW.value:
+        _publish_worker_continuation(request, work, incident)
         return
     committed = commit_new_incident_run(
         client,
@@ -316,32 +356,17 @@ async def worker_push(request: Request) -> None:
         trigger=work["trigger"],
         model_id=request.app.state.settings.gemini_model,
     )
-    if not committed:
+    if committed:
+        _publish_worker_continuation(request, work, {"state": IncidentState.TRIAGING.value})
+    else:
         request.app.state.logger.info("worker_duplicate_run run_key=%s", run_key)
 
 
-def load_incident_evidence(client: object, incident_id: str) -> list[dict[str, object]]:
-    incident = client.collection(firestore_client.INCIDENTS_COLLECTION).document(incident_id)
-    snapshots = incident.collection(firestore_client.EVIDENCE_COLLECTION).stream()
-    return [
-        {"evidence_id": snapshot.id, **(snapshot.to_dict() or {})}
-        for snapshot in snapshots
-    ]
-
-
-def load_rollback_guidance(client: object, incident_id: str, command_id: str) -> str | None:
-    command = client.collection(firestore_client.COMMANDS_COLLECTION).document(command_id).get()
-    if not command.exists:
-        return None
-    approval_id = (command.to_dict() or {}).get("approval_id")
-    if not isinstance(approval_id, str) or not approval_id:
-        return None
-    incident = client.collection(firestore_client.INCIDENTS_COLLECTION).document(incident_id)
-    approval = incident.collection(firestore_client.APPROVALS_COLLECTION).document(approval_id).get()
-    if not approval.exists:
-        return None
-    rollback_guidance = (approval.to_dict() or {}).get("rollback_plan")
-    return rollback_guidance if isinstance(rollback_guidance, str) and rollback_guidance else None
+def _publish_worker_continuation(request: Request, work: dict[str, object], incident: dict[str, object]) -> None:
+    payload = continuation_payload(work, incident)
+    if payload is not None:
+        settings = request.app.state.settings
+        publish_work(settings.google_cloud_project, settings.pubsub_topic, payload)
 
 
 async def enforce_telemetry_body_limit(request: Request) -> None:

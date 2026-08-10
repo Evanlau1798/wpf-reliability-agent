@@ -191,12 +191,12 @@ def reject_pending_approval(
     approval_id: str,
     actor: str,
     now: datetime,
-) -> int:
+) -> tuple[int, str, int]:
     if not actor:
         raise ValueError("Approval actor is required")
 
     @firestore.transactional
-    def reject(transaction: firestore.Transaction) -> int | None:
+    def reject(transaction: firestore.Transaction) -> tuple[int, str, int] | None:
         validated = _validate_pending_approval_in_transaction(
             client,
             transaction,
@@ -205,10 +205,10 @@ def reject_pending_approval(
         )
         if validated is None:
             return None
-        _, approval_document, incident_document, incident = validated
-        state_version = incident.get("state_version")
-        if type(state_version) is not int:
-            raise ValueError("Incident state version is invalid")
+        approval, approval_document, incident_document, incident = validated
+        state_version, evidence_revision = incident.get("state_version"), incident.get("evidence_revision")
+        if type(state_version) is not int or type(evidence_revision) is not int or evidence_revision < 0:
+            raise ValueError("Incident state or evidence revision is invalid")
 
         from app.workflow_state import IncidentState, transition_incident_in_transaction
 
@@ -235,13 +235,12 @@ def reject_pending_approval(
             status=ApprovalStatus.REJECTED,
             now=now,
         )
-        return next_version
+        return next_version, approval.incident_id, evidence_revision
 
-    next_version = reject(client.transaction())
-    if next_version is None:
+    result = reject(client.transaction())
+    if result is None:
         raise ValueError("Approval expired")
-    return next_version
-
+    return result
 
 def _write_approval_decision_audit(
     transaction: firestore.Transaction,

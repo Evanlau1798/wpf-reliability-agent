@@ -2,11 +2,10 @@ import hashlib
 import hmac
 from typing import Annotated
 
-from fastapi import Depends, FastAPI
-from fastapi.testclient import TestClient
-
 from app import auth, firestore_client
 from app.main import app
+from fastapi import Depends, FastAPI
+from fastapi.testclient import TestClient
 
 
 def test_operator_login_validates_token_from_environment(monkeypatch) -> None:
@@ -102,8 +101,9 @@ def test_approval_decide_route_accepts_only_approve_or_reject(monkeypatch) -> No
     monkeypatch.setattr(
         firestore_client,
         "reject_pending_approval",
-        lambda _client, *, approval_id, actor, now: 1,
+        lambda _client, *, approval_id, actor, now: (1, "incident-1", 1),
     )
+    monkeypatch.setattr("app.main.publish_work", lambda *_args: None)
 
     with TestClient(app, base_url="https://testserver") as client:
         login = client.post("/console/login", json={"token": "operator-secret"})
@@ -132,6 +132,43 @@ def test_approval_decide_route_accepts_only_approve_or_reject(monkeypatch) -> No
     assert invalid.status_code == 422
 
 
+def test_rejected_approval_publishes_reporting_continuation(monkeypatch) -> None:
+    _set_api_environment(monkeypatch)
+    published: list[tuple[str, str, dict[str, object]]] = []
+    monkeypatch.setattr("app.main.get_firestore_client", lambda _project_id: object())
+    monkeypatch.setattr(
+        firestore_client,
+        "reject_pending_approval",
+        lambda _client, *, approval_id, actor, now: (6, "incident-1", 7),
+    )
+    monkeypatch.setattr(
+        "app.main.publish_work",
+        lambda project, topic, payload: published.append((project, topic, payload)),
+    )
+
+    with TestClient(app, base_url="https://testserver") as client:
+        login = client.post("/console/login", json={"token": "operator-secret"})
+        csrf = login.cookies.get(auth.OPERATOR_CSRF_COOKIE)
+        assert csrf is not None
+        response = client.post(
+            "/v1/approvals/approval-1:decide",
+            headers={auth.OPERATOR_CSRF_HEADER: csrf},
+            json={"decision": "reject"},
+        )
+
+    assert response.status_code == 200
+    assert published == [(
+        "project-test",
+        "incident-work",
+        {
+            "incident_id": "incident-1",
+            "evidence_revision": 7,
+            "trigger": "workflow.reporting",
+            "event_id": "approval-1",
+        },
+    )]
+
+
 def test_approval_decide_route_records_authenticated_operator_actor(monkeypatch) -> None:
     _set_api_environment(monkeypatch)
     client_marker = object()
@@ -146,10 +183,11 @@ def test_approval_decide_route_records_authenticated_operator_actor(monkeypatch)
     def reject(client, *, approval_id, actor, now):
         assert now.tzinfo is not None
         calls.append(("reject", client, approval_id, actor))
-        return 6
+        return 6, "incident-1", 1
 
     monkeypatch.setattr(firestore_client, "approve_pending_approval", approve)
     monkeypatch.setattr(firestore_client, "reject_pending_approval", reject)
+    monkeypatch.setattr("app.main.publish_work", lambda *_args: None)
 
     with TestClient(app, base_url="https://testserver") as client:
         login = client.post("/console/login", json={"token": "operator-secret"})

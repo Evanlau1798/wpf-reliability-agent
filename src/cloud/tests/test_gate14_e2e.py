@@ -2,11 +2,9 @@ import base64
 import json
 from pathlib import Path
 
-from fastapi.testclient import TestClient
-
 from app import main, worker_auth
 from app.main import app
-
+from fastapi.testclient import TestClient
 
 FIXTURES = Path(__file__).parents[3] / "contracts" / "fixtures"
 
@@ -36,6 +34,7 @@ def test_approved_mutation_post_snapshot_enters_mitigated_without_manual_state_e
     monkeypatch.setattr(main, "get_firestore_client", lambda _project_id: firestore_client)
     monkeypatch.setattr(main, "is_run_processed", lambda *_args: False)
     monkeypatch.setattr(main, "load_incident_evidence", lambda *_args: fixture["evidence"])
+    monkeypatch.setattr(main, "publish_work", lambda *_args: "message-1")
 
     def commit(*_args, **kwargs):
         committed.append(kwargs)

@@ -4,9 +4,8 @@ from threading import Barrier, Lock
 from unittest.mock import Mock
 
 import pytest
-from google.api_core.exceptions import AlreadyExists
-
 from app import firestore_client
+from google.api_core.exceptions import AlreadyExists
 
 
 def test_pending_approval_can_be_loaded_for_decision(monkeypatch) -> None:
@@ -222,21 +221,20 @@ def test_rejected_decision_enters_rejected_reporting_path_without_command(monkey
             "app_session_id": "session-1",
             "state": "AWAITING_APPROVAL",
             "state_version": 5,
+            "evidence_revision": 7,
             "audit_sequence": 8,
             "audit_entry_hash": "8" * 64,
         },
     )
     monkeypatch.setattr(firestore_client.firestore, "transactional", lambda callback: callback)
     now = datetime(2026, 8, 8, 5, tzinfo=UTC)
-
-    next_version = firestore_client.reject_pending_approval(
+    result = firestore_client.reject_pending_approval(
         client,
         approval_id="approval-1",
         actor="demo-operator",
         now=now,
     )
-
-    assert next_version == 6
+    assert result == (6, "incident-1", 7)
     assert transaction.update.call_count == 3
     transaction.update.assert_any_call(
         snapshot.reference,

@@ -20,7 +20,6 @@ from app.models import (
 from app.policy import READ_ONLY_DIAGNOSTIC_TOOLS
 from app.workflow_state import MAX_INVESTIGATION_ROUNDS, MAX_READ_ONLY_TOOL_CALLS
 
-
 TOOL_DESCRIPTIONS = {
     DiagnosticTool.HEALTH_GET_SNAPSHOT.value: "Current app, session, and sensor health.",
     DiagnosticTool.BINDING_GET_ERRORS.value: "Aggregated binding error evidence.",
@@ -183,6 +182,28 @@ def create_evidence_command(
     context: AgentCorrelationContext,
     now: datetime,
 ) -> str:
+    return write_command_once(
+        client,
+        build_evidence_command(
+            decision,
+            incident_id=incident_id,
+            evidence_revision=evidence_revision,
+            app_session_id=app_session_id,
+            context=context,
+            now=now,
+        ),
+    )
+
+
+def build_evidence_command(
+    decision: AgentDecision,
+    *,
+    incident_id: str,
+    evidence_revision: int,
+    app_session_id: str,
+    context: AgentCorrelationContext,
+    now: datetime,
+) -> DiagnosticCommand:
     if decision.decision is not DecisionType.REQUEST_EVIDENCE or decision.next_command is None:
         raise ValueError("REQUEST_EVIDENCE decision required")
     if decision.next_command.tool not in READ_ONLY_DIAGNOSTIC_TOOLS:
@@ -205,7 +226,7 @@ def create_evidence_command(
             "arguments_hash": arguments_hash,
         }
     )
-    command = DiagnosticCommand(
+    return DiagnosticCommand(
         schema_version="1.0",
         command_id=f"cmd-{idempotency_key}",
         incident_id=incident_id,
@@ -220,7 +241,6 @@ def create_evidence_command(
         expires_at_utc=now + timedelta(minutes=1),
         timeout_ms=10_000,
     )
-    return write_command_once(client, command)
 
 
 def proposed_action_for_policy(decision: AgentDecision) -> ProposedAction:
