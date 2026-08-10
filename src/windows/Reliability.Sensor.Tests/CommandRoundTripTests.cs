@@ -9,6 +9,36 @@ namespace Reliability.Sensor.Tests;
 public sealed class CommandRoundTripTests
 {
     [Fact]
+    public void CommandResultHashIgnoresSubMicrosecondTimestampTicks()
+    {
+        var startedAt = new DateTimeOffset(2026, 8, 10, 17, 7, 43, TimeSpan.Zero)
+            .AddTicks(8_629_410);
+        var completedAt = new DateTimeOffset(2026, 8, 10, 17, 7, 43, TimeSpan.Zero)
+            .AddTicks(8_701_840);
+        var baseline = new CommandResult(
+            "1.0",
+            "command-1",
+            "incident-1",
+            "session-1",
+            ResultStatus.SUCCEEDED,
+            startedAt,
+            completedAt,
+            JsonSerializer.SerializeToElement(new { ok = true }),
+            new string('0', 64),
+            false,
+            null);
+        var subMicrosecond = baseline with
+        {
+            StartedAtUtc = startedAt.AddTicks(1),
+            CompletedAtUtc = completedAt.AddTicks(6),
+        };
+
+        Assert.Equal(
+            ReliabilitySensor.ComputeCommandResultHash(baseline),
+            ReliabilitySensor.ComputeCommandResultHash(subMicrosecond));
+    }
+
+    [Fact]
     public async Task StartedSensorLeasesExecutesAndCompletesReadOnlyCommand()
     {
         var directory = Path.Combine(

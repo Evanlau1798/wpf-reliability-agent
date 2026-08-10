@@ -10,8 +10,11 @@ public sealed class UtcDateTimeOffsetJsonConverter : JsonConverter<DateTimeOffse
             ? value
             : throw new JsonException("Expected an ISO-8601 timestamp.");
 
-    public override void Write(Utf8JsonWriter writer, DateTimeOffset value, JsonSerializerOptions options) =>
-        writer.WriteStringValue(value.UtcDateTime);
+    public override void Write(Utf8JsonWriter writer, DateTimeOffset value, JsonSerializerOptions options)
+    {
+        var utc = value.UtcDateTime;
+        writer.WriteStringValue(utc.AddTicks(-(utc.Ticks % 10)));
+    }
 }
 
 public sealed class NullableUtcDateTimeOffsetJsonConverter : JsonConverter<DateTimeOffset?>
@@ -31,6 +34,7 @@ public sealed class NullableUtcDateTimeOffsetJsonConverter : JsonConverter<DateT
             return;
         }
 
-        writer.WriteStringValue(value.Value.UtcDateTime);
+        var utc = value.Value.UtcDateTime;
+        writer.WriteStringValue(utc.AddTicks(-(utc.Ticks % 10)));
     }
 }

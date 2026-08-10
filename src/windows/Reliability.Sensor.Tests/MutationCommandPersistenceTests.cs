@@ -121,7 +121,13 @@ public sealed class MutationCommandPersistenceTests
                 completed.ResultJson,
                 ContractJsonContext.Default.CommandResult);
             Assert.NotNull(stored);
-            Assert.Equal(result with { Result = null }, stored with { Result = null });
+            var normalized = result with
+            {
+                Result = null,
+                StartedAtUtc = result.StartedAtUtc.AddTicks(-(result.StartedAtUtc.Ticks % 10)),
+                CompletedAtUtc = result.CompletedAtUtc.AddTicks(-(result.CompletedAtUtc.Ticks % 10)),
+            };
+            Assert.Equal(normalized, stored with { Result = null });
             Assert.Equal(
                 CanonicalJson.Serialize(result.Result),
                 CanonicalJson.Serialize(stored.Result));
