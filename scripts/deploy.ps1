@@ -144,7 +144,7 @@ function Ensure-CommandLeaseIndex {
         }
     }
 
-    & gcloud firestore indexes composite create --collection-group=commands --field-config=field-path=status,order=ascending --field-config=field-path=target_app_session_id,order=ascending --field-config=field-path=issued_at_utc,order=ascending --query-scope=collection --database="(default)" --project=$ProjectId --quiet | Out-Null
+    & gcloud firestore indexes composite create --collection-group=commands --field-config="field-path=status,order=ascending" --field-config="field-path=target_app_session_id,order=ascending" --field-config="field-path=issued_at_utc,order=ascending" --query-scope=collection --database="(default)" --project=$ProjectId --quiet | Out-Null
     if ($LASTEXITCODE -ne 0) {
         throw "Command lease Firestore composite index creation failed."
     }

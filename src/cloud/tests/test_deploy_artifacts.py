@@ -96,9 +96,9 @@ def test_deploy_script_provisions_command_lease_composite_index() -> None:
     assert "gcloud firestore indexes composite list" in script
     assert "gcloud firestore indexes composite create" in script
     assert "--collection-group=commands" in script
-    assert "field-path=status,order=ascending" in script
-    assert "field-path=target_app_session_id,order=ascending" in script
-    assert "field-path=issued_at_utc,order=ascending" in script
+    assert '--field-config="field-path=status,order=ascending"' in script
+    assert '--field-config="field-path=target_app_session_id,order=ascending"' in script
+    assert '--field-config="field-path=issued_at_utc,order=ascending"' in script
     assert "Ensure-CommandLeaseIndex" in script.split("Ensure-FirestoreDatabase", 2)[-1]
 
 
