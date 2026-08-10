@@ -286,6 +286,8 @@ def test_deploy_script_smokes_pubsub_worker_and_correlates_cloud_log() -> None:
     assert 'jsonPayload.message:`"worker_message_rejected`"' in script
     assert 'jsonPayload.message:`"$RunId`"' in script
     assert '--format="value(jsonPayload.message)"' in script
+    assert '$LogMatch = & gcloud logging read' in script
+    assert '$LogMatch = ($LogMatch | Out-String).Trim()' in script
 
 
 def test_cleanup_script_is_confirmed_parameterized_and_project_scoped() -> None:

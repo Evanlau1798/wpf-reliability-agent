@@ -312,10 +312,11 @@ function Invoke-PubSubWorkerSmokeTest {
 
     $LogFilter = "resource.type=`"cloud_run_revision`" AND resource.labels.service_name=`"$WorkerService`" AND jsonPayload.message:`"worker_message_rejected`" AND jsonPayload.message:`"$RunId`""
     for ($attempt = 1; $attempt -le 6; $attempt++) {
-        $LogMatch = (& gcloud logging read $LogFilter --project=$ProjectId --freshness=5m --limit=1 --format="value(jsonPayload.message)").Trim()
+        $LogMatch = & gcloud logging read $LogFilter --project=$ProjectId --freshness=5m --limit=1 --format="value(jsonPayload.message)"
         if ($LASTEXITCODE -ne 0) {
             throw "Cloud Logging query failed during Pub/Sub worker smoke test."
         }
+        $LogMatch = ($LogMatch | Out-String).Trim()
         if ($LogMatch) {
             Write-Host "Worker smoke run ID: $RunId"
             return
