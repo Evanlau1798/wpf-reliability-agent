@@ -210,6 +210,7 @@ def test_worker_deploy_uses_same_digest_private_identity_and_limits() -> None:
     assert "--no-allow-unauthenticated" in script
     assert "SERVICE_ROLE=worker" in script
     assert "PUBSUB_INVOKER_EMAIL=$PubSubInvokerServiceAccountEmail" in script
+    assert "GOOGLE_GENAI_USE_VERTEXAI=true" in script
     assert "GOOGLE_CLOUD_LOCATION=$VertexLocation" in script
     assert "gcloud run services update $WorkerService" in script
     assert "PUBSUB_PUSH_AUDIENCE=$WorkerUrl" in script
