@@ -48,7 +48,8 @@ $ApiProjectRoles = @(
 $WorkerProjectRoles = @(
     "roles/aiplatform.user",
     "roles/datastore.user",
-    "roles/logging.logWriter"
+    "roles/logging.logWriter",
+    "roles/pubsub.publisher"
 )
 $BuildProjectRoles = @(
     "roles/logging.logWriter"

@@ -110,9 +110,11 @@ def test_deploy_script_creates_api_service_account_with_minimal_project_roles() 
 
 def test_deploy_script_creates_worker_service_account_with_minimal_project_roles() -> None:
     script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
+    worker_roles = script.split("$WorkerProjectRoles = @(", 1)[1].split(")", 1)[0]
 
     assert "Ensure-ServiceAccount $WorkerServiceAccount" in script
-    assert '"roles/aiplatform.user"' in script
+    assert '"roles/aiplatform.user"' in worker_roles
+    assert '"roles/pubsub.publisher"' in worker_roles
     assert "$WorkerProjectRoles" in script
 
 
