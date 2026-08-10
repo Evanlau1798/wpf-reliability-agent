@@ -215,11 +215,11 @@ function Ensure-PushSubscription {
 
 function Grant-DeadLetterAccess {
     $PubSubServiceAgent = Get-PubSubServiceAgentEmail
-    & gcloud pubsub topics add-iam-policy-binding $DeadLetterTopic --project=$ProjectId --member="serviceAccount:$PubSubServiceAgent" --role=roles/pubsub.publisher --condition=None --quiet | Out-Null
+    & gcloud pubsub topics add-iam-policy-binding $DeadLetterTopic --project=$ProjectId --member="serviceAccount:$PubSubServiceAgent" --role=roles/pubsub.publisher --quiet | Out-Null
     if ($LASTEXITCODE -ne 0) {
         throw "Dead-letter topic publisher binding failed."
     }
-    & gcloud pubsub subscriptions add-iam-policy-binding $PubSubSubscription --project=$ProjectId --member="serviceAccount:$PubSubServiceAgent" --role=roles/pubsub.subscriber --condition=None --quiet | Out-Null
+    & gcloud pubsub subscriptions add-iam-policy-binding $PubSubSubscription --project=$ProjectId --member="serviceAccount:$PubSubServiceAgent" --role=roles/pubsub.subscriber --quiet | Out-Null
     if ($LASTEXITCODE -ne 0) {
         throw "Source subscription subscriber binding failed."
     }

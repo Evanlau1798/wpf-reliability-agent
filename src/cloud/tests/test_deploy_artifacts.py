@@ -222,6 +222,9 @@ def test_push_subscription_uses_worker_url_and_oidc_invoker_identity() -> None:
 
 def test_push_subscription_has_bounded_dead_letter_delivery() -> None:
     script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
+    dead_letter_access = script.split("function Grant-DeadLetterAccess", 1)[1].split(
+        "function Ensure-Secret", 1
+    )[0]
 
     assert '[string]$DeadLetterTopic = "incident-work-dead-letter"' in script
     assert "Ensure-PubSubTopic $DeadLetterTopic" in script
@@ -231,6 +234,7 @@ def test_push_subscription_has_bounded_dead_letter_delivery() -> None:
     assert "--role=roles/pubsub.publisher" in script
     assert "gcloud pubsub subscriptions add-iam-policy-binding $PubSubSubscription" in script
     assert "--role=roles/pubsub.subscriber" in script
+    assert "--condition=None" not in dead_letter_access
 
 
 def test_deploy_script_outputs_non_secret_deployment_and_windows_config_names() -> None:
