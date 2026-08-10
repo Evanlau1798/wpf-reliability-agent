@@ -76,9 +76,11 @@ function Assert-CloudBuildPermission {
 }
 
 function Enable-RequiredApis {
-    & gcloud services enable $RequiredApis --project $ProjectId
-    if ($LASTEXITCODE -ne 0) {
-        throw "Required API enablement failed for '$ProjectId'."
+    foreach ($Api in $RequiredApis) {
+        & gcloud services enable $Api --project $ProjectId
+        if ($LASTEXITCODE -ne 0) {
+            throw "Required API enablement failed for '$Api' in '$ProjectId'."
+        }
     }
 }
 

@@ -46,7 +46,8 @@ def test_deploy_script_enables_required_apis_idempotently() -> None:
         "aiplatform.googleapis.com",
     ):
         assert api in script
-    assert "gcloud services enable $RequiredApis --project $ProjectId" in script
+    assert "foreach ($Api in $RequiredApis)" in script
+    assert "gcloud services enable $Api --project $ProjectId" in script
 
 
 def test_deploy_script_creates_artifact_repository_only_when_missing() -> None:
