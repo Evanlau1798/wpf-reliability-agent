@@ -173,6 +173,16 @@ def test_readme_streams_secret_tokens_as_raw_bytes_without_powershell_pipeline()
     assert "| gcloud secrets versions add" not in readme
 
 
+def test_readme_demo_includes_the_formal_console_approval_step() -> None:
+    readme = README.read_text(encoding="utf-8")
+
+    assert "/console/incidents/<incident-id>" in readme
+    assert "X-CSRF-Token" in readme
+    assert "/v1/approvals/${ApprovalId}:decide" in readme
+    assert "recovery.set_feature_flag" in readme
+    assert "ExperimentalPeopleGrid" in readme
+
+
 def test_cloud_build_uses_explicit_minimal_identity_sha_tag_and_digest() -> None:
     script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
     config = CLOUD_BUILD_CONFIG.read_text(encoding="utf-8")

@@ -182,4 +182,18 @@ The primary scenario is an `ExperimentalPeopleGrid` binding storm with rendering
    (Invoke-WebRequest -Uri "$env:WPF_RELIABILITY_API_BASE_URI/console/incidents" -WebSession $ConsoleSession).Content
    ```
 
-   The incident list shows the incident ID, state, summary, and update time. Request `/console/incidents/<incident-id>` with the same `$ConsoleSession` to inspect the timeline, evidence, hypotheses, tool ledger, approval, verification, and report. After the exact HIGH-risk recovery action is approved and verified, the WPF app switches to the safe fallback and the incident is reported as `MITIGATED`. Click **Reset Demo** to restore the broken grid for the next rehearsal.
+   The incident list shows the incident ID, state, summary, and update time. Request `/console/incidents/<incident-id>` with the same `$ConsoleSession` to inspect the timeline, evidence, hypotheses, tool ledger, approval, verification, and report.
+4. When the incident reaches `AWAITING_APPROVAL`, inspect the detail response before approving anything. Confirm the pending HIGH-risk action is `recovery.set_feature_flag`, the feature is `ExperimentalPeopleGrid`, `enabled` is `false`, `expected_current_value` is `true`, and the evidence hash, rollback plan, and expiry are present. Then approve that exact pending record through the same authenticated console session:
+
+   ```powershell
+   $IncidentId = "<incident-id>"
+   $DetailHtml = (Invoke-WebRequest -Uri "$env:WPF_RELIABILITY_API_BASE_URI/console/incidents/$IncidentId" -WebSession $ConsoleSession).Content
+   $ApprovalMatch = [regex]::Match($DetailHtml, 'data-approval-id="([^"]+)" data-approval-decision="approve"')
+   if (-not $ApprovalMatch.Success) { throw "No pending approval was found." }
+   $ApprovalId = $ApprovalMatch.Groups[1].Value
+   $CsrfCookie = $ConsoleSession.Cookies.GetCookies([Uri]$env:WPF_RELIABILITY_API_BASE_URI) | Where-Object Name -eq "__Host-wpfra-csrf" | Select-Object -First 1
+   if (-not $CsrfCookie) { throw "The operator CSRF cookie is missing." }
+   $DecisionBody = @{ decision = "approve" } | ConvertTo-Json -Compress
+   Invoke-WebRequest -Method Post -Uri "$env:WPF_RELIABILITY_API_BASE_URI/v1/approvals/${ApprovalId}:decide" -WebSession $ConsoleSession -Headers @{ "X-CSRF-Token" = $CsrfCookie.Value } -ContentType "application/json" -Body $DecisionBody | Out-Null
+   ```
+5. Continue observing the same incident detail. After the approved mutation and post-action verification complete, the WPF app switches to the safe fallback and the incident is reported as `MITIGATED`. Click **Reset Demo** to restore the broken grid for the next rehearsal.
