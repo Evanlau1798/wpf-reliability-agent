@@ -244,7 +244,7 @@ function Grant-SecretAccess {
 function Assert-SecretHasEnabledVersion {
     param([string]$Name)
 
-    $version = (& gcloud secrets versions list $Name --project $ProjectId --filter="state=ENABLED" --limit=1 --format="value(name)").Trim()
+    $version = (& gcloud secrets versions list $Name --project $ProjectId --filter="state=ENABLED" --limit=1 --format="value(name)")
     if ($LASTEXITCODE -ne 0 -or -not $version) {
         throw "Secret '$Name' needs an enabled version before deployment."
     }

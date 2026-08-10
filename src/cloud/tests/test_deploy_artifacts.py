@@ -135,6 +135,17 @@ def test_deploy_script_creates_secret_placeholders_without_secret_values() -> No
     assert "--data-file=-" in script
 
 
+def test_deploy_script_handles_empty_secret_version_list_before_bootstrap_stop() -> None:
+    script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
+    block = script.split("function Assert-SecretHasEnabledVersion", 1)[1].split(
+        "function Ensure-BuildSourceBucket", 1
+    )[0]
+
+    assert ").Trim()" not in block
+    assert "if ($LASTEXITCODE -ne 0 -or -not $version)" in block
+    assert "needs an enabled version before deployment" in block
+
+
 def test_cloud_build_uses_explicit_minimal_identity_sha_tag_and_digest() -> None:
     script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
     config = CLOUD_BUILD_CONFIG.read_text(encoding="utf-8")
