@@ -57,12 +57,21 @@ $BuildProjectRoles = @(
 function Test-GcloudResource {
     param([string[]]$Arguments)
 
+    $previousErrorActionPreference = $ErrorActionPreference
     try {
-        & gcloud @Arguments >$null 2>$null
+        $probeCommand = Get-Command gcloud.cmd -ErrorAction SilentlyContinue
+        if (-not $probeCommand) {
+            $probeCommand = Get-Command gcloud -ErrorAction Stop
+        }
+        $ErrorActionPreference = "Continue"
+        & $probeCommand.Source @Arguments >$null 2>$null
         return $LASTEXITCODE -eq 0
     }
     catch {
         return $false
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
     }
 }
 

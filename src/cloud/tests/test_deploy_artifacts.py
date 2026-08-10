@@ -59,7 +59,14 @@ def test_deploy_script_tolerates_expected_missing_resource_probes() -> None:
     assert "try {" in helper
     assert "catch {" in helper
     assert "param([string[]]$Arguments)" in helper
-    assert "& gcloud @Arguments >$null 2>$null" in helper
+    assert "Get-Command gcloud.cmd -ErrorAction SilentlyContinue" in helper
+    assert "Get-Command gcloud -ErrorAction Stop" in helper
+    assert "& $probeCommand.Source @Arguments >$null 2>$null" in helper
+    assert "& gcloud @Arguments" not in helper
+    assert "$previousErrorActionPreference = $ErrorActionPreference" in helper
+    assert '$ErrorActionPreference = "Continue"' in helper
+    assert "finally {" in helper
+    assert "$ErrorActionPreference = $previousErrorActionPreference" in helper
     assert "return $LASTEXITCODE -eq 0" in helper
     assert "[scriptblock]$Probe" not in helper
     assert script.count("Test-GcloudResource -Arguments @(") == 7
