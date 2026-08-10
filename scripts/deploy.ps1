@@ -54,6 +54,18 @@ $BuildProjectRoles = @(
     "roles/logging.logWriter"
 )
 
+function Test-GcloudResource {
+    param([scriptblock]$Probe)
+
+    try {
+        & $Probe 2>$null | Out-Null
+        return $LASTEXITCODE -eq 0
+    }
+    catch {
+        return $false
+    }
+}
+
 function Assert-GcloudPrerequisites {
     Get-Command gcloud -ErrorAction Stop | Out-Null
 
@@ -85,8 +97,7 @@ function Enable-RequiredApis {
 }
 
 function Ensure-ArtifactRepository {
-    & gcloud artifacts repositories describe $ArtifactRepository --location $Region --project $ProjectId --format="value(name)" 2>$null | Out-Null
-    if ($LASTEXITCODE -eq 0) {
+    if (Test-GcloudResource { & gcloud artifacts repositories describe $ArtifactRepository --location $Region --project $ProjectId --format="value(name)" }) {
         return
     }
 
@@ -97,8 +108,7 @@ function Ensure-ArtifactRepository {
 }
 
 function Ensure-FirestoreDatabase {
-    & gcloud firestore databases describe --database="(default)" --project $ProjectId --format="value(name)" 2>$null | Out-Null
-    if ($LASTEXITCODE -eq 0) {
+    if (Test-GcloudResource { & gcloud firestore databases describe --database="(default)" --project $ProjectId --format="value(name)" }) {
         return
     }
 
@@ -111,8 +121,7 @@ function Ensure-FirestoreDatabase {
 function Ensure-PubSubTopic {
     param([string]$Name)
 
-    & gcloud pubsub topics describe $Name --project $ProjectId --format="value(name)" 2>$null | Out-Null
-    if ($LASTEXITCODE -eq 0) {
+    if (Test-GcloudResource { & gcloud pubsub topics describe $Name --project $ProjectId --format="value(name)" }) {
         return
     }
 
@@ -134,8 +143,7 @@ function Ensure-ServiceAccount {
     )
 
     $email = Get-ServiceAccountEmail $Name
-    & gcloud iam service-accounts describe $email --project $ProjectId --format="value(email)" 2>$null | Out-Null
-    if ($LASTEXITCODE -ne 0) {
+    if (-not (Test-GcloudResource { & gcloud iam service-accounts describe $email --project $ProjectId --format="value(email)" })) {
         & gcloud iam service-accounts create $Name --display-name="$DisplayName" --project $ProjectId | Out-Null
         if ($LASTEXITCODE -ne 0) {
             throw "Service account creation failed for '$Name'."
@@ -185,8 +193,7 @@ function Grant-PubSubTokenCreator {
 
 function Ensure-PushSubscription {
     $PushEndpoint = "$WorkerUrl/v1/work:push"
-    & gcloud pubsub subscriptions describe $PubSubSubscription --project=$ProjectId --format="value(name)" 2>$null | Out-Null
-    if ($LASTEXITCODE -eq 0) {
+    if (Test-GcloudResource { & gcloud pubsub subscriptions describe $PubSubSubscription --project=$ProjectId --format="value(name)" }) {
         & gcloud pubsub subscriptions update $PubSubSubscription --project=$ProjectId --push-endpoint="$PushEndpoint" --push-auth-service-account=$PubSubInvokerServiceAccountEmail --push-auth-token-audience=$WorkerUrl --dead-letter-topic=$DeadLetterTopic --max-delivery-attempts=5 | Out-Null
     }
     else {
@@ -212,8 +219,7 @@ function Grant-DeadLetterAccess {
 function Ensure-Secret {
     param([string]$Name)
 
-    & gcloud secrets describe $Name --project $ProjectId --format="value(name)" 2>$null | Out-Null
-    if ($LASTEXITCODE -eq 0) {
+    if (Test-GcloudResource { & gcloud secrets describe $Name --project $ProjectId --format="value(name)" }) {
         return
     }
 
@@ -245,8 +251,7 @@ function Assert-SecretHasEnabledVersion {
 }
 
 function Ensure-BuildSourceBucket {
-    & gcloud storage buckets describe $BuildSourceBucketUri --project $ProjectId 2>$null | Out-Null
-    if ($LASTEXITCODE -eq 0) {
+    if (Test-GcloudResource { & gcloud storage buckets describe $BuildSourceBucketUri --project $ProjectId }) {
         return
     }
 

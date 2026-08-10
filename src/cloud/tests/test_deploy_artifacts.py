@@ -50,6 +50,26 @@ def test_deploy_script_enables_required_apis_idempotently() -> None:
     assert "gcloud services enable $Api --project $ProjectId" in script
 
 
+def test_deploy_script_tolerates_expected_missing_resource_probes() -> None:
+    script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
+    helper = script.split("function Test-GcloudResource", 1)[1].split(
+        "function Assert-GcloudPrerequisites", 1
+    )[0]
+
+    assert "try {" in helper
+    assert "catch {" in helper
+    for probe in (
+        "& gcloud artifacts repositories describe",
+        "& gcloud firestore databases describe",
+        "& gcloud pubsub topics describe",
+        "& gcloud iam service-accounts describe",
+        "& gcloud pubsub subscriptions describe",
+        "& gcloud secrets describe",
+        "& gcloud storage buckets describe",
+    ):
+        assert f"Test-GcloudResource {{ {probe}" in script
+
+
 def test_deploy_script_creates_artifact_repository_only_when_missing() -> None:
     script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
 
