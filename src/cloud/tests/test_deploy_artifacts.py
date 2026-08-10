@@ -58,6 +58,10 @@ def test_deploy_script_tolerates_expected_missing_resource_probes() -> None:
 
     assert "try {" in helper
     assert "catch {" in helper
+    assert ". $Probe >$null 2>$null" in helper
+    assert "return $LASTEXITCODE -eq 0" in helper
+    assert "return $?" not in helper
+    assert "| Out-Null" not in helper
     for probe in (
         "& gcloud artifacts repositories describe",
         "& gcloud firestore databases describe",

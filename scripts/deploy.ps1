@@ -58,7 +58,7 @@ function Test-GcloudResource {
     param([scriptblock]$Probe)
 
     try {
-        & $Probe 2>$null | Out-Null
+        . $Probe >$null 2>$null
         return $LASTEXITCODE -eq 0
     }
     catch {
