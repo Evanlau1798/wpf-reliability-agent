@@ -275,6 +275,37 @@ def test_duplicate_delivery_republishes_current_continuation(monkeypatch) -> Non
     assert published[0]["trigger"] == "workflow.triaging"
 
 
+def test_stale_work_does_not_advance_while_evidence_command_is_pending(monkeypatch) -> None:
+    _set_worker_environment(monkeypatch)
+    _allow_identity(monkeypatch)
+    published: list[dict[str, object]] = []
+    commit = Mock(return_value=True)
+    monkeypatch.setattr(main, "get_firestore_client", lambda _project_id: object())
+    monkeypatch.setattr(main, "is_run_processed", lambda *_args: False)
+    monkeypatch.setattr(
+        main,
+        "load_incident_workflow_state",
+        lambda *_args: {
+            "state": "COLLECTING_EVIDENCE",
+            "evidence_revision": 7,
+            "pending_command_id": "cmd-read-1",
+        },
+    )
+    monkeypatch.setattr(main, "commit_new_incident_run", commit)
+    monkeypatch.setattr(main, "publish_work", lambda _project, _topic, payload: published.append(payload))
+
+    with TestClient(main.app) as client:
+        response = client.post(
+            "/v1/work:push",
+            headers={"Authorization": "Bearer signed-token"},
+            json=_push_envelope(),
+        )
+
+    assert response.status_code == 204
+    commit.assert_not_called()
+    assert published == []
+
+
 def test_stale_external_work_republishes_durable_continuation(monkeypatch) -> None:
     _set_worker_environment(monkeypatch)
     _allow_identity(monkeypatch)

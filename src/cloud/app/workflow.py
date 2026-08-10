@@ -318,6 +318,8 @@ def continuation_payload(
     work: dict[str, object],
     incident: dict[str, object],
 ) -> dict[str, object] | None:
+    if incident.get("state") == IncidentState.COLLECTING_EVIDENCE.value and incident.get("pending_command_id") is not None:
+        return None
     trigger = {
         IncidentState.TRIAGING.value: TRIAGING_TRIGGER,
         IncidentState.COLLECTING_EVIDENCE.value: COLLECTING_TRIGGER,
