@@ -252,13 +252,15 @@ public sealed class SourceMapToolTests
     public async Task DemoBuildOutputContainsSourceMapReadableAtSensorStartup()
     {
         var repositoryRoot = RepositoryRoot();
+        var configuration = new DirectoryInfo(AppContext.BaseDirectory).Parent?.Name
+            ?? throw new DirectoryNotFoundException("Test build configuration directory not found.");
         var sourceMapPath = Path.Combine(
             repositoryRoot,
             "src",
             "windows",
             "Demo.BrokenWpfApp",
             "bin",
-            "Debug",
+            configuration,
             "net8.0-windows",
             "source-map.json");
 
