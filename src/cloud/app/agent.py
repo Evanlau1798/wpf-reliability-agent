@@ -29,7 +29,10 @@ TOOL_DESCRIPTIONS = {
     DiagnosticTool.UI_GET_ELEMENT_DETAILS.value: "Allowlisted UI element properties.",
     DiagnosticTool.PERFORMANCE_SAMPLE.value: "Bounded performance sample window.",
     DiagnosticTool.STATE_COMPARE_SNAPSHOTS.value: "Pure before and after snapshot comparison.",
-    DiagnosticTool.SOURCE_LOOKUP_BINDING.value: "Build-time XAML source-map attribution.",
+    DiagnosticTool.SOURCE_LOOKUP_BINDING.value: (
+        "Build-time XAML source-map attribution. Arguments require either key, "
+        "or binding_path plus target_property."
+    ),
     DiagnosticTool.RECOVERY_SET_FEATURE_FLAG.value: "Typed ExperimentalPeopleGrid recovery proposal.",
 }
 
@@ -47,7 +50,8 @@ A temporary mitigation is not a permanent fix and must never be called RESOLVED.
 When exact source-map evidence supports a permanent fix, a patch proposal may be returned as an artifact; it is never a command and must never be executed.
 """
 SCHEMA_REPAIR_INSTRUCTION = """Repair your previous response as valid AgentDecision JSON.
-Do not change evidence references, tool choice, arguments, proposed action, or meaning.
+Do not change evidence references, tool choice, proposed action, or meaning.
+Correct arguments only when required to satisfy the selected tool contract.
 Return one corrected decision only.
 """
 
@@ -101,11 +105,23 @@ def validate_decision_evidence_ids(
 
 
 def validate_decision_next_tool(decision: AgentDecision) -> AgentDecision:
-    if (
-        decision.next_command is not None
-        and decision.next_command.tool not in READ_ONLY_DIAGNOSTIC_TOOLS
-    ):
+    command = decision.next_command
+    if command is None:
+        return decision
+    if command.tool not in READ_ONLY_DIAGNOSTIC_TOOLS:
         raise ValueError("Next evidence tool is not in the read-only allowlist")
+    if command.tool is DiagnosticTool.SOURCE_LOOKUP_BINDING:
+        arguments = command.arguments
+        by_key = set(arguments) == {"key"} and isinstance(arguments.get("key"), str) and bool(arguments["key"])
+        by_binding = (
+            set(arguments) == {"binding_path", "target_property"}
+            and isinstance(arguments.get("binding_path"), str)
+            and bool(arguments["binding_path"])
+            and isinstance(arguments.get("target_property"), str)
+            and bool(arguments["target_property"])
+        )
+        if not (by_key or by_binding):
+            raise ValueError("source.lookup_binding arguments are invalid")
     return decision
 
 

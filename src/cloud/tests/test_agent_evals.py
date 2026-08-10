@@ -295,6 +295,37 @@ def test_blocked_tool_output_eval_is_rejected_after_one_repair_attempt() -> None
     assert runner.outputs == []
 
 
+def test_source_lookup_without_selector_is_repaired_once() -> None:
+    invalid = {
+        "schema_version": "1.0",
+        "decision": "REQUEST_EVIDENCE",
+        "hypotheses": [],
+        "next_command": {"tool": "source.lookup_binding", "arguments": {}},
+        "missing_evidence": ["exact source attribution"],
+    }
+    repaired = {
+        **invalid,
+        "next_command": {
+            "tool": "source.lookup_binding",
+            "arguments": {"binding_path": "DisplayNmae", "target_property": "Text"},
+        },
+    }
+    runner = _Runner([invalid, repaired])
+
+    decision = asyncio.run(
+        run_investigator_once(
+            runner,
+            incident_id="incident-source-lookup",
+            run_key="incident-source-lookup:1:eval",
+            context=_context([]),
+        )
+    )
+
+    assert decision.next_command is not None
+    assert decision.next_command.arguments == repaired["next_command"]["arguments"]
+    assert runner.outputs == []
+
+
 def test_duplicate_tool_request_eval_is_stopped_by_loop_guard(monkeypatch) -> None:
     arguments = {"element_id": "people-grid", "max_depth": 2}
     runner = _Runner(
