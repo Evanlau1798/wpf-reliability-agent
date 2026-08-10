@@ -89,6 +89,19 @@ def test_deploy_script_preserves_existing_firestore_database() -> None:
     assert "--type=firestore-native" in script
 
 
+def test_deploy_script_provisions_command_lease_composite_index() -> None:
+    script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
+
+    assert "function Ensure-CommandLeaseIndex" in script
+    assert "gcloud firestore indexes composite list" in script
+    assert "gcloud firestore indexes composite create" in script
+    assert "--collection-group=commands" in script
+    assert "field-path=status,order=ascending" in script
+    assert "field-path=target_app_session_id,order=ascending" in script
+    assert "field-path=issued_at_utc,order=ascending" in script
+    assert "Ensure-CommandLeaseIndex" in script.split("Ensure-FirestoreDatabase", 2)[-1]
+
+
 def test_deploy_script_creates_pubsub_topic_only_when_missing() -> None:
     script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
 

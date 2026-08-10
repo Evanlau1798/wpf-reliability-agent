@@ -128,6 +128,28 @@ function Ensure-FirestoreDatabase {
     }
 }
 
+function Ensure-CommandLeaseIndex {
+    $indexJson = (& gcloud firestore indexes composite list --database="(default)" --project=$ProjectId --format=json | Out-String)
+    if ($LASTEXITCODE -ne 0) {
+        throw "Firestore composite index listing failed."
+    }
+    $indexes = @($indexJson | ConvertFrom-Json | Where-Object { $null -ne $_ })
+    foreach ($index in $indexes) {
+        $fields = @($index.fields)
+        $hasStatus = @($fields | Where-Object { $_.fieldPath -eq "status" -and $_.order -eq "ASCENDING" }).Count -eq 1
+        $hasSession = @($fields | Where-Object { $_.fieldPath -eq "target_app_session_id" -and $_.order -eq "ASCENDING" }).Count -eq 1
+        $hasIssuedAt = @($fields | Where-Object { $_.fieldPath -eq "issued_at_utc" -and $_.order -eq "ASCENDING" }).Count -eq 1
+        if ($index.collectionGroup -eq "commands" -and $index.state -eq "READY" -and $hasStatus -and $hasSession -and $hasIssuedAt) {
+            return
+        }
+    }
+
+    & gcloud firestore indexes composite create --collection-group=commands --field-config=field-path=status,order=ascending --field-config=field-path=target_app_session_id,order=ascending --field-config=field-path=issued_at_utc,order=ascending --query-scope=collection --database="(default)" --project=$ProjectId --quiet | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Command lease Firestore composite index creation failed."
+    }
+}
+
 function Ensure-PubSubTopic {
     param([string]$Name)
 
@@ -334,6 +356,7 @@ Enable-RequiredApis
 Assert-CloudBuildPermission
 Ensure-ArtifactRepository
 Ensure-FirestoreDatabase
+Ensure-CommandLeaseIndex
 Ensure-PubSubTopic $PubSubTopic
 Ensure-PubSubTopic $DeadLetterTopic
 $ApiServiceAccountEmail = Ensure-ServiceAccount $ApiServiceAccount "WPF Reliability API"
