@@ -2,6 +2,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).parents[3]
+README = REPO_ROOT / "README.md"
 DEPLOY_SCRIPT = REPO_ROOT / "scripts" / "deploy.ps1"
 CLEANUP_SCRIPT = REPO_ROOT / "scripts" / "cleanup-cloud.ps1"
 CLOUD_BUILD_CONFIG = REPO_ROOT / "src" / "cloud" / "cloudbuild.yaml"
@@ -146,6 +147,15 @@ def test_deploy_script_handles_empty_secret_version_list_before_bootstrap_stop()
     assert ").Trim()" not in block
     assert "if ($LASTEXITCODE -ne 0 -or -not $version)" in block
     assert "needs an enabled version before deployment" in block
+
+
+def test_readme_streams_secret_tokens_as_raw_bytes_without_powershell_pipeline() -> None:
+    readme = README.read_text(encoding="utf-8")
+
+    assert "subprocess.run" in readme
+    assert "input=secrets.token_urlsafe(32).encode()" in readme
+    assert '"gcloud.cmd"' in readme
+    assert "| gcloud secrets versions add" not in readme
 
 
 def test_cloud_build_uses_explicit_minimal_identity_sha_tag_and_digest() -> None:

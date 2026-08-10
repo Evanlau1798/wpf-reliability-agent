@@ -85,8 +85,8 @@ On a new project the first pass stops once it confirms that the two Secret Manag
 Generate both demo tokens locally and stream them directly into Secret Manager without writing a token file into the repository. The Python commands intentionally omit a trailing newline so the stored secret exactly matches the bearer token:
 
 ```powershell
-.\.venv\Scripts\python.exe -c "import secrets,sys; sys.stdout.write(secrets.token_urlsafe(32))" | gcloud secrets versions add reliability-device-token --project $ProjectId --data-file=-
-.\.venv\Scripts\python.exe -c "import secrets,sys; sys.stdout.write(secrets.token_urlsafe(32))" | gcloud secrets versions add reliability-operator-token --project $ProjectId --data-file=-
+.\.venv\Scripts\python.exe -c 'import secrets,subprocess,sys; subprocess.run(["gcloud.cmd","secrets","versions","add","reliability-device-token","--project",sys.argv[1],"--data-file=-"], input=secrets.token_urlsafe(32).encode(), check=True)' $ProjectId
+.\.venv\Scripts\python.exe -c 'import secrets,subprocess,sys; subprocess.run(["gcloud.cmd","secrets","versions","add","reliability-operator-token","--project",sys.argv[1],"--data-file=-"], input=secrets.token_urlsafe(32).encode(), check=True)' $ProjectId
 
 .\scripts\deploy.ps1 -ProjectId $ProjectId
 ```
