@@ -58,26 +58,17 @@ def test_deploy_script_tolerates_expected_missing_resource_probes() -> None:
 
     assert "try {" in helper
     assert "catch {" in helper
-    assert ". $Probe >$null 2>$null" in helper
+    assert "param([string[]]$Arguments)" in helper
+    assert "& gcloud @Arguments >$null 2>$null" in helper
     assert "return $LASTEXITCODE -eq 0" in helper
-    assert "return $?" not in helper
-    assert "| Out-Null" not in helper
-    for probe in (
-        "& gcloud artifacts repositories describe",
-        "& gcloud firestore databases describe",
-        "& gcloud pubsub topics describe",
-        "& gcloud iam service-accounts describe",
-        "& gcloud pubsub subscriptions describe",
-        "& gcloud secrets describe",
-        "& gcloud storage buckets describe",
-    ):
-        assert f"Test-GcloudResource {{ {probe}" in script
+    assert "[scriptblock]$Probe" not in helper
+    assert script.count("Test-GcloudResource -Arguments @(") == 7
 
 
 def test_deploy_script_creates_artifact_repository_only_when_missing() -> None:
     script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
 
-    assert "gcloud artifacts repositories describe $ArtifactRepository" in script
+    assert '"artifacts", "repositories", "describe", $ArtifactRepository' in script
     assert "gcloud artifacts repositories create $ArtifactRepository" in script
     assert "--repository-format=docker" in script
 
@@ -85,7 +76,7 @@ def test_deploy_script_creates_artifact_repository_only_when_missing() -> None:
 def test_deploy_script_preserves_existing_firestore_database() -> None:
     script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
 
-    assert 'gcloud firestore databases describe --database="(default)"' in script
+    assert '"firestore", "databases", "describe", "--database=(default)"' in script
     assert 'gcloud firestore databases create --database="(default)"' in script
     assert "--type=firestore-native" in script
 
@@ -93,7 +84,7 @@ def test_deploy_script_preserves_existing_firestore_database() -> None:
 def test_deploy_script_creates_pubsub_topic_only_when_missing() -> None:
     script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
 
-    assert "gcloud pubsub topics describe $Name" in script
+    assert '"pubsub", "topics", "describe", $Name' in script
     assert "gcloud pubsub topics create $Name" in script
     assert "Ensure-PubSubTopic $PubSubTopic" in script
 
@@ -129,7 +120,7 @@ def test_pubsub_invoker_has_only_worker_service_invoker_binding() -> None:
 def test_deploy_script_creates_secret_placeholders_without_secret_values() -> None:
     script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
 
-    assert "gcloud secrets describe $Name" in script
+    assert '"secrets", "describe", $Name' in script
     assert "gcloud secrets create $Name" in script
     assert "Ensure-Secret $DeviceTokenSecret" in script
     assert "Ensure-Secret $OperatorTokenSecret" in script
@@ -213,7 +204,7 @@ def test_push_subscription_uses_worker_url_and_oidc_invoker_identity() -> None:
     assert "service-$ProjectNumber@gcp-sa-pubsub.iam.gserviceaccount.com" in script
     assert "gcloud iam service-accounts add-iam-policy-binding $PubSubInvokerServiceAccountEmail" in script
     assert "--role=roles/iam.serviceAccountTokenCreator" in script
-    assert "gcloud pubsub subscriptions describe $PubSubSubscription" in script
+    assert '"pubsub", "subscriptions", "describe", $PubSubSubscription' in script
     assert "gcloud pubsub subscriptions create $PubSubSubscription" in script
     assert "gcloud pubsub subscriptions update $PubSubSubscription" in script
     assert '$PushEndpoint = "$WorkerUrl/v1/work:push"' in script
