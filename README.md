@@ -60,7 +60,7 @@ dotnet restore WpfReliabilityAgent.sln
 dotnet build WpfReliabilityAgent.sln -c Release --no-restore
 .\.venv\Scripts\python.exe -m pytest src\cloud\tests -q
 dotnet test src\windows\Reliability.Sensor.Tests\Reliability.Sensor.Tests.csproj -c Release --no-build
-dotnet test src\windows\Demo.BrokenWpfApp.Tests\Demo.BrokenWpfApp.Tests.csproj -c Release
+dotnet test src\windows\Demo.BrokenWpfApp.Tests\Demo.BrokenWpfApp.Tests.csproj -c Release --no-build
 ```
 
 No Cloud emulator or live Google Cloud project is required for these tests. Cloud boundaries use FastAPI `TestClient` plus deterministic fakes/stubs for Firestore, Pub/Sub, authentication, and model interactions, so the normal unit/integration loop does not make billable cloud calls.
@@ -137,6 +137,26 @@ The following command classes are permanently blocked and have no P0 executor: `
 - Device and operator authentication use demo bearer tokens. They are intentionally simple credentials for the single-project demo, not production workforce/device identity.
 - `recovery.set_feature_flag` is a temporary, reversible mitigation. Successful verification reports `MITIGATED`, not `RESOLVED`, because the underlying source defect remains.
 - Source-map evidence may produce a patch proposal as a report artifact, but P0 never applies that diff and never writes source, builds, restarts, commits, pushes, or opens a pull request.
+
+## Testing
+
+After completing the local environment setup above, run the production checks from the repository root as separate build and test commands:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\scan_secrets.py
+Push-Location src\cloud
+..\..\.venv\Scripts\python.exe -m ruff check --select E9,F63,F7,F82 app tests
+..\..\.venv\Scripts\python.exe -m mypy --ignore-missing-imports --follow-imports=skip app\models.py app\config.py app\contracts.py app\policy.py app\auth.py app\worker.py
+..\..\.venv\Scripts\python.exe -m pytest -q
+Pop-Location
+
+dotnet restore WpfReliabilityAgent.sln
+dotnet build WpfReliabilityAgent.sln -c Release --no-restore
+dotnet test src\windows\Reliability.Sensor.Tests\Reliability.Sensor.Tests.csproj -c Release --no-build
+dotnet test src\windows\Demo.BrokenWpfApp.Tests\Demo.BrokenWpfApp.Tests.csproj -c Release --no-build
+```
+
+Expected result: every command exits with code 0; the secret scan reports no findings; Ruff and mypy report no errors; pytest and both .NET test projects report no failed tests; and the Release solution build reports zero errors. Hosted GitHub CI additionally builds the Linux container image and smoke-tests both Cloud Run roles without requiring Docker Desktop or WSL on the Windows development machine.
 
 ## Demo
 
