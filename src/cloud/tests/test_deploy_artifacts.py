@@ -177,6 +177,7 @@ def test_readme_demo_includes_the_formal_console_approval_step() -> None:
     readme = README.read_text(encoding="utf-8")
 
     assert "/console/incidents/<incident-id>" in readme
+    assert readme.count("Invoke-WebRequest -UseBasicParsing") >= 3
     assert "X-CSRF-Token" in readme
     assert "/v1/approvals/${ApprovalId}:decide" in readme
     assert "recovery.set_feature_flag" in readme

@@ -178,8 +178,8 @@ The primary scenario is an `ExperimentalPeopleGrid` binding storm with rendering
    $OperatorToken = (gcloud secrets versions access latest --secret reliability-operator-token --project $ProjectId).Trim()
    $ConsoleSession = New-Object Microsoft.PowerShell.Commands.WebRequestSession
    $LoginBody = @{ token = $OperatorToken } | ConvertTo-Json -Compress
-   Invoke-WebRequest -Method Post -Uri "$env:WPF_RELIABILITY_API_BASE_URI/console/login" -WebSession $ConsoleSession -ContentType "application/json" -Body $LoginBody | Out-Null
-   (Invoke-WebRequest -Uri "$env:WPF_RELIABILITY_API_BASE_URI/console/incidents" -WebSession $ConsoleSession).Content
+   Invoke-WebRequest -UseBasicParsing -Method Post -Uri "$env:WPF_RELIABILITY_API_BASE_URI/console/login" -WebSession $ConsoleSession -ContentType "application/json" -Body $LoginBody | Out-Null
+   (Invoke-WebRequest -UseBasicParsing -Uri "$env:WPF_RELIABILITY_API_BASE_URI/console/incidents" -WebSession $ConsoleSession).Content
    ```
 
    The incident list shows the incident ID, state, summary, and update time. Request `/console/incidents/<incident-id>` with the same `$ConsoleSession` to inspect the timeline, evidence, hypotheses, tool ledger, approval, verification, and report.
@@ -187,13 +187,13 @@ The primary scenario is an `ExperimentalPeopleGrid` binding storm with rendering
 
    ```powershell
    $IncidentId = "<incident-id>"
-   $DetailHtml = (Invoke-WebRequest -Uri "$env:WPF_RELIABILITY_API_BASE_URI/console/incidents/$IncidentId" -WebSession $ConsoleSession).Content
+   $DetailHtml = (Invoke-WebRequest -UseBasicParsing -Uri "$env:WPF_RELIABILITY_API_BASE_URI/console/incidents/$IncidentId" -WebSession $ConsoleSession).Content
    $ApprovalMatch = [regex]::Match($DetailHtml, 'data-approval-id="([^"]+)" data-approval-decision="approve"')
    if (-not $ApprovalMatch.Success) { throw "No pending approval was found." }
    $ApprovalId = $ApprovalMatch.Groups[1].Value
    $CsrfCookie = $ConsoleSession.Cookies.GetCookies([Uri]$env:WPF_RELIABILITY_API_BASE_URI) | Where-Object Name -eq "__Host-wpfra-csrf" | Select-Object -First 1
    if (-not $CsrfCookie) { throw "The operator CSRF cookie is missing." }
    $DecisionBody = @{ decision = "approve" } | ConvertTo-Json -Compress
-   Invoke-WebRequest -Method Post -Uri "$env:WPF_RELIABILITY_API_BASE_URI/v1/approvals/${ApprovalId}:decide" -WebSession $ConsoleSession -Headers @{ "X-CSRF-Token" = $CsrfCookie.Value } -ContentType "application/json" -Body $DecisionBody | Out-Null
+   Invoke-WebRequest -UseBasicParsing -Method Post -Uri "$env:WPF_RELIABILITY_API_BASE_URI/v1/approvals/${ApprovalId}:decide" -WebSession $ConsoleSession -Headers @{ "X-CSRF-Token" = $CsrfCookie.Value } -ContentType "application/json" -Body $DecisionBody | Out-Null
    ```
 5. Continue observing the same incident detail. After the approved mutation and post-action verification complete, the WPF app switches to the safe fallback and the incident is reported as `MITIGATED`. Click **Reset Demo** to restore the broken grid for the next rehearsal.
