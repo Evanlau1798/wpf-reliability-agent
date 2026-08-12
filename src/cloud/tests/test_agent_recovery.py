@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import pytest
-from app.agent import build_root_agent, run_investigator_once
+from app.agent import SCHEMA_REPAIR_INSTRUCTION, build_root_agent, run_investigator_once
 from app.correlation import AgentCorrelationContext, NormalizedEvidenceSummary
 
 
@@ -61,6 +61,10 @@ def run(outputs: list[object], items: list[NormalizedEvidenceSummary]):
 
 def test_investigator_generation_is_deterministic() -> None:
     assert build_root_agent("gemini-test").generate_content_config.temperature == 0
+
+
+def test_schema_repair_can_select_the_required_demo_mitigation() -> None:
+    assert "except for the required ExperimentalPeopleGrid mitigation" in SCHEMA_REPAIR_INSTRUCTION
 
 
 def test_invalid_recovery_proposal_is_canonicalized_for_exact_demo_source() -> None:

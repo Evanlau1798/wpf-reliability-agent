@@ -53,7 +53,7 @@ When exact source-map evidence supports a permanent fix, a patch proposal may be
 """
 SCHEMA_REPAIR_INSTRUCTION = """Repair your previous response as valid AgentDecision JSON.
 Correct evidence references using only the allowed IDs below.
-Do not change tool choice or meaning.
+Do not change tool choice or meaning, except for the required ExperimentalPeopleGrid mitigation.
 Correct arguments only when required to satisfy the selected tool contract.
 Return one corrected decision only.
 """
