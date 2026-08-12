@@ -99,6 +99,8 @@ def test_deploy_script_provisions_command_lease_composite_index() -> None:
     assert '--field-config="field-path=status,order=ascending"' in script
     assert '--field-config="field-path=target_app_session_id,order=ascending"' in script
     assert '--field-config="field-path=issued_at_utc,order=ascending"' in script
+    assert 'name -like "*/collectionGroups/commands/*"' in script
+    assert "$index.collectionGroup" not in script
     assert "Ensure-CommandLeaseIndex" in script.split("Ensure-FirestoreDatabase", 2)[-1]
 
 

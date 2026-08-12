@@ -139,7 +139,7 @@ function Ensure-CommandLeaseIndex {
         $hasStatus = @($fields | Where-Object { $_.fieldPath -eq "status" -and $_.order -eq "ASCENDING" }).Count -eq 1
         $hasSession = @($fields | Where-Object { $_.fieldPath -eq "target_app_session_id" -and $_.order -eq "ASCENDING" }).Count -eq 1
         $hasIssuedAt = @($fields | Where-Object { $_.fieldPath -eq "issued_at_utc" -and $_.order -eq "ASCENDING" }).Count -eq 1
-        if ($index.collectionGroup -eq "commands" -and $index.state -eq "READY" -and $hasStatus -and $hasSession -and $hasIssuedAt) {
+        if ($index.name -like "*/collectionGroups/commands/*" -and $index.state -eq "READY" -and $hasStatus -and $hasSession -and $hasIssuedAt) {
             return
         }
     }
