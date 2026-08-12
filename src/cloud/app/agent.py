@@ -50,7 +50,8 @@ A temporary mitigation is not a permanent fix and must never be called RESOLVED.
 When exact source-map evidence supports a permanent fix, a patch proposal may be returned as an artifact; it is never a command and must never be executed.
 """
 SCHEMA_REPAIR_INSTRUCTION = """Repair your previous response as valid AgentDecision JSON.
-Do not change evidence references, tool choice, proposed action, or meaning.
+Correct evidence references using only the allowed IDs below.
+Do not change tool choice, proposed action, or meaning.
 Correct arguments only when required to satisfy the selected tool contract.
 Return one corrected decision only.
 """
@@ -153,7 +154,10 @@ async def run_investigator_once(
     except ValueError:
         repair_message = types.Content(
             role="user",
-            parts=[types.Part(text=SCHEMA_REPAIR_INSTRUCTION)],
+            parts=[types.Part(text=(
+                f"{SCHEMA_REPAIR_INSTRUCTION}"
+                f"Allowed evidence IDs: {json.dumps([item.evidence_id for item in context.evidence])}"
+            ))],
         )
         decision = await _run_investigator_message(
             runner,

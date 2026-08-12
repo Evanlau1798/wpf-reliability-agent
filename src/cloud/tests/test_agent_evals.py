@@ -21,9 +21,11 @@ class _Runner:
 
     def __init__(self, outputs: list[object]) -> None:
         self.outputs = outputs
+        self.messages: list[str] = []
         self.session_service = _SessionService()
 
-    def run_async(self, **_kwargs):
+    def run_async(self, **kwargs):
+        self.messages.append(kwargs["new_message"].parts[0].text)
         output = self.outputs.pop(0)
 
         async def events():
@@ -170,6 +172,62 @@ def test_ambiguous_candidate_eval_requests_evidence_instead_of_action() -> None:
     assert decision.next_command is not None
     assert decision.next_command.tool is DiagnosticTool.BINDING_GET_LIVE_CANDIDATES
     assert decision.proposed_action is None
+
+
+def test_unknown_evidence_reference_repairs_to_allowed_id() -> None:
+    evidence = NormalizedEvidenceSummary(
+        evidence_id="binding-allowed",
+        kind="binding.aggregate",
+        app_session_id="session-1",
+        observed_at_utc=datetime(2026, 8, 8, tzinfo=UTC),
+        summary="DisplayNmae binding failures are repeating.",
+        binding_path="DisplayNmae",
+    )
+    runner = _Runner(
+        [
+            {
+                "schema_version": "1.0",
+                "decision": "NO_ACTION",
+                "hypotheses": [
+                    {
+                        "claim": "The binding path is invalid.",
+                        "confidence": "HIGH",
+                        "evidence_ids": ["binding-invented"],
+                        "counter_evidence_ids": [],
+                    }
+                ],
+                "stop_reason": "No action required.",
+                "missing_evidence": [],
+            },
+            {
+                "schema_version": "1.0",
+                "decision": "NO_ACTION",
+                "hypotheses": [
+                    {
+                        "claim": "The binding path is invalid.",
+                        "confidence": "HIGH",
+                        "evidence_ids": ["binding-allowed"],
+                        "counter_evidence_ids": [],
+                    }
+                ],
+                "stop_reason": "No action required.",
+                "missing_evidence": [],
+            },
+        ]
+    )
+
+    decision = asyncio.run(
+        run_investigator_once(
+            runner,
+            incident_id="incident-repair",
+            run_key="incident-repair:1:eval",
+            context=_context([evidence]),
+        )
+    )
+
+    assert decision.hypotheses[0].evidence_ids == ["binding-allowed"]
+    assert "binding-allowed" in runner.messages[1]
+    assert "correct evidence references" in runner.messages[1].lower()
 
 
 def test_insufficient_evidence_eval_stops_when_tool_budget_is_exhausted() -> None:
