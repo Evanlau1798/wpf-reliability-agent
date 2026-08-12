@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import pytest
-from app.agent import run_investigator_once
+from app.agent import build_root_agent, run_investigator_once
 from app.correlation import AgentCorrelationContext, NormalizedEvidenceSummary
 
 
@@ -57,6 +57,10 @@ def run(outputs: list[object], items: list[NormalizedEvidenceSummary]):
     return asyncio.run(run_investigator_once(
         Runner(outputs), incident_id="incident-1", run_key="incident-1:1:eval", context=context(items),
     ))
+
+
+def test_investigator_generation_is_deterministic() -> None:
+    assert build_root_agent("gemini-test").generate_content_config.temperature == 0
 
 
 def test_invalid_recovery_proposal_is_canonicalized_for_exact_demo_source() -> None:

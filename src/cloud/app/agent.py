@@ -65,6 +65,7 @@ def build_root_agent(model_id: str) -> Agent:
         model=model_id,
         instruction=INVESTIGATOR_INSTRUCTION,
         output_schema=AgentDecision,
+        generate_content_config=types.GenerateContentConfig(temperature=0),
     )
 
 
