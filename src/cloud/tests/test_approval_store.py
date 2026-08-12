@@ -9,7 +9,7 @@ from google.api_core.exceptions import AlreadyExists
 
 
 def test_pending_approval_can_be_loaded_for_decision(monkeypatch) -> None:
-    client, transaction, _ = _approval_client(_approval_document())
+    client, transaction, snapshot = _approval_client(_approval_document())
     monkeypatch.setattr(firestore_client.firestore, "transactional", lambda callback: callback)
 
     approval = firestore_client.validate_pending_approval_decision(
@@ -21,6 +21,7 @@ def test_pending_approval_can_be_loaded_for_decision(monkeypatch) -> None:
     assert approval.approval_id == "approval-1"
     assert approval.status.value == "PENDING"
     client.collection_group.assert_called_once_with(firestore_client.APPROVALS_COLLECTION)
+    snapshot.reference.parent.parent.collection.return_value.order_by.assert_called_once_with("__name__")
     transaction.update.assert_not_called()
     transaction.create.assert_not_called()
 
@@ -436,7 +437,8 @@ def _approval_client(
         for evidence_id, evidence_hash in (evidence or [("evidence-1", "a" * 64)])
     ]
     snapshot.reference.parent.parent = incident_document
-    incident_document.collection.return_value = evidence_query
+    evidence_collection = incident_document.collection.return_value
+    evidence_collection.order_by.return_value = evidence_query
     incident_document.get.return_value = Mock(
         exists=True,
         to_dict=lambda: incident

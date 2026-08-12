@@ -312,7 +312,7 @@ def _validate_pending_approval_in_transaction(
         raise ValueError("Approval proposal version mismatch")
     material_evidence: list[tuple[str, str]] = []
     for evidence_snapshot in transaction.get(
-        incident_document.collection(EVIDENCE_COLLECTION)
+        incident_document.collection(EVIDENCE_COLLECTION).order_by("__name__")
     ):
         evidence = evidence_snapshot.to_dict() or {}
         evidence_hash = evidence.get("evidence_hash")
