@@ -105,7 +105,10 @@ def validate_decision_evidence_ids(
     return decision
 
 
-def validate_decision_next_tool(decision: AgentDecision) -> AgentDecision:
+def validate_decision_next_tool(
+    decision: AgentDecision,
+    context: AgentCorrelationContext | None = None,
+) -> AgentDecision:
     command = decision.next_command
     if command is None:
         return decision
@@ -113,6 +116,15 @@ def validate_decision_next_tool(decision: AgentDecision) -> AgentDecision:
         raise ValueError("Next evidence tool is not in the read-only allowlist")
     if command.tool is DiagnosticTool.SOURCE_LOOKUP_BINDING:
         arguments = command.arguments
+        selectors = {
+            (item.binding_path, item.target_property)
+            for item in context.evidence
+            if item.binding_path is not None and item.target_property is not None
+        } if context is not None else set()
+        if not arguments and len(selectors) == 1:
+            binding_path, target_property = selectors.pop()
+            command.arguments = {"binding_path": binding_path, "target_property": target_property}
+            arguments = command.arguments
         by_key = set(arguments) == {"key"} and isinstance(arguments.get("key"), str) and bool(arguments["key"])
         by_binding = (
             set(arguments) == {"binding_path", "target_property"}
@@ -150,7 +162,7 @@ async def run_investigator_once(
             message=message,
         )
         validate_decision_evidence_ids(decision, context)
-        return validate_decision_next_tool(decision)
+        return validate_decision_next_tool(decision, context)
     except ValueError:
         repair_message = types.Content(
             role="user",
@@ -166,7 +178,7 @@ async def run_investigator_once(
             message=repair_message,
         )
         validate_decision_evidence_ids(decision, context)
-        return validate_decision_next_tool(decision)
+        return validate_decision_next_tool(decision, context)
 
 
 async def _run_investigator_message(

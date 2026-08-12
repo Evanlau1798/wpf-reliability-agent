@@ -36,6 +36,7 @@ class NormalizedEvidenceSummary(BaseModel):
     summary: Annotated[str, StringConstraints(min_length=1, max_length=4096)]
     element_id: Identifier | None = None
     binding_path: Identifier | None = None
+    target_property: Identifier | None = None
     element_name: Identifier | None = None
     element_type: Identifier | None = None
     nearest_named_ancestor: Identifier | None = None

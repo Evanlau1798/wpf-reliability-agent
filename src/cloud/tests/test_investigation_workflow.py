@@ -125,6 +125,7 @@ def test_investigator_context_normalizes_durable_binding_and_live_candidates() -
         "correlation": {"element_id": "element-1", "binding_path": "DisplayNmae"},
         "payload": {
             "binding_path": "DisplayNmae",
+            "target_property": "Text",
             "element_type": "TextBlock",
             "element_name": "PersonName",
             "occurrence_count": 30,
@@ -160,7 +161,9 @@ def test_investigator_context_normalizes_durable_binding_and_live_candidates() -
     )
 
     assert [item.evidence_id for item in context.evidence] == ["binding-1", "command-1"]
-    assert next(item for item in context.evidence if item.evidence_id == "binding-1").window_seconds == 10.0
+    normalized_binding = next(item for item in context.evidence if item.evidence_id == "binding-1")
+    assert normalized_binding.window_seconds == 10.0
+    assert normalized_binding.target_property == "Text"
     assert context.tool_calls_remaining == 5
     assert context.candidate_claims[0].candidate == "PersonName"
     assert context.candidate_claims[0].confidence.value == "HIGH"

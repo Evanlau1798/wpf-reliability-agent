@@ -4,10 +4,13 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
-
 from app import workflow_state
 from app.agent import READ_ONLY_DIAGNOSTIC_TOOLS, run_investigator_once
-from app.correlation import AgentCorrelationContext, CandidateClaim, NormalizedEvidenceSummary
+from app.correlation import (
+    AgentCorrelationContext,
+    CandidateClaim,
+    NormalizedEvidenceSummary,
+)
 from app.models import Confidence, DecisionType, DiagnosticTool
 
 
@@ -353,7 +356,7 @@ def test_blocked_tool_output_eval_is_rejected_after_one_repair_attempt() -> None
     assert runner.outputs == []
 
 
-def test_source_lookup_without_selector_is_repaired_once() -> None:
+def test_empty_source_lookup_uses_unique_evidence_selector() -> None:
     invalid = {
         "schema_version": "1.0",
         "decision": "REQUEST_EVIDENCE",
@@ -361,26 +364,51 @@ def test_source_lookup_without_selector_is_repaired_once() -> None:
         "next_command": {"tool": "source.lookup_binding", "arguments": {}},
         "missing_evidence": ["exact source attribution"],
     }
-    repaired = {
-        **invalid,
-        "next_command": {
-            "tool": "source.lookup_binding",
-            "arguments": {"binding_path": "DisplayNmae", "target_property": "Text"},
-        },
-    }
-    runner = _Runner([invalid, repaired])
+    runner = _Runner([invalid])
+    evidence = NormalizedEvidenceSummary(
+        evidence_id="binding-1",
+        kind="binding.aggregate",
+        app_session_id="session-1",
+        observed_at_utc=datetime(2026, 8, 13, tzinfo=UTC),
+        summary="Binding failure",
+        binding_path="DisplayNmae",
+        target_property="Text",
+    )
 
     decision = asyncio.run(
         run_investigator_once(
             runner,
             incident_id="incident-source-lookup",
             run_key="incident-source-lookup:1:eval",
-            context=_context([]),
+            context=_context([evidence]),
         )
     )
 
     assert decision.next_command is not None
-    assert decision.next_command.arguments == repaired["next_command"]["arguments"]
+    assert decision.next_command.arguments == {"binding_path": "DisplayNmae", "target_property": "Text"}
+    assert runner.outputs == []
+
+
+def test_empty_source_lookup_without_unique_selector_is_rejected() -> None:
+    invalid = {
+        "schema_version": "1.0",
+        "decision": "REQUEST_EVIDENCE",
+        "hypotheses": [],
+        "next_command": {"tool": "source.lookup_binding", "arguments": {}},
+        "missing_evidence": ["exact source attribution"],
+    }
+    runner = _Runner([invalid.copy(), invalid.copy()])
+
+    with pytest.raises(ValueError, match="source.lookup_binding arguments are invalid"):
+        asyncio.run(
+            run_investigator_once(
+                runner,
+                incident_id="incident-ambiguous-source-lookup",
+                run_key="incident-ambiguous-source-lookup:1:eval",
+                context=_context([]),
+            )
+        )
+
     assert runner.outputs == []
 
 

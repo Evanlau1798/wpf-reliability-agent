@@ -246,6 +246,7 @@ def _normalize_evidence(evidence_id: str, data: dict[str, object]) -> Normalized
         summary=(json.dumps(payload, ensure_ascii=False, separators=(",", ":"), default=str)[:4096] or kind),
         element_id=correlation.get("element_id") if isinstance(correlation.get("element_id"), str) else None,
         binding_path=_first_string(payload, correlation, "binding_path"),
+        target_property=_first_string(payload, correlation, "target_property"),
         element_name=payload.get("element_name") if isinstance(payload.get("element_name"), str) else None,
         element_type=payload.get("element_type") if isinstance(payload.get("element_type"), str) else None,
         occurrence_count=payload.get("occurrence_count") if type(payload.get("occurrence_count")) is int else None,
