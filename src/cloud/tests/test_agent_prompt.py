@@ -1,20 +1,18 @@
-from datetime import UTC, datetime
 import asyncio
 import json
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import Mock
 
-from google.adk.agents import Agent
 import pytest
-
 from app import agent
 from app.agent import (
     INVESTIGATOR_INSTRUCTION,
     MAX_INVESTIGATION_ROUNDS,
     MAX_READ_ONLY_TOOL_CALLS,
     READ_ONLY_DIAGNOSTIC_TOOLS,
-    build_root_agent,
     build_investigator_contents,
+    build_root_agent,
     create_evidence_command,
     decision_for_reporting,
     proposed_action_for_policy,
@@ -24,6 +22,7 @@ from app.agent import (
 )
 from app.correlation import AgentCorrelationContext, NormalizedEvidenceSummary
 from app.models import AgentDecision, DecisionType, DiagnosticTool
+from google.adk.agents import Agent
 
 
 def test_investigator_instruction_enforces_core_safety_rules() -> None:

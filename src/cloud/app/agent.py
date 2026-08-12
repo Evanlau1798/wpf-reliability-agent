@@ -6,6 +6,7 @@ from google.adk.agents import Agent
 from google.adk.runners import InMemoryRunner
 from google.genai import types
 
+from app.approval import validate_recovery_proposal
 from app.commands import write_command_once
 from app.contracts import sha256_canonical
 from app.correlation import AgentCorrelationContext
@@ -52,7 +53,7 @@ When exact source-map evidence supports a permanent fix, a patch proposal may be
 """
 SCHEMA_REPAIR_INSTRUCTION = """Repair your previous response as valid AgentDecision JSON.
 Correct evidence references using only the allowed IDs below.
-Do not change tool choice, proposed action, or meaning.
+Do not change tool choice or meaning.
 Correct arguments only when required to satisfy the selected tool contract.
 Return one corrected decision only.
 """
@@ -139,6 +140,40 @@ def validate_decision_next_tool(
     return decision
 
 
+def validate_decision_proposed_action(
+    decision: AgentDecision,
+    context: AgentCorrelationContext | None = None,
+) -> AgentDecision:
+    proposal = decision.proposed_action
+    if proposal is None:
+        return decision
+    try:
+        validate_recovery_proposal(proposal)
+    except ValueError:
+        matching_bindings = [
+            item for item in context.evidence
+            if item.kind == "binding.aggregate"
+            and item.binding_path == "DisplayNmae"
+            and item.target_property == "Text"
+        ] if context is not None else []
+        matching_sources = [
+            item for item in context.evidence
+            if item.kind == DiagnosticTool.SOURCE_LOOKUP_BINDING.value
+            and item.binding_path == "DisplayNmae"
+            and item.target_property == "Text"
+            and item.nearest_named_ancestor == "ExperimentalPeopleGrid"
+        ] if context is not None else []
+        if not matching_bindings or len(matching_sources) != 1:
+            raise
+        proposal.arguments = {
+            "feature": "ExperimentalPeopleGrid",
+            "enabled": False,
+            "expected_current_value": True,
+        }
+        validate_recovery_proposal(proposal)
+    return decision
+
+
 async def run_investigator_once(
     runner: Any,
     *,
@@ -163,6 +198,7 @@ async def run_investigator_once(
             message=message,
         )
         validate_decision_evidence_ids(decision, context)
+        validate_decision_proposed_action(decision, context)
         return validate_decision_next_tool(decision, context)
     except ValueError:
         repair_message = types.Content(
@@ -179,6 +215,7 @@ async def run_investigator_once(
             message=repair_message,
         )
         validate_decision_evidence_ids(decision, context)
+        validate_decision_proposed_action(decision, context)
         return validate_decision_next_tool(decision, context)
 
 

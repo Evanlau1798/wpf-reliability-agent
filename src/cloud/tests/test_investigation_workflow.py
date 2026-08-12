@@ -152,7 +152,21 @@ def test_investigator_context_normalizes_durable_binding_and_live_candidates() -
             },
         },
     }
-    evidence_collection.stream.return_value = [binding, live]
+    source = Mock(id="source-1")
+    source.to_dict.return_value = {
+        "event_type": "tool.result",
+        "tool": "source.lookup_binding",
+        "app_session_id": "session-1",
+        "result": {
+            "completed_at_utc": NOW,
+            "result": {"matches": [{
+                "binding_path": "DisplayNmae",
+                "target_property": "Text",
+                "named_ancestors": ["ExperimentalPeopleGrid"],
+            }]},
+        },
+    }
+    evidence_collection.stream.return_value = [binding, live, source]
 
     context = workflow.build_investigator_context(
         client,
@@ -160,10 +174,12 @@ def test_investigator_context_normalizes_durable_binding_and_live_candidates() -
         incident={"read_only_tool_call_count": 1},
     )
 
-    assert [item.evidence_id for item in context.evidence] == ["binding-1", "command-1"]
+    assert {item.evidence_id for item in context.evidence} == {"binding-1", "command-1", "source-1"}
     normalized_binding = next(item for item in context.evidence if item.evidence_id == "binding-1")
     assert normalized_binding.window_seconds == 10.0
     assert normalized_binding.target_property == "Text"
+    normalized_source = next(item for item in context.evidence if item.evidence_id == "source-1")
+    assert normalized_source.nearest_named_ancestor == "ExperimentalPeopleGrid"
     assert context.tool_calls_remaining == 5
     assert context.candidate_claims[0].candidate == "PersonName"
     assert context.candidate_claims[0].confidence.value == "HIGH"

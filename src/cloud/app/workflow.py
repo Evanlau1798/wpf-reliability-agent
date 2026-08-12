@@ -238,6 +238,9 @@ def _normalize_evidence(evidence_id: str, data: dict[str, object]) -> Normalized
     statistics = payload.get("frame_statistics") if isinstance(payload.get("frame_statistics"), dict) else {}
     aggregation_ms = payload.get("aggregation_window_ms")
     nodes = payload.get("nodes")
+    matches = payload.get("matches")
+    source_match = matches[0] if isinstance(matches, list) and len(matches) == 1 and isinstance(matches[0], dict) else {}
+    named_ancestors = source_match.get("named_ancestors")
     return NormalizedEvidenceSummary(
         evidence_id=evidence_id,
         kind=kind,
@@ -245,8 +248,13 @@ def _normalize_evidence(evidence_id: str, data: dict[str, object]) -> Normalized
         observed_at_utc=observed_at,
         summary=(json.dumps(payload, ensure_ascii=False, separators=(",", ":"), default=str)[:4096] or kind),
         element_id=correlation.get("element_id") if isinstance(correlation.get("element_id"), str) else None,
-        binding_path=_first_string(payload, correlation, "binding_path"),
-        target_property=_first_string(payload, correlation, "target_property"),
+        binding_path=_first_string(source_match, payload, correlation, "binding_path"),
+        target_property=_first_string(source_match, payload, correlation, "target_property"),
+        nearest_named_ancestor=(
+            named_ancestors[-1]
+            if isinstance(named_ancestors, list) and named_ancestors and isinstance(named_ancestors[-1], str)
+            else None
+        ),
         element_name=payload.get("element_name") if isinstance(payload.get("element_name"), str) else None,
         element_type=payload.get("element_type") if isinstance(payload.get("element_type"), str) else None,
         occurrence_count=payload.get("occurrence_count") if type(payload.get("occurrence_count")) is int else None,
