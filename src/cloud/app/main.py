@@ -3,6 +3,7 @@ import secrets
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
+from time import sleep
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
@@ -63,7 +64,6 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="WPF Reliability Agent", lifespan=lifespan)
-
 
 @app.get("/health", include_in_schema=False)
 @app.get("/healthz", include_in_schema=False)
@@ -183,16 +183,19 @@ def lease_command(
     if device_id != authenticated_device_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     client = get_firestore_client(request.app.state.settings.google_cloud_project)
-    command = lease_next_command(
-        client,
-        app_session_id=lease_request.app_session_id,
-        lease_owner=authenticated_device_id,
-        now=datetime.now(UTC),
-        duration=timedelta(seconds=30),
-    )
-    if command is None:
-        return Response(status_code=status.HTTP_204_NO_CONTENT)
-    return command
+    for attempt in range(lease_request.wait_seconds + 1):
+        command = lease_next_command(
+            client,
+            app_session_id=lease_request.app_session_id,
+            lease_owner=authenticated_device_id,
+            now=datetime.now(UTC),
+            duration=timedelta(seconds=30),
+        )
+        if command is not None:
+            return command
+        if attempt < lease_request.wait_seconds:
+            sleep(1)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @app.post(

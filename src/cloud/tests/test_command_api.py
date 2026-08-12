@@ -3,6 +3,7 @@ from pathlib import Path
 
 from app import main
 from app.main import app
+from app.models import DiagnosticCommand
 
 
 FIXTURES = Path(__file__).parents[3] / "contracts" / "fixtures"
@@ -37,11 +38,42 @@ def test_command_lease_returns_204_when_no_pending_command(monkeypatch) -> None:
         response = client.post(
             "/v1/devices/device-test/commands:lease",
             headers={"Authorization": "Bearer secret-token"},
-            json={"app_session_id": "session-1", "wait_seconds": 20, "max_commands": 1},
+            json={"app_session_id": "session-1", "wait_seconds": 0, "max_commands": 1},
         )
 
     assert response.status_code == 204
     assert leased == [(firestore_client, "session-1", "device-test")]
+
+
+def test_command_lease_waits_for_pending_command(monkeypatch) -> None:
+    _set_environment(monkeypatch)
+    firestore_client = object()
+    monkeypatch.setattr(main, "get_firestore_client", lambda _project_id: firestore_client)
+    command = DiagnosticCommand.model_validate_json(
+        (FIXTURES / "diagnostic-command-valid-read.json").read_text(encoding="utf-8")
+    )
+    attempts = 0
+
+    def lease(*_args, **_kwargs):
+        nonlocal attempts
+        attempts += 1
+        return command if attempts == 3 else None
+
+    sleeps: list[float] = []
+    monkeypatch.setattr(main, "lease_next_command", lease, raising=False)
+    monkeypatch.setattr(main, "sleep", sleeps.append, raising=False)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/devices/device-test/commands:lease",
+            headers={"Authorization": "Bearer secret-token"},
+            json={"app_session_id": "session-1", "wait_seconds": 2, "max_commands": 1},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["command_id"] == command.command_id
+    assert attempts == 3
+    assert sleeps == [1, 1]
 
 
 def test_command_complete_requires_device_auth(monkeypatch) -> None:
