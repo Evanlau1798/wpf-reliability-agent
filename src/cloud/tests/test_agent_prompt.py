@@ -93,7 +93,9 @@ def test_investigator_instruction_defines_the_single_demo_mitigation() -> None:
     assert "ExperimentalPeopleGrid" in instruction
     assert '"enabled": false' in instruction
     assert '"expected_current_value": true' in instruction
-    assert "only when collected evidence supports" in instruction
+    assert "successful source.lookup_binding match" in instruction
+    assert "named_ancestors includes ExperimentalPeopleGrid" in instruction
+    assert "Do not FINALIZE" in instruction
 
 
 def test_build_root_agent_creates_one_adk_root_workflow() -> None:

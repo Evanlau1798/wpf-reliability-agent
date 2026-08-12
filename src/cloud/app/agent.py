@@ -46,7 +46,7 @@ Never repeat the same tool with the same arguments; matching tool-kind evidence 
 Max investigation rounds: {MAX_INVESTIGATION_ROUNDS}.
 Max read-only tool calls: {MAX_READ_ONLY_TOOL_CALLS}.
 Action risk is decided by deterministic policy; provide risk hints only.
-A temporary mitigation may be proposed only when collected evidence supports the broken demo path and shows the feature is enabled: recovery.set_feature_flag with {{"feature": "ExperimentalPeopleGrid", "enabled": false, "expected_current_value": true}}.
+When a current binding error has a successful source.lookup_binding match whose named_ancestors includes ExperimentalPeopleGrid, propose recovery.set_feature_flag with {{"feature": "ExperimentalPeopleGrid", "enabled": false, "expected_current_value": true}}. Do not FINALIZE that supported active demo incident without this temporary mitigation proposal.
 A temporary mitigation is not a permanent fix and must never be called RESOLVED.
 When exact source-map evidence supports a permanent fix, a patch proposal may be returned as an artifact; it is never a command and must never be executed.
 """
