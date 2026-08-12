@@ -104,6 +104,18 @@ def test_deploy_script_provisions_command_lease_composite_index() -> None:
     assert "Ensure-CommandLeaseIndex" in script.split("Ensure-FirestoreDatabase", 2)[-1]
 
 
+def test_deploy_script_provisions_approval_collection_group_index() -> None:
+    script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
+
+    assert "function Ensure-ApprovalLookupIndex" in script
+    assert "gcloud firestore indexes fields describe approval_id" in script
+    assert "--collection-group=approvals" in script
+    assert "Invoke-RestMethod -Method Patch" in script
+    assert 'queryScope = "COLLECTION_GROUP"' in script
+    assert 'order = "ASCENDING"' in script
+    assert "Ensure-ApprovalLookupIndex" in script.split("Ensure-FirestoreDatabase", 2)[-1]
+
+
 def test_deploy_script_creates_pubsub_topic_only_when_missing() -> None:
     script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
 

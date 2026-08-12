@@ -150,6 +150,41 @@ function Ensure-CommandLeaseIndex {
     }
 }
 
+function Test-ApprovalLookupIndexReady {
+    $fieldJson = (& gcloud firestore indexes fields describe approval_id --collection-group=approvals --database="(default)" --project=$ProjectId --format=json | Out-String)
+    if ($LASTEXITCODE -ne 0) {
+        return $false
+    }
+    $field = $fieldJson | ConvertFrom-Json
+    return @($field.indexConfig.indexes | Where-Object {
+        $_.queryScope -eq "COLLECTION_GROUP" -and $_.state -eq "READY" -and
+        $_.fields[0].fieldPath -eq "approval_id" -and $_.fields[0].order -eq "ASCENDING"
+    }).Count -eq 1
+}
+
+function Ensure-ApprovalLookupIndex {
+    if (Test-ApprovalLookupIndexReady) {
+        return
+    }
+
+    $accessToken = (& gcloud auth print-access-token).Trim()
+    $fieldUri = "https://firestore.googleapis.com/v1/projects/$ProjectId/databases/(default)/collectionGroups/approvals/fields/approval_id?updateMask=indexConfig"
+    $body = @{ indexConfig = @{ indexes = @(
+        @{ queryScope = "COLLECTION"; fields = @(@{ fieldPath = "approval_id"; order = "ASCENDING" }) },
+        @{ queryScope = "COLLECTION"; fields = @(@{ fieldPath = "approval_id"; order = "DESCENDING" }) },
+        @{ queryScope = "COLLECTION"; fields = @(@{ fieldPath = "approval_id"; arrayConfig = "CONTAINS" }) },
+        @{ queryScope = "COLLECTION_GROUP"; fields = @(@{ fieldPath = "approval_id"; order = "ASCENDING" }) }
+    ) } } | ConvertTo-Json -Depth 6
+    Invoke-RestMethod -Method Patch -Uri $fieldUri -Headers @{ Authorization = "Bearer $accessToken" } -ContentType "application/json" -Body $body | Out-Null
+    foreach ($attempt in 1..60) {
+        if (Test-ApprovalLookupIndexReady) {
+            return
+        }
+        Start-Sleep -Seconds 5
+    }
+    throw "Approval lookup Firestore index did not become ready."
+}
+
 function Ensure-PubSubTopic {
     param([string]$Name)
 
@@ -357,6 +392,7 @@ Assert-CloudBuildPermission
 Ensure-ArtifactRepository
 Ensure-FirestoreDatabase
 Ensure-CommandLeaseIndex
+Ensure-ApprovalLookupIndex
 Ensure-PubSubTopic $PubSubTopic
 Ensure-PubSubTopic $DeadLetterTopic
 $ApiServiceAccountEmail = Ensure-ServiceAccount $ApiServiceAccount "WPF Reliability API"
