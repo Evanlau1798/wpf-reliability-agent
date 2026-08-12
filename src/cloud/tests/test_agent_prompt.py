@@ -87,6 +87,15 @@ def test_investigator_instruction_distinguishes_temporary_mitigation() -> None:
     assert "resolved" in instruction
 
 
+def test_investigator_instruction_defines_the_single_demo_mitigation() -> None:
+    instruction = INVESTIGATOR_INSTRUCTION
+
+    assert "ExperimentalPeopleGrid" in instruction
+    assert '"enabled": false' in instruction
+    assert '"expected_current_value": true' in instruction
+    assert "only when collected evidence supports" in instruction
+
+
 def test_build_root_agent_creates_one_adk_root_workflow() -> None:
     root = build_root_agent("gemini-test")
 
