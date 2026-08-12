@@ -70,7 +70,8 @@ def commit_proposed_action_run(
 
         material_evidence: list[tuple[str, str]] = []
         evidence_ids: set[str] = set()
-        for evidence_snapshot in transaction.get(incident_document.collection(EVIDENCE_COLLECTION)):
+        evidence_query = incident_document.collection(EVIDENCE_COLLECTION).order_by("__name__")
+        for evidence_snapshot in transaction.get(evidence_query):
             evidence = evidence_snapshot.to_dict() or {}
             evidence_hash = evidence.get("evidence_hash")
             if not isinstance(evidence_hash, str):

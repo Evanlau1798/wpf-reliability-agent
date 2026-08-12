@@ -469,4 +469,6 @@ def test_proposed_action_creates_bound_pending_approval_without_command(monkeypa
     assert update["mutation_proposal_count"] == 1
     assert update["approval_id"] == approval["approval_id"]
     assert update["pending_action_id"] == approval["action_id"]
+    evidence_collection.order_by.assert_called_once_with("__name__")
+    assert transaction.get.call_args.args[0] is evidence_collection.order_by.return_value
     assert not any(call.args[1].get("tool") == "recovery.set_feature_flag" for call in transaction.create.call_args_list if isinstance(call.args[1], dict) and call.args[0] is not approval_document)
