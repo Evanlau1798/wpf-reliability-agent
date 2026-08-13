@@ -415,15 +415,20 @@ def persist_incident_event(
     evidence_id: str,
     incident: dict[str, object] | None,
     evidence: dict[str, object],
-) -> int | None:
+) -> tuple[bool, int]:
     dedup_document = client.collection(EVENT_DEDUP_COLLECTION).document(event_id)
     incident_document = client.collection(INCIDENTS_COLLECTION).document(incident_id)
     evidence_document = incident_document.collection(EVIDENCE_COLLECTION).document(evidence_id)
 
     @firestore.transactional
-    def persist(transaction: firestore.Transaction) -> int | None:
-        if dedup_document.get(transaction=transaction).exists:
-            return None
+    def persist(transaction: firestore.Transaction) -> tuple[bool, int]:
+        dedup_snapshot = dedup_document.get(transaction=transaction)
+        if dedup_snapshot.exists:
+            dedup = dedup_snapshot.to_dict() or {}
+            revision = dedup.get("evidence_revision")
+            if dedup.get("incident_id") != incident_id or type(revision) is not int or revision < 1:
+                raise ValueError("Event dedup record is invalid")
+            return False, revision
 
         incident_snapshot = incident_document.get(transaction=transaction)
         if not incident_snapshot.exists and incident is None:
@@ -441,7 +446,11 @@ def persist_incident_event(
 
         transaction.create(
             dedup_document,
-            {"created_at": firestore.SERVER_TIMESTAMP, "incident_id": incident_id},
+            {
+                "created_at": firestore.SERVER_TIMESTAMP,
+                "incident_id": incident_id,
+                "evidence_revision": evidence_revision,
+            },
         )
         if incident_snapshot.exists:
             transaction.update(
@@ -454,6 +463,6 @@ def persist_incident_event(
         else:
             transaction.create(incident_document, incident)
         transaction.create(evidence_document, evidence)
-        return evidence_revision
+        return True, evidence_revision
 
     return persist(client.transaction())

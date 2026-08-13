@@ -325,6 +325,7 @@ def test_telemetry_batch_persists_binding_incident_and_evidence(monkeypatch) -> 
     assert transaction.create.call_args_list[0].args[1] == {
         "created_at": firestore_store.firestore.SERVER_TIMESTAMP,
         "incident_id": incident_id,
+        "evidence_revision": 1,
     }
     incident = transaction.create.call_args_list[1].args[1]
     assert incident["state"] == "NEW"

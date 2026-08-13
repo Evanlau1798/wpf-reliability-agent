@@ -38,7 +38,7 @@ from app.ingest import (
 )
 from app.logging_config import configure_logging
 from app.models import CommandResult, EventType
-from app.pubsub import publish_work
+from app.pubsub import publish_after_commit, publish_work
 from app.verification import (
     build_inconclusive_verification_audit,
     build_regression_verification_audit,
@@ -488,13 +488,4 @@ def telemetry_batch(
         "rejected": rejected,
     }
 def _publish_after_commit(request: Request, payload: dict[str, object]) -> None:
-    settings = request.app.state.settings
-    try:
-        publish_work(settings.google_cloud_project, settings.pubsub_topic, payload)
-    except Exception:
-        request.app.state.logger.error(
-            "pubsub_publish_failed incident_id=%s evidence_revision=%s event_id=%s",
-            payload.get("incident_id"),
-            payload.get("evidence_revision"),
-            payload.get("event_id"),
-        )
+    publish_after_commit(request, payload, publish_work)

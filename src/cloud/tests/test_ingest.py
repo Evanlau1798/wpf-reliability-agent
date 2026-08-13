@@ -105,9 +105,9 @@ def test_binding_ingest_builds_publish_payload_after_persist(monkeypatch) -> Non
     valid, rejected = validate_telemetry_events([event])
     order: list[str] = []
 
-    def persist(*_args, **_kwargs) -> int:
+    def persist(*_args, **_kwargs) -> tuple[bool, int]:
         order.append("commit")
-        return 3
+        return True, 3
 
     def build_payload(incident_id, evidence_revision, persisted_event):
         order.append("payload")
@@ -136,6 +136,24 @@ def test_binding_ingest_builds_publish_payload_after_persist(monkeypatch) -> Non
         "trigger": "binding.aggregate",
         "event_id": "event-1",
     }
+
+
+def test_duplicate_binding_ingest_rebuilds_the_same_publish_payload(monkeypatch) -> None:
+    valid, _ = validate_telemetry_events([
+        _event(
+            "binding.aggregate",
+            {"binding_path": "DisplayNmae"},
+            {"fingerprint": "binding-1", "occurrence_count": 1},
+        )
+    ])
+    monkeypatch.setattr(ingest, "persist_incident_event", lambda *_args, **_kwargs: (False, 3))
+
+    accepted, incident_id, payload = ingest.ingest_binding_event(
+        object(), valid[0], "device-test"
+    )
+
+    assert accepted is False
+    assert payload == ingest.build_publish_payload(incident_id, 3, valid[0])
 
 
 def test_binding_ingest_preserves_aggregation_window_for_rate_verification() -> None:
@@ -196,9 +214,9 @@ def test_recovery_result_persists_post_snapshot_as_incident_evidence(monkeypatch
     valid, rejected = validate_telemetry_events([event])
     captured: dict[str, object] = {}
 
-    def persist(*_args, **kwargs) -> int:
+    def persist(*_args, **kwargs) -> tuple[bool, int]:
         captured.update(kwargs)
-        return 7
+        return True, 7
 
     monkeypatch.setattr(ingest, "persist_incident_event", persist)
 

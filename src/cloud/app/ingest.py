@@ -184,7 +184,7 @@ def ingest_binding_event(
         if isinstance(binding_path, str) and binding_path
         else "Binding error burst"
     )
-    evidence_revision = persist_incident_event(
+    is_new, evidence_revision = persist_incident_event(
         client,
         event_id=event.event_id,
         incident_id=incident_id,
@@ -198,9 +198,7 @@ def ingest_binding_event(
         ),
         evidence=trusted_event.model_dump(mode="json"),
     )
-    if evidence_revision is None:
-        return False, incident_id, None
-    return True, incident_id, build_publish_payload(incident_id, evidence_revision, trusted_event)
+    return is_new, incident_id, build_publish_payload(incident_id, evidence_revision, trusted_event)
 
 
 def ingest_performance_event(
@@ -215,7 +213,7 @@ def ingest_performance_event(
         raise ValueError("Performance app session correlation must match the event")
 
     trusted_event = event.model_copy(update={"device_id": device_id})
-    evidence_revision = persist_incident_event(
+    is_new, evidence_revision = persist_incident_event(
         client,
         event_id=event.event_id,
         incident_id=incident_id,
@@ -223,9 +221,7 @@ def ingest_performance_event(
         incident=None,
         evidence=trusted_event.model_dump(mode="json"),
     )
-    if evidence_revision is None:
-        return False, None
-    return True, build_publish_payload(incident_id, evidence_revision, trusted_event)
+    return is_new, build_publish_payload(incident_id, evidence_revision, trusted_event)
 
 
 def ingest_recovery_event(
@@ -242,7 +238,7 @@ def ingest_recovery_event(
         raise ValueError("Recovery result requires incident command and action references")
 
     trusted_event = event.model_copy(update={"device_id": device_id})
-    evidence_revision = persist_incident_event(
+    is_new, evidence_revision = persist_incident_event(
         client,
         event_id=event.event_id,
         incident_id=incident_id,
@@ -250,9 +246,7 @@ def ingest_recovery_event(
         incident=None,
         evidence=trusted_event.model_dump(mode="json"),
     )
-    if evidence_revision is None:
-        return False, None
-    return True, build_publish_payload(incident_id, evidence_revision, trusted_event)
+    return is_new, build_publish_payload(incident_id, evidence_revision, trusted_event)
 
 
 def build_publish_payload(

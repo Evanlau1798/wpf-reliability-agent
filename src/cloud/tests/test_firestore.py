@@ -225,13 +225,14 @@ def test_incident_event_persist_is_atomic(monkeypatch) -> None:
         evidence_id="event-1",
         incident=incident,
         evidence=evidence,
-    ) == 1
+    ) == (True, 1)
 
     transaction.create.assert_any_call(
         dedup_document,
         {
             "created_at": firestore_client.firestore.SERVER_TIMESTAMP,
             "incident_id": "incident-1",
+            "evidence_revision": 1,
         },
     )
     transaction.create.assert_any_call(incident_document, incident)
@@ -303,7 +304,7 @@ def test_incident_event_persist_returns_next_evidence_revision(monkeypatch) -> N
         evidence={"event_id": "performance-1"},
     )
 
-    assert revision == 4
+    assert revision == (True, 4)
     transaction.update.assert_called_once_with(
         incident_document,
         {
@@ -330,7 +331,10 @@ def test_duplicate_incident_event_does_not_add_evidence_or_revision(monkeypatch)
     dedup_collection.document.return_value = dedup_document
     incident_collection.document.return_value = incident_document
     incident_document.collection.return_value.document.return_value = evidence_document
-    dedup_document.get.side_effect = [Mock(exists=False), Mock(exists=True)]
+    dedup_document.get.side_effect = [
+        Mock(exists=False),
+        Mock(exists=True, to_dict=lambda: {"incident_id": "incident-1", "evidence_revision": 1}),
+    ]
     incident_document.get.return_value = Mock(exists=False)
     monkeypatch.setattr(firestore_client.firestore, "transactional", lambda callback: callback)
     incident = {"state": "NEW", "evidence_revision": 1}
@@ -353,8 +357,8 @@ def test_duplicate_incident_event_does_not_add_evidence_or_revision(monkeypatch)
         evidence=evidence,
     )
 
-    assert first == 1
-    assert second is None
+    assert first == (True, 1)
+    assert second == (False, 1)
     assert transaction.create.call_count == 3
     transaction.create.assert_any_call(evidence_document, evidence)
     transaction.update.assert_not_called()
