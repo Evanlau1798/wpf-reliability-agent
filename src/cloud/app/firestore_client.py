@@ -371,47 +371,6 @@ def is_run_processed(client: firestore.Client, run_key: str) -> bool:
     return client.collection(PROCESSED_RUNS_COLLECTION).document(run_key).get().exists
 
 
-def create_incident(
-    client: firestore.Client,
-    incident_id: str,
-    *,
-    application_id: str,
-    app_session_id: str,
-    severity: str,
-    summary: str,
-) -> None:
-    client.collection(INCIDENTS_COLLECTION).document(incident_id).create(
-        build_incident_document(
-            application_id=application_id,
-            app_session_id=app_session_id,
-            severity=severity,
-            summary=summary,
-        )
-    )
-
-
-def append_incident_evidence(
-    client: firestore.Client,
-    incident_id: str,
-    evidence_id: str,
-    evidence: dict[str, object],
-) -> None:
-    incident = client.collection(INCIDENTS_COLLECTION).document(incident_id)
-    incident.collection(EVIDENCE_COLLECTION).document(evidence_id).create(evidence)
-
-
-def increment_incident_occurrence(
-    client: firestore.Client,
-    incident_id: str,
-    evidence_id: str,
-    occurrence_count: int,
-) -> None:
-    incident = client.collection(INCIDENTS_COLLECTION).document(incident_id)
-    incident.collection(EVIDENCE_COLLECTION).document(evidence_id).update(
-        {"payload.occurrence_count": firestore.Increment(occurrence_count)}
-    )
-
-
 def build_incident_document(
     *,
     application_id: str,

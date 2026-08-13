@@ -134,52 +134,6 @@ def test_event_dedup_transaction_accepts_event_once(monkeypatch) -> None:
     )
 
 
-def test_incident_create_writes_complete_initial_state() -> None:
-    client = Mock()
-    document = Mock()
-    client.collection.return_value.document.return_value = document
-
-    firestore_client.create_incident(
-        client,
-        "incident-1",
-        application_id="app-1",
-        app_session_id="session-1",
-        severity="ERROR",
-        summary="Binding error burst",
-    )
-
-    client.collection.assert_called_once_with(firestore_client.INCIDENTS_COLLECTION)
-    client.collection.return_value.document.assert_called_once_with("incident-1")
-    document.create.assert_called_once_with(
-        {
-            "state": "NEW",
-            "state_version": 1,
-            "audit_sequence": 0,
-            "audit_entry_hash": "0" * 64,
-            "evidence_revision": 0,
-            "proposal_version": 0,
-            "investigation_round_count": 0,
-            "read_only_tool_call_count": 0,
-            "read_only_tool_request_keys": [],
-            "last_investigated_evidence_revision": None,
-            "no_new_evidence_count": 0,
-            "mutation_proposal_count": 0,
-            "application_id": "app-1",
-            "app_session_id": "session-1",
-            "severity": "ERROR",
-            "summary": "Binding error burst",
-            "current_hypotheses": [],
-            "pending_command_id": None,
-            "pending_action_id": None,
-            "approval_id": None,
-            "lease_owner": None,
-            "lease_until": None,
-            "created_at": firestore_client.firestore.SERVER_TIMESTAMP,
-            "updated_at": firestore_client.firestore.SERVER_TIMESTAMP,
-        }
-    )
-
-
 def test_pending_approval_document_binds_exact_proposal() -> None:
     client = Mock()
     incident = Mock()
@@ -239,51 +193,6 @@ def test_pending_approval_document_binds_exact_proposal() -> None:
     incident.collection.assert_called_once_with(firestore_client.APPROVALS_COLLECTION)
     incident.collection.return_value.document.assert_called_once_with("approval-1")
     approval_document.create.assert_called_once_with(approval.model_dump(mode="json"))
-
-
-def test_incident_evidence_append_rejects_duplicate_id() -> None:
-    client = Mock()
-    incident = Mock()
-    evidence_document = Mock()
-    client.collection.return_value.document.return_value = incident
-    incident.collection.return_value.document.return_value = evidence_document
-    evidence_document.create.side_effect = [None, AlreadyExists("duplicate evidence")]
-    evidence = {"event_id": "event-1", "kind": "binding.aggregate"}
-
-    firestore_client.append_incident_evidence(client, "incident-1", "evidence-1", evidence)
-    with pytest.raises(AlreadyExists):
-        firestore_client.append_incident_evidence(client, "incident-1", "evidence-1", evidence)
-
-    client.collection.assert_called_with(firestore_client.INCIDENTS_COLLECTION)
-    client.collection.return_value.document.assert_called_with("incident-1")
-    incident.collection.assert_called_with(firestore_client.EVIDENCE_COLLECTION)
-    incident.collection.return_value.document.assert_called_with("evidence-1")
-    assert evidence_document.create.call_count == 2
-    evidence_document.create.assert_called_with(evidence)
-
-
-def test_incident_occurrence_update_does_not_advance_evidence_revision() -> None:
-    client = Mock()
-    incident = Mock()
-    evidence_document = Mock()
-    client.collection.return_value.document.return_value = incident
-    incident.collection.return_value.document.return_value = evidence_document
-
-    firestore_client.increment_incident_occurrence(client, "incident-1", "evidence-1", 3)
-
-    client.collection.assert_called_once_with(firestore_client.INCIDENTS_COLLECTION)
-    client.collection.return_value.document.assert_called_once_with("incident-1")
-    incident.collection.assert_called_once_with(firestore_client.EVIDENCE_COLLECTION)
-    incident.collection.return_value.document.assert_called_once_with("evidence-1")
-    evidence_document.update.assert_called_once_with(
-        {"payload.occurrence_count": firestore_client.firestore.Increment(3)}
-    )
-    incident.update.assert_not_called()
-    assert firestore_client.next_evidence_revision(
-        7,
-        event_type="binding.aggregate",
-        observed_event_types=frozenset({"binding.aggregate"}),
-    ) == 7
 
 
 def test_incident_event_persist_is_atomic(monkeypatch) -> None:
