@@ -7,7 +7,7 @@ public static class DemoCalibration
 {
     // ponytail: This non-virtualized row and animation ceiling is demo-only; tune it only when three-run frame p95 no longer separates broken and fallback views.
     public const int DefaultPersonCount = 1_500;
-    public const int AnimatedRowCount = 64;
+    public const int AnimatedRowCount = 8;
 }
 
 public sealed record PersonViewModel(
