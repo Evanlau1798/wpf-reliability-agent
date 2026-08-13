@@ -70,3 +70,14 @@ def test_ci_runs_for_pull_requests_and_master_pushes() -> None:
     assert "  pull_request:" in workflow
     assert "  push:" in workflow
     assert "branches: [master]" in workflow
+
+
+def test_dotnet_test_projects_do_not_install_an_unused_coverage_collector() -> None:
+    package_versions = (REPO_ROOT / "Directory.Packages.props").read_text(encoding="utf-8")
+    project_files = [
+        REPO_ROOT / "src" / "windows" / "Reliability.Sensor.Tests" / "Reliability.Sensor.Tests.csproj",
+        REPO_ROOT / "src" / "windows" / "Demo.BrokenWpfApp.Tests" / "Demo.BrokenWpfApp.Tests.csproj",
+    ]
+
+    assert "coverlet.collector" not in package_versions
+    assert all("coverlet.collector" not in project.read_text(encoding="utf-8") for project in project_files)
