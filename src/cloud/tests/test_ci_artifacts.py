@@ -81,3 +81,16 @@ def test_dotnet_test_projects_do_not_install_an_unused_coverage_collector() -> N
 
     assert "coverlet.collector" not in package_versions
     assert all("coverlet.collector" not in project.read_text(encoding="utf-8") for project in project_files)
+
+
+def test_dotnet_packages_pin_nonvulnerable_dependency_lines() -> None:
+    package_versions = (REPO_ROOT / "Directory.Packages.props").read_text(encoding="utf-8")
+    sensor_project = (
+        REPO_ROOT / "src" / "windows" / "Reliability.Sensor" / "Reliability.Sensor.csproj"
+    ).read_text(encoding="utf-8")
+
+    assert 'Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.5"' in package_versions
+    assert 'Include="Microsoft.NET.Test.Sdk" Version="18.8.1"' in package_versions
+    assert 'Include="xunit" Version="2.9.3"' in package_versions
+    assert 'Include="xunit.runner.visualstudio" Version="3.1.5"' in package_versions
+    assert 'PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3"' in sensor_project
