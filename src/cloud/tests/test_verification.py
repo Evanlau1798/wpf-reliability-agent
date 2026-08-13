@@ -90,6 +90,32 @@ def test_frame_p95_delta_preserves_before_and_after_sample_confidence() -> None:
     assert delta.after_confidence == "HIGH"
 
 
+def test_frame_p95_delta_accepts_live_tool_and_recovery_wire_names() -> None:
+    before = {
+        "event_type": "tool.result",
+        "result": {
+            "result": {
+                "frame_statistics": {"sample_count": 120, "p95_ms": 48.0},
+                "sample_duration_ms": 2_000.0,
+                "confidence": "HIGH",
+            }
+        },
+    }
+    after = {
+        "payload": {
+            "frame_statistics": {"sample_count": 90, "p95_milliseconds": 18.0},
+            "performance_sample_duration_ms": 1_500.0,
+            "performance_confidence": 2,
+        }
+    }
+
+    delta = frame_p95_delta(before, after)
+
+    assert delta is not None
+    assert delta.p95 == MetricDelta(48.0, 18.0, -30.0)
+    assert delta.before_confidence == delta.after_confidence == "HIGH"
+
+
 def test_visual_count_delta_requires_same_exact_scope() -> None:
     before = {
         "app_session_id": "session-1",

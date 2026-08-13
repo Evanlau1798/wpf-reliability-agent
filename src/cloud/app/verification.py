@@ -98,7 +98,7 @@ def frame_p95_delta(
     after_payload = _payload(after_evidence)
     before_stats = _object(before_payload.get("frame_statistics"))
     after_stats = _object(after_payload.get("frame_statistics"))
-    before_p95 = _number(_first(before_stats, "p95_milliseconds", "P95Milliseconds"))
+    before_p95 = _number(_first(before_stats, "p95_ms", "p95_milliseconds", "P95Milliseconds"))
     after_p95 = _number(_first(after_stats, "p95_milliseconds", "P95Milliseconds"))
     before_count = _integer(_first(before_stats, "sample_count", "SampleCount"))
     after_count = _integer(_first(after_stats, "sample_count", "SampleCount"))
@@ -398,6 +398,8 @@ def _integer(value: object) -> int | None:
 
 
 def _confidence(value: object) -> str | None:
+    if type(value) is int:
+        return {0: "LOW", 1: "MEDIUM", 2: "HIGH"}.get(value)
     return value if value in {"LOW", "MEDIUM", "HIGH"} else None
 
 
