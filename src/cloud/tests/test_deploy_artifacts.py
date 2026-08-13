@@ -24,6 +24,8 @@ def test_deploy_script_parameterizes_project_region_and_resource_names() -> None
 def test_deploy_script_checks_gcloud_auth_project_and_build_permission_only() -> None:
     script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
 
+    assert "Get-Command gcloud.cmd -ErrorAction Stop" in script
+    assert "Set-Alias -Name gcloud -Value $GcloudCommand.Source -Scope Script" in script
     assert "Get-Command gcloud -ErrorAction Stop" in script
     assert "gcloud auth list" in script
     assert "gcloud projects describe $ProjectId" in script

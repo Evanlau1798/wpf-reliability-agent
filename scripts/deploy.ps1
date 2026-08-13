@@ -22,6 +22,8 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+$GcloudCommand = Get-Command gcloud.cmd -ErrorAction Stop
+Set-Alias -Name gcloud -Value $GcloudCommand.Source -Scope Script
 
 if (-not $BuildSourceBucket) {
     $BuildSourceBucket = "$ProjectId-reliability-build-source"
