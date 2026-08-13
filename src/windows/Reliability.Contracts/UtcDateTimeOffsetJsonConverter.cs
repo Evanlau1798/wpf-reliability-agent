@@ -12,9 +12,13 @@ public sealed class UtcDateTimeOffsetJsonConverter : JsonConverter<DateTimeOffse
 
     public override void Write(Utf8JsonWriter writer, DateTimeOffset value, JsonSerializerOptions options)
     {
-        var utc = value.UtcDateTime;
-        writer.WriteStringValue(utc.AddTicks(-(utc.Ticks % 10)));
+        writer.WriteStringValue(Format(value));
     }
+
+    internal static string Format(DateTimeOffset value) =>
+        value.UtcDateTime
+            .AddTicks(-(value.UtcTicks % 10))
+            .ToString("yyyy-MM-dd'T'HH:mm:ss.ffffff'Z'", System.Globalization.CultureInfo.InvariantCulture);
 }
 
 public sealed class NullableUtcDateTimeOffsetJsonConverter : JsonConverter<DateTimeOffset?>
@@ -34,7 +38,6 @@ public sealed class NullableUtcDateTimeOffsetJsonConverter : JsonConverter<DateT
             return;
         }
 
-        var utc = value.Value.UtcDateTime;
-        writer.WriteStringValue(utc.AddTicks(-(utc.Ticks % 10)));
+        writer.WriteStringValue(UtcDateTimeOffsetJsonConverter.Format(value.Value));
     }
 }

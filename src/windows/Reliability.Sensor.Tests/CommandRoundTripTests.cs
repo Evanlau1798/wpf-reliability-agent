@@ -9,6 +9,28 @@ namespace Reliability.Sensor.Tests;
 public sealed class CommandRoundTripTests
 {
     [Fact]
+    public void CommandResultTimestampsSerializeWithSixFractionalDigits()
+    {
+        var result = new CommandResult(
+            "1.0",
+            "command-1",
+            "incident-1",
+            "session-1",
+            ResultStatus.SUCCEEDED,
+            new DateTimeOffset(2026, 8, 13, 1, 0, 28, 298, TimeSpan.Zero).AddTicks(3_000),
+            new DateTimeOffset(2026, 8, 13, 1, 0, 28, 315, TimeSpan.Zero).AddTicks(7_770),
+            JsonSerializer.SerializeToElement(new { ok = true }),
+            new string('0', 64),
+            false,
+            null);
+
+        var json = JsonSerializer.Serialize(result, ContractJsonContext.Default.CommandResult);
+
+        Assert.Contains("\"started_at_utc\":\"2026-08-13T01:00:28.298300Z\"", json);
+        Assert.Contains("\"completed_at_utc\":\"2026-08-13T01:00:28.315777Z\"", json);
+    }
+
+    [Fact]
     public void CommandResultHashIgnoresSubMicrosecondTimestampTicks()
     {
         var startedAt = new DateTimeOffset(2026, 8, 10, 17, 7, 43, TimeSpan.Zero)
