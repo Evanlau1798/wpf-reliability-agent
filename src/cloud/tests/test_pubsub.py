@@ -107,7 +107,7 @@ def test_telemetry_publishes_work_after_durable_ingest(monkeypatch) -> None:
     assert order == ["commit", ("publish", "project-test", "incident-work", payload)]
 
 
-def test_publish_failure_keeps_ingest_accepted_and_logs_recovery_identifiers(monkeypatch) -> None:
+def test_publish_failure_requests_retry_and_logs_recovery_identifiers(monkeypatch) -> None:
     _set_required_environment(monkeypatch)
     output = io.StringIO()
     payload = {
@@ -137,8 +137,8 @@ def test_publish_failure_keeps_ingest_accepted_and_logs_recovery_identifiers(mon
         )
 
     log = output.getvalue()
-    assert response.status_code == 200
-    assert response.json()["accepted_event_ids"] == ["event-1"]
+    assert response.status_code == 503
+    assert response.json() == {"detail": "Work scheduling failed"}
     assert "pubsub_publish_failed" in log
     assert "incident-1" in log
     assert "event-1" in log

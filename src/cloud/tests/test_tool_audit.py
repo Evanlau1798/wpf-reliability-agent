@@ -1,4 +1,5 @@
 import json
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -79,7 +80,14 @@ def test_tool_result_writes_hash_and_command_reference_only(monkeypatch) -> None
     command = json.loads(
         (FIXTURES / "diagnostic-command-valid-read.json").read_text(encoding="utf-8")
     )
-    command.update({"status": CommandStatus.LEASED.value, "lease_owner": "device-a"})
+    now = datetime(2026, 8, 7, 0, 0, 30, tzinfo=UTC)
+    command.update(
+        {
+            "status": CommandStatus.LEASED.value,
+            "lease_owner": "device-a",
+            "lease_until": now + timedelta(seconds=15),
+        }
+    )
     command_document.get.return_value = Mock(exists=True, to_dict=lambda: command)
     incident_document.get.return_value = Mock(
         exists=True,
@@ -102,6 +110,7 @@ def test_tool_result_writes_hash_and_command_reference_only(monkeypatch) -> None
         command_id="command-read-1",
         lease_owner="device-a",
         result=result,
+        now=now,
     ) == (False, 6)
 
     audit_records = [
