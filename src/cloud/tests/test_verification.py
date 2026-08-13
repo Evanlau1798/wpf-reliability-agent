@@ -120,6 +120,29 @@ def test_visual_count_delta_requires_same_exact_scope() -> None:
     ) is None
 
 
+def test_visual_count_delta_accepts_a_truncated_before_lower_bound() -> None:
+    before = {
+        "app_session_id": "session-1",
+        "payload": {
+            "visual_count": 500,
+            "visual_count_truncated": True,
+            "visual_scope_id": "element-session-1-7",
+        },
+    }
+    after = {
+        "app_session_id": "session-1",
+        "payload": {
+            "visual_count": 52,
+            "visual_count_truncated": False,
+            "visual_scope_id": "element-session-1-7",
+        },
+    }
+
+    delta = visual_count_delta(before, after)
+
+    assert delta == MetricDelta(500.0, 52.0, -448.0)
+
+
 def test_mitigation_thresholds_are_fixture_locked_and_deterministic() -> None:
     fixture = json.loads((FIXTURES / "mitigation-thresholds.json").read_text(encoding="utf-8"))
     metrics = fixture["passing_metrics"]

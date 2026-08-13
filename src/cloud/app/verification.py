@@ -144,7 +144,7 @@ def visual_count_delta(
     after_scope = after_payload.get("visual_scope_id")
     if not isinstance(before_scope, str) or not before_scope or before_scope != after_scope:
         return None
-    if before_payload.get("visual_count_truncated") is not False:
+    if before_payload.get("visual_count_truncated") not in {False, True}:
         return None
     if after_payload.get("visual_count_truncated") is not False:
         return None
