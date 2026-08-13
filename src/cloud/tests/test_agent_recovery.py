@@ -3,8 +3,14 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import pytest
-from app.agent import SCHEMA_REPAIR_INSTRUCTION, build_root_agent, run_investigator_once
+from app.agent import (
+    SCHEMA_REPAIR_INSTRUCTION,
+    build_root_agent,
+    run_investigator_once,
+    validate_decision_proposed_action,
+)
 from app.correlation import AgentCorrelationContext, NormalizedEvidenceSummary
+from app.models import AgentDecision
 
 
 class Runner:
@@ -85,3 +91,24 @@ def test_invalid_recovery_proposal_without_exact_source_is_rejected() -> None:
 
     with pytest.raises(ValueError, match="ExperimentalPeopleGrid"):
         run([invalid.copy(), invalid.copy()], [binding])
+
+
+def test_supported_demo_fault_cannot_skip_required_mitigation() -> None:
+    decision = {
+        "schema_version": "1.0",
+        "decision": "NO_ACTION",
+        "hypotheses": [],
+        "stop_reason": "No action selected.",
+        "missing_evidence": [],
+    }
+    items = [
+        evidence("binding.aggregate"),
+        evidence("performance.sample"),
+        evidence("source.lookup_binding", "ExperimentalPeopleGrid"),
+    ]
+
+    with pytest.raises(ValueError, match="required ExperimentalPeopleGrid mitigation"):
+        validate_decision_proposed_action(
+            AgentDecision.model_validate(decision),
+            context(items),
+        )

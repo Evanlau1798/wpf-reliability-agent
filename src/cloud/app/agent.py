@@ -146,24 +146,31 @@ def validate_decision_proposed_action(
     context: AgentCorrelationContext | None = None,
 ) -> AgentDecision:
     proposal = decision.proposed_action
+    matching_bindings = [
+        item for item in context.evidence
+        if item.kind == "binding.aggregate"
+        and item.binding_path == "DisplayNmae"
+        and item.target_property == "Text"
+    ] if context is not None else []
+    matching_sources = [
+        item for item in context.evidence
+        if item.kind == DiagnosticTool.SOURCE_LOOKUP_BINDING.value
+        and item.binding_path == "DisplayNmae"
+        and item.target_property == "Text"
+        and item.nearest_named_ancestor == "ExperimentalPeopleGrid"
+    ] if context is not None else []
+    matching_performance = [
+        item for item in context.evidence
+        if item.kind == DiagnosticTool.PERFORMANCE_SAMPLE.value
+        and item.app_session_id in {binding.app_session_id for binding in matching_bindings}
+    ] if context is not None else []
+    if matching_bindings and len(matching_sources) == 1 and matching_performance and proposal is None:
+        raise ValueError("Decision skipped the required ExperimentalPeopleGrid mitigation")
     if proposal is None:
         return decision
     try:
         validate_recovery_proposal(proposal)
     except ValueError:
-        matching_bindings = [
-            item for item in context.evidence
-            if item.kind == "binding.aggregate"
-            and item.binding_path == "DisplayNmae"
-            and item.target_property == "Text"
-        ] if context is not None else []
-        matching_sources = [
-            item for item in context.evidence
-            if item.kind == DiagnosticTool.SOURCE_LOOKUP_BINDING.value
-            and item.binding_path == "DisplayNmae"
-            and item.target_property == "Text"
-            and item.nearest_named_ancestor == "ExperimentalPeopleGrid"
-        ] if context is not None else []
         if not matching_bindings or len(matching_sources) != 1:
             raise
         proposal.arguments = {
