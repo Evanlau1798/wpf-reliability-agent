@@ -355,7 +355,7 @@ def test_occurrence_only_evidence_update_does_not_stale_approval(monkeypatch) ->
 def test_material_evidence_update_stales_approval_before_command(monkeypatch) -> None:
     client, transaction, _ = _approval_client(
         _approval_document(),
-        evidence=[("evidence-1", "a" * 64), ("evidence-2", "b" * 64)],
+        evidence=[("evidence-1", "b" * 64)],
     )
     monkeypatch.setattr(firestore_client.firestore, "transactional", lambda callback: callback)
 
@@ -434,7 +434,7 @@ def _approval_client(
                 "payload": {"occurrence_count": occurrence_count},
             },
         )
-        for evidence_id, evidence_hash in (evidence or [("evidence-1", "a" * 64)])
+        for evidence_id, evidence_hash in (evidence or [("evidence-1", "a" * 64), ("later", "b" * 64)])
     ]
     snapshot.reference.parent.parent = incident_document
     evidence_collection = incident_document.collection.return_value
@@ -480,9 +480,8 @@ def _approval_document(
         "approval_id": "approval-1",
         "incident_id": "incident-1",
         "proposal_version": 3,
-        "evidence_snapshot_hash": firestore_client.evidence_snapshot_hash(
-            [("evidence-1", "a" * 64)]
-        ),
+        "evidence_ids": ["evidence-1"],
+        "evidence_snapshot_hash": firestore_client.evidence_snapshot_hash([("evidence-1", "a" * 64)]),
         "action_id": "action-1",
         "tool": "recovery.set_feature_flag",
         "canonical_arguments": canonical_arguments,

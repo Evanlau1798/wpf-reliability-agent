@@ -51,7 +51,7 @@ def create_pending_approval(
         schema_version="1.0",
         approval_id=approval_id,
         incident_id=incident_id,
-        proposal_version=proposal_version,
+        proposal_version=proposal_version, evidence_ids=proposal.evidence_ids,
         evidence_snapshot_hash=evidence_snapshot_hash_value,
         action_id=action_id,
         tool=proposal.tool,
@@ -318,7 +318,8 @@ def _validate_pending_approval_in_transaction(
         evidence_hash = evidence.get("evidence_hash")
         if not isinstance(evidence_hash, str):
             raise ValueError("Incident evidence hash is invalid")
-        material_evidence.append((evidence_snapshot.id, evidence_hash))
+        if evidence_snapshot.id in approval.evidence_ids:
+            material_evidence.append((evidence_snapshot.id, evidence_hash))
     if evidence_snapshot_hash(material_evidence) != approval.evidence_snapshot_hash:
         raise ValueError("Approval evidence snapshot mismatch")
     if sha256_canonical(approval.canonical_arguments) != approval.canonical_arguments_hash:

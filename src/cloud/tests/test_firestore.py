@@ -218,6 +218,7 @@ def test_pending_approval_document_binds_exact_proposal() -> None:
         "approval_id": "approval-1",
         "incident_id": "incident-1",
         "proposal_version": 3,
+        "evidence_ids": proposal.evidence_ids,
         "evidence_snapshot_hash": "1" * 64,
         "action_id": "action-1",
         "tool": "recovery.set_feature_flag",

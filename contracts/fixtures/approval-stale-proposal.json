@@ -3,6 +3,7 @@
   "approval_id": "approval-stale-1",
   "incident_id": "incident-1",
   "proposal_version": 0,
+  "evidence_ids": ["evidence-1"],
   "evidence_snapshot_hash": "6666666666666666666666666666666666666666666666666666666666666666",
   "action_id": "action-1",
   "tool": "recovery.set_feature_flag",

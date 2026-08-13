@@ -261,6 +261,7 @@ class ApprovalRecord(ContractModel):
     approval_id: Identifier
     incident_id: Identifier
     proposal_version: int = Field(ge=1)
+    evidence_ids: list[Identifier] = Field(min_length=1, max_length=20)
     evidence_snapshot_hash: Hash
     action_id: Identifier
     tool: Literal[DiagnosticTool.RECOVERY_SET_FEATURE_FLAG]

@@ -78,7 +78,8 @@ def commit_proposed_action_run(
                 raise ValueError("Incident evidence hash is invalid")
             evidence_id = str(evidence_snapshot.id)
             evidence_ids.add(evidence_id)
-            material_evidence.append((evidence_id, evidence_hash))
+            if evidence_id in proposal.evidence_ids:
+                material_evidence.append((evidence_id, evidence_hash))
         if not set(proposal.evidence_ids).issubset(evidence_ids):
             raise ValueError("Proposal evidence does not exist")
 
@@ -98,6 +99,7 @@ def commit_proposed_action_run(
             approval_id=approval_id,
             incident_id=incident_id,
             proposal_version=next_version,
+            evidence_ids=proposal.evidence_ids,
             evidence_snapshot_hash=evidence_hash,
             action_id=action_id,
             tool=proposal.tool,
