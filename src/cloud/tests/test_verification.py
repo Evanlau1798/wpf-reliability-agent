@@ -173,6 +173,25 @@ def test_main_before_after_fixture_verifies_mitigation() -> None:
     assert audit["metrics"]["binding_errors_per_second"]["delta"] == -4.8
 
 
+def test_performance_tool_result_is_used_as_pre_action_baseline() -> None:
+    fixture = json.loads((FIXTURES / "post-action-mitigation.json").read_text(encoding="utf-8"))
+    evidence = fixture["evidence"]
+    baseline = next(item for item in evidence if item["evidence_id"] == "performance-before")
+    baseline["event_type"] = "tool.result"
+    baseline["tool"] = "performance.sample"
+    baseline["result"] = {
+        "status": "SUCCEEDED",
+        "completed_at_utc": baseline.pop("timestamp_utc"),
+        "result": baseline.pop("payload"),
+    }
+
+    result = evaluate_post_action_verification(evidence, "post-1")
+
+    assert result is not None
+    assert result.before_performance_evidence_id == "performance-before"
+    assert meets_mitigation_thresholds(result.binding, result.performance, result.visual)
+
+
 def test_inconclusive_audit_keeps_post_and_action_binding_without_success_metrics() -> None:
     evidence = [
         {

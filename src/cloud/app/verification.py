@@ -256,8 +256,15 @@ def evaluate_post_action_verification(
             observed_at = _timestamp(_payload(item).get("last_seen_utc"))
             if observed_at is not None and observed_at <= action_started:
                 binding_candidates.append((observed_at, item))
-        elif item.get("event_type") == "performance.sample":
-            observed_at = _timestamp(item.get("timestamp_utc"))
+        elif (
+            item.get("event_type") == "performance.sample"
+            or item.get("event_type") == "tool.result"
+            and item.get("tool") == "performance.sample"
+            and _object(item.get("result")).get("status") == "SUCCEEDED"
+        ):
+            observed_at = _timestamp(
+                item.get("timestamp_utc") or _object(item.get("result")).get("completed_at_utc")
+            )
             if observed_at is not None and observed_at <= action_started:
                 performance_candidates.append((observed_at, item))
     if not binding_candidates or not performance_candidates:
@@ -365,6 +372,8 @@ def build_regression_verification_audit(
 
 
 def _payload(evidence: dict[str, object]) -> dict[str, object]:
+    if evidence.get("event_type") == "tool.result":
+        return _object(_object(evidence.get("result")).get("result"))
     payload = evidence.get("payload")
     return payload if isinstance(payload, dict) else {}
 
