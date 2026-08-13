@@ -62,4 +62,35 @@ public sealed class RecoveryActionTests
             [RecoveryAction.DisableExperimentalPeopleGrid],
             Enum.GetValues<RecoveryAction>());
     }
+
+    [Fact]
+    public void ApprovedRecoveryStopsTheRenderingFault()
+    {
+        Exception? failure = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                var window = new MainWindow();
+                Assert.True(window.IsRenderingFaultActive);
+
+                var result = window.ApplyRecoveryAction(
+                    RecoveryAction.DisableExperimentalPeopleGrid,
+                    expectedCurrentState: true);
+
+                Assert.Equal(RecoveryStatus.APPLIED, result.Status);
+                Assert.False(window.IsRenderingFaultActive);
+                window.Close();
+            }
+            catch (Exception exception)
+            {
+                failure = exception;
+            }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+
+        Assert.True(thread.Join(TimeSpan.FromSeconds(10)));
+        Assert.Null(failure);
+    }
 }

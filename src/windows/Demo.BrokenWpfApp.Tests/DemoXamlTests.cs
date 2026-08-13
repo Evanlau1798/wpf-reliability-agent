@@ -25,9 +25,6 @@ public sealed class DemoXamlTests
     public void DemoHasBoundedAnimationAndNoAgentSubmissionButton()
     {
         Assert.Contains("IsAnimated", Xaml, StringComparison.Ordinal);
-        Assert.Contains("RepeatBehavior=\"Forever\"", Xaml, StringComparison.Ordinal);
-        Assert.Contains("Storyboard.TargetProperty=\"Padding\"", Xaml, StringComparison.Ordinal);
-        Assert.Contains("ThicknessAnimation", Xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("Send to Agent", Xaml, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Submit to Agent", Xaml, StringComparison.OrdinalIgnoreCase);
     }

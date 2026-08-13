@@ -12,6 +12,7 @@ public partial class MainWindow : Window
         DemoDataGenerator.Generate(DemoCalibration.DefaultPersonCount, seed: 1729);
     private readonly ExperimentalPeopleGridState _featureState = new();
     private readonly RecoveryActionRegistry _recoveryActions = new();
+    private readonly DispatcherTimer _renderingFaultTimer;
     private readonly ReliabilitySensor? _sensor;
     private bool _bindingProbeCompleted;
 
@@ -23,6 +24,13 @@ public partial class MainWindow : Window
     {
         _sensor = sensor;
         InitializeComponent();
+        _renderingFaultTimer = new DispatcherTimer(
+            TimeSpan.FromMilliseconds(DemoCalibration.RenderingFaultIntervalMilliseconds),
+            DispatcherPriority.Render,
+            (_, _) => Thread.Sleep(DemoCalibration.RenderingFaultDelayMilliseconds),
+            Dispatcher);
+        _renderingFaultTimer.Start();
+        Closed += (_, _) => _renderingFaultTimer.Stop();
         _recoveryActions.Register(
             RecoveryAction.DisableExperimentalPeopleGrid,
             _featureState.Disable);
@@ -56,15 +64,22 @@ public partial class MainWindow : Window
         return result;
     }
 
+    public bool IsRenderingFaultActive => _renderingFaultTimer.IsEnabled;
+
     private void ResetDemo_Click(object sender, RoutedEventArgs e)
     {
         _featureState.Enable();
+        _renderingFaultTimer.Start();
         RefreshView();
     }
 
     private void RefreshView()
     {
         var isEnabled = _featureState.IsEnabled;
+        if (!isEnabled)
+        {
+            _renderingFaultTimer.Stop();
+        }
         ExperimentalPeopleGrid.ItemsSource = isEnabled ? _people : null;
         ExperimentalPeopleGrid.Visibility = isEnabled ? Visibility.Visible : Visibility.Collapsed;
         FallbackView.Visibility = isEnabled ? Visibility.Collapsed : Visibility.Visible;

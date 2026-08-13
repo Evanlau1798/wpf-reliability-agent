@@ -67,10 +67,10 @@
                                                 <DataTrigger Binding="{Binding IsAnimated}" Value="True">
                                                     <DataTrigger.EnterActions>
                                                         <BeginStoryboard>
-                                                            <Storyboard AutoReverse="True" RepeatBehavior="Forever">
-                                                                <ThicknessAnimation Storyboard.TargetProperty="Padding"
-                                                                                    To="12,16"
-                                                                                    Duration="0:0:0.35" />
+                                                            <Storyboard AutoReverse="True" RepeatBehavior="3x">
+                                                                <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                                                 To="0.55"
+                                                                                 Duration="0:0:0.35" />
                                                             </Storyboard>
                                                         </BeginStoryboard>
                                                     </DataTrigger.EnterActions>
