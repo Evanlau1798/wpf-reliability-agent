@@ -1,5 +1,6 @@
 import hashlib
 import hmac
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 from app import auth, firestore_client
@@ -36,6 +37,7 @@ def test_operator_login_validates_token_from_environment(monkeypatch) -> None:
     assert "Secure" in set_cookie
     assert "SameSite=strict" in set_cookie
     assert "Path=/" in set_cookie
+    assert f"Max-Age={auth.OPERATOR_SESSION_MAX_AGE_SECONDS}" in set_cookie
     csrf_cookie = response.cookies.get(auth.OPERATOR_CSRF_COOKIE)
     assert csrf_cookie is not None
     assert len(csrf_cookie) >= 32
@@ -48,6 +50,16 @@ def test_operator_login_validates_token_from_environment(monkeypatch) -> None:
     assert "Secure" in csrf_set_cookie
     assert "SameSite=strict" in csrf_set_cookie
     assert "Path=/" in csrf_set_cookie
+
+
+def test_operator_session_rejects_expired_and_future_values() -> None:
+    secret = auth.SecretStr("operator-secret")
+    issued_at = datetime(2026, 8, 13, tzinfo=UTC)
+    cookie = auth.create_operator_session_value(secret, now=issued_at)
+
+    assert auth.is_operator_session_valid(cookie, secret, now=issued_at + timedelta(minutes=14))
+    assert not auth.is_operator_session_valid(cookie, secret, now=issued_at + timedelta(minutes=16))
+    assert not auth.is_operator_session_valid(cookie, secret, now=issued_at - timedelta(seconds=1))
 
 
 def test_operator_login_rejects_invalid_token(monkeypatch) -> None:

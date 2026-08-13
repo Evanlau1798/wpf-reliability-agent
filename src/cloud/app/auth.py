@@ -1,5 +1,6 @@
 import hashlib
 import hmac
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request, status
@@ -10,6 +11,7 @@ from pydantic import BaseModel, Field, SecretStr
 bearer_scheme = HTTPBearer(auto_error=False)
 OPERATOR_SESSION_COOKIE = "__Host-wpfra-operator-session"
 OPERATOR_SESSION_PAYLOAD = "operator-session-v1"
+OPERATOR_SESSION_MAX_AGE_SECONDS = 15 * 60
 OPERATOR_CSRF_COOKIE = "__Host-wpfra-csrf"
 OPERATOR_CSRF_HEADER = "X-CSRF-Token"
 
@@ -59,21 +61,45 @@ def authenticate_operator_token(request: Request, login: OperatorLoginRequest) -
     return expected
 
 
-def create_operator_session_value(secret: SecretStr) -> str:
+def create_operator_session_value(secret: SecretStr, *, now: datetime | None = None) -> str:
+    issued_at = int((now or datetime.now(UTC)).timestamp())
+    payload = f"{OPERATOR_SESSION_PAYLOAD}.{issued_at}"
     signature = hmac.new(
         secret.get_secret_value().encode("utf-8"),
-        OPERATOR_SESSION_PAYLOAD.encode("utf-8"),
+        payload.encode("utf-8"),
         hashlib.sha256,
     ).hexdigest()
-    return f"{OPERATOR_SESSION_PAYLOAD}.{signature}"
+    return f"{payload}.{signature}"
+
+
+def is_operator_session_valid(
+    cookie: str,
+    secret: SecretStr,
+    *,
+    now: datetime | None = None,
+) -> bool:
+    try:
+        payload, issued_at_value, signature = cookie.rsplit(".", 2)
+        issued_at = int(issued_at_value)
+    except ValueError:
+        return False
+    expected = hmac.new(
+        secret.get_secret_value().encode("utf-8"),
+        f"{payload}.{issued_at_value}".encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    age = int((now or datetime.now(UTC)).timestamp()) - issued_at
+    return (
+        payload == OPERATOR_SESSION_PAYLOAD
+        and 0 <= age <= OPERATOR_SESSION_MAX_AGE_SECONDS
+        and hmac.compare_digest(signature, expected)
+    )
 
 
 def authenticate_operator_session(request: Request) -> str:
     secret = request.app.state.settings.demo_operator_token
     cookie = request.cookies.get(OPERATOR_SESSION_COOKIE)
-    if secret is None or cookie is None or not hmac.compare_digest(
-        cookie, create_operator_session_value(secret)
-    ):
+    if secret is None or cookie is None or not is_operator_session_valid(cookie, secret):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid operator session",

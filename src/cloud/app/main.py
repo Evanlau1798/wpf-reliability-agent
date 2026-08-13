@@ -15,6 +15,7 @@ from app.approval import ApprovalDecisionRequest
 from app.auth import (
     OPERATOR_CSRF_COOKIE,
     OPERATOR_SESSION_COOKIE,
+    OPERATOR_SESSION_MAX_AGE_SECONDS,
     authenticate_device_token,
     authenticate_operator_session,
     authenticate_operator_token,
@@ -83,6 +84,7 @@ def operator_login(
         secure=True,
         samesite="strict",
         path="/",
+        max_age=OPERATOR_SESSION_MAX_AGE_SECONDS,
     )
     response.set_cookie(
         key=OPERATOR_CSRF_COOKIE,
@@ -91,6 +93,7 @@ def operator_login(
         secure=True,
         samesite="strict",
         path="/",
+        max_age=OPERATOR_SESSION_MAX_AGE_SECONDS,
     )
     return response
 
