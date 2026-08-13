@@ -1,3 +1,4 @@
+import json
 from html import escape
 from typing import Annotated, Any
 
@@ -132,6 +133,7 @@ async def run_reporter_once(
             return validate_reporter_output(reporter_input, report)
         except (RuntimeError, ValueError):
             return build_fallback_report(
+                reporter_input=reporter_input,
                 incident_id=incident_id,
                 severity=severity,
                 model_id=model_id,
@@ -166,6 +168,7 @@ async def _run_reporter_message(
 
 def build_fallback_report(
     *,
+    reporter_input: ReporterInput,
     incident_id: str,
     severity: Severity,
     model_id: str,
@@ -173,6 +176,30 @@ def build_fallback_report(
     policy_version: str,
     reuse_revision: str,
 ) -> IncidentReport:
+    mitigation = _fallback_mitigation(reporter_input)
+    if mitigation is not None:
+        approval, verification, metrics, evidence = mitigation
+        return IncidentReport.model_validate(
+            {
+                "schema_version": "1.0",
+                "incident_id": incident_id,
+                "status": IncidentStatus.MITIGATED,
+                "severity": severity,
+                "confidence": Confidence.HIGH,
+                "timeline": [],
+                "evidence": evidence,
+                "claims": [],
+                "temporary_mitigation": {
+                    "action_id": approval["action_id"],
+                    "tool": approval["tool"],
+                    "approval_id": approval["approval_id"],
+                },
+                "verification": metrics,
+                "metadata": _fallback_metadata(
+                    model_id, prompt_version, policy_version, reuse_revision
+                ),
+            }
+        )
     return IncidentReport.model_validate(
         {
             "schema_version": "1.0",
@@ -184,15 +211,85 @@ def build_fallback_report(
             "evidence": [],
             "claims": [],
             "verification": [],
-            "metadata": {
-                "model_id": model_id,
-                "prompt_version": prompt_version,
-                "schema_version": "1.0",
-                "policy_version": policy_version,
-                "reuse_revision": reuse_revision,
-            },
+            "metadata": _fallback_metadata(model_id, prompt_version, policy_version, reuse_revision),
         }
     )
+
+
+def _fallback_mitigation(
+    reporter_input: ReporterInput,
+) -> tuple[dict[str, str], dict[str, object], list[dict[str, object]], list[dict[str, str]]] | None:
+    if len(reporter_input.approvals) != 1 or len(reporter_input.verification) != 1:
+        return None
+    approval = _summary_json(reporter_input.approvals[0])
+    verification = _summary_json(reporter_input.verification[0])
+    if (
+        approval.get("status") != "APPROVED"
+        or approval.get("tool") != "recovery.set_feature_flag"
+        or verification.get("outcome") != "MITIGATED"
+        or approval.get("action_id") != verification.get("action_id")
+    ):
+        return None
+    records = reporter_input.evidence + reporter_input.tools
+    evidence = [
+        {"evidence_id": item.reference, "kind": item.kind, "summary": item.summary}
+        for item in records
+    ]
+    known_ids = {item["evidence_id"] for item in evidence}
+    evidence_ids = verification.get("evidence_ids")
+    metrics = verification.get("metrics")
+    if not isinstance(evidence_ids, list) or not isinstance(metrics, dict):
+        return None
+    referenced = [item for item in evidence_ids if isinstance(item, str) and item in known_ids]
+    rendered_metrics = [
+        {
+            "metric_name": name,
+            "before": metric.get("before"),
+            "after": metric.get("after"),
+            "unit": metric.get("unit"),
+            "evidence_ids": referenced,
+        }
+        for name, metric in metrics.items()
+        if isinstance(name, str)
+        and isinstance(metric, dict)
+        and isinstance(metric.get("before"), (int, float))
+        and isinstance(metric.get("after"), (int, float))
+        and isinstance(metric.get("unit"), str)
+        and referenced
+    ]
+    action_id = approval.get("action_id")
+    if not rendered_metrics or not isinstance(action_id, str):
+        return None
+    return (
+        {
+            "approval_id": reporter_input.approvals[0].reference,
+            "action_id": action_id,
+            "tool": "recovery.set_feature_flag",
+        },
+        verification,
+        rendered_metrics,
+        evidence,
+    )
+
+
+def _summary_json(record: FinalizedReporterRecord) -> dict[str, object]:
+    try:
+        value = json.loads(record.summary)
+    except json.JSONDecodeError:
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def _fallback_metadata(
+    model_id: str, prompt_version: str, policy_version: str, reuse_revision: str
+) -> dict[str, str]:
+    return {
+        "model_id": model_id,
+        "prompt_version": prompt_version,
+        "schema_version": "1.0",
+        "policy_version": policy_version,
+        "reuse_revision": reuse_revision,
+    }
 
 
 def persist_report_json(client: Any, report: IncidentReport, *, version: str) -> None:

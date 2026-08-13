@@ -441,7 +441,7 @@ def _approval_record(reference: str, data: dict[str, object]) -> FinalizedReport
 def _verification_record(reference: str, data: dict[str, object]) -> FinalizedReporterRecord:
     summary = {
         key: data.get(key)
-        for key in ("outcome", "command_id", "action_id", "verification_hash")
+        for key in ("outcome", "command_id", "action_id", "verification_hash", "evidence_ids", "metrics")
         if data.get(key) is not None
     }
     related = [

@@ -182,6 +182,58 @@ def test_reporter_repairs_schema_once_then_uses_deterministic_fallback() -> None
     assert report.metadata.reuse_revision == "9" * 40
 
 
+def test_reporter_fallback_preserves_finalized_mitigation() -> None:
+    from app.models import Severity
+    from app.reporting import FinalizedReporterRecord, ReporterInput, build_fallback_report
+
+    def record(reference: str, kind: str, summary: dict[str, object]):
+        return FinalizedReporterRecord(
+            reference=reference,
+            kind=kind,
+            summary=json.dumps(summary),
+            payload_hash="a" * 64,
+            timestamp_utc="2026-08-08T06:00:00Z",
+        )
+
+    reporter_input = ReporterInput(
+        evidence=[record("binding-before", "binding.aggregate", {"occurrence_count": 49})],
+        tools=[],
+        approvals=[record("approval-1", "approval", {
+            "status": "APPROVED",
+            "tool": "recovery.set_feature_flag",
+            "action_id": "action-1",
+        })],
+        verification=[record("audit-9", "mutation.verification", {
+            "outcome": "MITIGATED",
+            "action_id": "action-1",
+            "evidence_ids": ["binding-before"],
+            "metrics": {
+                "binding_errors_per_second": {
+                    "before": 4.9,
+                    "after": 0.0,
+                    "unit": "errors_per_second",
+                }
+            },
+        })],
+    )
+
+    report = build_fallback_report(
+        reporter_input=reporter_input,
+        incident_id="incident-1",
+        severity=Severity.ERROR,
+        model_id="gemini-test",
+        prompt_version="1",
+        policy_version="1",
+        reuse_revision="9" * 40,
+    )
+
+    assert report.status.value == "MITIGATED"
+    assert report.temporary_mitigation is not None
+    assert report.temporary_mitigation.approval_id == "approval-1"
+    assert report.verification[0].before == 4.9
+    assert report.verification[0].after == 0.0
+
+
 def test_report_json_persistence_keeps_required_metadata() -> None:
     from app.contracts import sha256_canonical
     from app.models import IncidentReport

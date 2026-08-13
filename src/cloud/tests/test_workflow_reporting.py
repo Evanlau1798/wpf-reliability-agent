@@ -233,6 +233,14 @@ def test_reporter_input_is_built_only_from_finalized_ledgers() -> None:
             "action_id": "action-1",
             "verification_hash": "7" * 64,
             "outcome": "MITIGATED",
+            "evidence_ids": ["evidence-1", "command-1"],
+            "metrics": {
+                "binding_errors_per_second": {
+                    "before": 4.9,
+                    "after": 0.0,
+                    "unit": "errors_per_second",
+                }
+            },
         })
     ]
 
@@ -243,6 +251,8 @@ def test_reporter_input_is_built_only_from_finalized_ledgers() -> None:
     assert [item.reference for item in reporter_input.approvals] == ["approval-1"]
     assert [item.reference for item in reporter_input.verification] == ["9"]
     assert reporter_input.verification[0].kind == "mutation.verification"
+    assert '"evidence_ids"' in reporter_input.verification[0].summary
+    assert '"metrics"' in reporter_input.verification[0].summary
 
 
 def test_report_commit_persists_hash_and_closes_atomically(monkeypatch) -> None:
