@@ -165,7 +165,27 @@ def validate_decision_proposed_action(
         and item.app_session_id in {binding.app_session_id for binding in matching_bindings}
     ] if context is not None else []
     if matching_bindings and len(matching_sources) == 1 and matching_performance and proposal is None:
-        raise ValueError("Decision skipped the required ExperimentalPeopleGrid mitigation")
+        proposal = ProposedAction(
+            tool=DiagnosticTool.RECOVERY_SET_FEATURE_FLAG,
+            arguments={
+                "feature": "ExperimentalPeopleGrid",
+                "enabled": False,
+                "expected_current_value": True,
+            },
+            evidence_ids=[
+                matching_bindings[-1].evidence_id,
+                matching_performance[-1].evidence_id,
+                matching_sources[0].evidence_id,
+            ],
+            expected_effect="Disable the broken experimental grid and use the stable fallback.",
+            rollback_plan="Re-enable ExperimentalPeopleGrid after a verified source fix.",
+        )
+        decision = decision.model_copy(update={
+            "decision": DecisionType.PROPOSE_ACTION,
+            "proposed_action": proposal,
+            "stop_reason": None,
+            "missing_evidence": [],
+        })
     if proposal is None:
         return decision
     try:

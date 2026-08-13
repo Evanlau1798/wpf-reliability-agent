@@ -107,8 +107,20 @@ def test_supported_demo_fault_cannot_skip_required_mitigation() -> None:
         evidence("source.lookup_binding", "ExperimentalPeopleGrid"),
     ]
 
-    with pytest.raises(ValueError, match="required ExperimentalPeopleGrid mitigation"):
-        validate_decision_proposed_action(
-            AgentDecision.model_validate(decision),
-            context(items),
-        )
+    normalized = validate_decision_proposed_action(
+        AgentDecision.model_validate(decision),
+        context(items),
+    )
+
+    assert normalized.decision.value == "PROPOSE_ACTION"
+    assert normalized.proposed_action is not None
+    assert normalized.proposed_action.arguments == {
+        "feature": "ExperimentalPeopleGrid",
+        "enabled": False,
+        "expected_current_value": True,
+    }
+    assert set(normalized.proposed_action.evidence_ids) == {
+        "binding.aggregate-1",
+        "performance.sample-1",
+        "source.lookup_binding-1",
+    }
