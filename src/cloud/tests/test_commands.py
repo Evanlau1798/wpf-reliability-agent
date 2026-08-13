@@ -21,6 +21,7 @@ from app.models import CommandResult, DiagnosticCommand
 
 
 FIXTURES = Path(__file__).parents[3] / "contracts" / "fixtures"
+COMMAND_NOW = datetime(2026, 8, 7, 0, 0, 30, tzinfo=UTC)
 
 
 def test_command_statuses_match_p0_lifecycle() -> None:
@@ -190,7 +191,7 @@ def test_lease_conflict_returns_command_to_only_one_caller(monkeypatch) -> None:
     payload["expires_at_utc"] = "2026-08-07T00:10:00Z"
     snapshot.to_dict.return_value = payload
     client.transaction.return_value = transaction
-    transaction.get.side_effect = [iter([snapshot]), iter([])]
+    transaction.get.side_effect = [iter([snapshot]), iter([]), iter([])]
     monkeypatch.setattr(commands.firestore, "transactional", lambda callback: callback)
     now = datetime(2026, 8, 7, 0, 2, tzinfo=UTC)
 
@@ -303,7 +304,7 @@ def test_same_command_result_resubmission_is_idempotent(monkeypatch) -> None:
     command = json.loads(
         (FIXTURES / "diagnostic-command-valid-read.json").read_text(encoding="utf-8")
     )
-    command.update({"status": CommandStatus.LEASED.value, "lease_owner": "device-a"})
+    command.update({"status": CommandStatus.LEASED.value, "lease_owner": "device-a", "lease_until": COMMAND_NOW + timedelta(seconds=15)})
     result = CommandResult.model_validate_json(
         (FIXTURES / "command-result-success.json").read_text(encoding="utf-8")
     )
@@ -333,13 +334,13 @@ def test_same_command_result_resubmission_is_idempotent(monkeypatch) -> None:
         client,
         command_id="command-read-1",
         lease_owner="device-a",
-        result=result,
+        result=result, now=COMMAND_NOW,
     )
     replay = complete_command_once(
         client,
         command_id="command-read-1",
         lease_owner="device-a",
-        result=result,
+        result=result, now=COMMAND_NOW,
     )
 
     assert first == (False, 6)
@@ -373,7 +374,7 @@ def test_conflicting_command_result_is_rejected_without_overwrite(monkeypatch) -
             client,
             command_id="command-read-1",
             lease_owner="device-a",
-            result=conflicting,
+            result=conflicting, now=COMMAND_NOW,
         )
 
     transaction.update.assert_not_called()
@@ -399,7 +400,7 @@ def test_source_lookup_completion_persists_source_code_evidence(monkeypatch) -> 
     command = json.loads(
         (FIXTURES / "diagnostic-command-valid-read.json").read_text(encoding="utf-8")
     )
-    command.update({"status": CommandStatus.LEASED.value, "lease_owner": "device-a", "tool": "source.lookup_binding"})
+    command.update({"status": CommandStatus.LEASED.value, "lease_owner": "device-a", "lease_until": COMMAND_NOW + timedelta(seconds=15), "tool": "source.lookup_binding"})
     command_document.get.return_value = Mock(exists=True, to_dict=lambda: command)
     incident_document.get.return_value = Mock(
         exists=True,
@@ -420,7 +421,7 @@ def test_source_lookup_completion_persists_source_code_evidence(monkeypatch) -> 
         client,
         command_id="command-read-1",
         lease_owner="device-a",
-        result=result,
+        result=result, now=COMMAND_NOW,
     )
 
     assert replay == (False, 6)
@@ -458,7 +459,7 @@ def test_successful_mutation_completion_marks_verification_pending(monkeypatch) 
     command = json.loads(
         (FIXTURES / "diagnostic-command-valid-mutation.json").read_text(encoding="utf-8")
     )
-    command.update({"status": CommandStatus.LEASED.value, "lease_owner": "device-a"})
+    command.update({"status": CommandStatus.LEASED.value, "lease_owner": "device-a", "lease_until": COMMAND_NOW + timedelta(seconds=15)})
     command_document.get.return_value = Mock(exists=True, to_dict=lambda: command)
     incident = {
         "app_session_id": "session-1",
@@ -485,7 +486,7 @@ def test_successful_mutation_completion_marks_verification_pending(monkeypatch) 
         client,
         command_id=command["command_id"],
         lease_owner="device-a",
-        result=result,
+        result=result, now=COMMAND_NOW,
     )
 
     incident_updates = [call.args[1] for call in transaction.update.call_args_list]

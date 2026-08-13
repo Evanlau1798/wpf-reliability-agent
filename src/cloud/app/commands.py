@@ -99,12 +99,20 @@ def expire_command_if_needed(
     return expire(client.transaction())
 
 
-def pending_command_query(client: firestore.Client, app_session_id: str):
+def command_status_query(
+    client: firestore.Client,
+    app_session_id: str,
+    status: CommandStatus,
+):
     return client.collection(COMMANDS_COLLECTION).where(
-        filter=FieldFilter("status", "==", CommandStatus.PENDING.value)
+        filter=FieldFilter("status", "==", status.value)
     ).where(
         filter=FieldFilter("target_app_session_id", "==", app_session_id)
     ).order_by("issued_at_utc").order_by("__name__").limit(1)
+
+
+def pending_command_query(client: firestore.Client, app_session_id: str):
+    return command_status_query(client, app_session_id, CommandStatus.PENDING)
 
 
 def lease_next_command(
@@ -119,11 +127,14 @@ def lease_next_command(
         raise ValueError("Lease owner is required")
     if duration <= timedelta(0):
         raise ValueError("Lease duration must be positive")
-    query = pending_command_query(client, app_session_id)
+    pending_query = pending_command_query(client, app_session_id)
+    leased_query = command_status_query(client, app_session_id, CommandStatus.LEASED)
 
     @firestore.transactional
     def lease(transaction: firestore.Transaction) -> DiagnosticCommand | None:
-        snapshot = next(transaction.get(query), None)
+        snapshot = next(transaction.get(leased_query), None)
+        if snapshot is None:
+            snapshot = next(transaction.get(pending_query), None)
         if snapshot is None:
             return None
         command = DiagnosticCommand.model_validate(snapshot.to_dict() or {})
@@ -182,6 +193,7 @@ def complete_command_once(
     command_id: str,
     lease_owner: str,
     result: CommandResult,
+    now: datetime,
 ) -> tuple[bool, int]:
     document = client.collection(COMMANDS_COLLECTION).document(command_id)
     incident_document = client.collection(INCIDENTS_COLLECTION).document(result.incident_id)
@@ -216,6 +228,7 @@ def complete_command_once(
             command_id=command_id,
             lease_owner=lease_owner,
             result=result,
+            now=now,
         )
         incident_snapshot = incident_document.get(transaction=transaction)
         if not incident_snapshot.exists:
@@ -333,12 +346,17 @@ def _validate_completion_data(
     command_id: str,
     lease_owner: str,
     result: CommandResult,
+    now: datetime | None = None,
 ) -> DiagnosticCommand:
     if data.get("status") != CommandStatus.LEASED.value:
         raise ValueError("Command is not leased")
     if data.get("lease_owner") != lease_owner:
         raise ValueError("Lease owner mismatch")
     command = DiagnosticCommand.model_validate(data)
+    if now is not None:
+        lease_until = data.get("lease_until")
+        if not isinstance(lease_until, datetime) or lease_until <= now or command.expires_at_utc <= now:
+            raise ValueError("Command lease expired")
     _validate_result_binding(command, command_id=command_id, result=result)
     return command
 

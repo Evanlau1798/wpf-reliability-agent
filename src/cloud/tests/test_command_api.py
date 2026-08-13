@@ -102,7 +102,8 @@ def test_command_complete_reports_idempotent_replay(monkeypatch) -> None:
     monkeypatch.setattr(main, "get_firestore_client", lambda _project_id: firestore_client)
     completed: list[tuple[object, str, str]] = []
 
-    def complete(client, *, command_id, lease_owner, result):
+    def complete(client, *, command_id, lease_owner, result, now):
+        assert now.tzinfo is not None
         completed.append((client, command_id, lease_owner))
         return True, 6
 
@@ -145,7 +146,8 @@ def test_command_result_publish_occurs_after_completion_transaction(monkeypatch)
     monkeypatch.setattr(main, "get_firestore_client", lambda _project_id: firestore_client)
     order: list[str] = []
 
-    def complete(_client, *, command_id, lease_owner, result):
+    def complete(_client, *, command_id, lease_owner, result, now):
+        assert now.tzinfo is not None
         order.append("commit")
         return False, 7
 

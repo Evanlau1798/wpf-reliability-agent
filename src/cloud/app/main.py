@@ -215,7 +215,7 @@ def complete_command(
             client,
             command_id=command_id,
             lease_owner=authenticated_device_id,
-            result=result,
+            result=result, now=datetime.now(UTC),
         )
     except ValueError as exc:
         raise HTTPException(
