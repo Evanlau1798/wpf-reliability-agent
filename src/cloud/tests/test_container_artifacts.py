@@ -15,6 +15,13 @@ def test_dockerfile_uses_multistage_runtime_server() -> None:
     assert 'CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]' in dockerfile
 
 
+def test_test_client_dependency_names_the_imported_http_library() -> None:
+    pyproject = (REPO_ROOT / "src" / "cloud" / "pyproject.toml").read_text(encoding="utf-8")
+
+    assert '"httpx>=0.27,<0.29"' in pyproject
+    assert "httpx2" not in pyproject
+
+
 def test_runtime_image_and_ci_use_non_root_user() -> None:
     dockerfile = (REPO_ROOT / "src" / "cloud" / "Dockerfile").read_text(encoding="utf-8")
     workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
