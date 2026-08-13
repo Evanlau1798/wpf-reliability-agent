@@ -89,7 +89,7 @@ public partial class MainWindow : Window
 
     private void ProbeBrokenBindings(DependencyObject root, int maxNodes)
     {
-        // ponytail: this bounded demo fallback covers machines where WPF managed tracing is disabled.
+        // ponytail: this 300-node demo fallback covers disabled WPF tracing; replace it only if the demo tree outgrows the bound.
         var pending = new Stack<DependencyObject>();
         pending.Push(root);
         for (var visited = 0; pending.Count > 0 && visited < maxNodes; visited++)
