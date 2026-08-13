@@ -177,6 +177,9 @@ def test_new_work_commits_durable_step_before_ack(monkeypatch) -> None:
     _set_environment(monkeypatch, "worker")
     _allow_identity(monkeypatch)
     firestore_client = object()
+    output = io.StringIO()
+    original_configure_logging = configure_logging
+    monkeypatch.setattr(main, "configure_logging", lambda role: original_configure_logging(role, output))
     committed: list[tuple[object, str, str, int, str, str]] = []
     monkeypatch.setattr(main, "get_firestore_client", lambda _project_id: firestore_client)
     monkeypatch.setattr(main, "is_run_processed", lambda *_args: False)
@@ -207,6 +210,7 @@ def test_new_work_commits_durable_step_before_ack(monkeypatch) -> None:
             "gemini-3.5-flash-lite",
         )
     ]
+    assert "worker_run incident_id=incident-1 trigger=binding.aggregate" in output.getvalue()
 
 
 def test_recovery_work_uses_deterministic_verification_path(monkeypatch) -> None:

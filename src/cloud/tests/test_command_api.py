@@ -1,3 +1,5 @@
+import io
+
 from fastapi.testclient import TestClient
 from pathlib import Path
 
@@ -93,6 +95,9 @@ def test_command_complete_requires_device_auth(monkeypatch) -> None:
 
 def test_command_complete_reports_idempotent_replay(monkeypatch) -> None:
     _set_environment(monkeypatch)
+    output = io.StringIO()
+    original_configure_logging = main.configure_logging
+    monkeypatch.setattr(main, "configure_logging", lambda role: original_configure_logging(role, output))
     firestore_client = object()
     monkeypatch.setattr(main, "get_firestore_client", lambda _project_id: firestore_client)
     completed: list[tuple[object, str, str]] = []
@@ -131,6 +136,7 @@ def test_command_complete_reports_idempotent_replay(monkeypatch) -> None:
             "event_id": "command-read-1",
         }
     ]
+    assert "command_completed incident_id=incident-1 command_id=command-read-1 idempotent=true" in output.getvalue()
 
 
 def test_command_result_publish_occurs_after_completion_transaction(monkeypatch) -> None:

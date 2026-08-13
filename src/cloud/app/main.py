@@ -230,8 +230,8 @@ def complete_command(
             "event_id": command_id,
         },
     )
+    request.app.state.logger.info("command_completed incident_id=%s command_id=%s idempotent=%s", result.incident_id, command_id, str(idempotent).lower())
     return {"accepted": True, "idempotent": idempotent}
-
 
 @app.post("/v1/work:push", status_code=status.HTTP_204_NO_CONTENT)
 async def worker_push(request: Request) -> None:
@@ -248,6 +248,7 @@ async def worker_push(request: Request) -> None:
             pubsub_message_id(envelope),
         )
         return
+    request.app.state.logger.info("worker_run incident_id=%s trigger=%s event_id=%s", work["incident_id"], work["trigger"], work["event_id"])
 
     run_key = build_run_key(
         work["incident_id"],
@@ -485,8 +486,6 @@ def telemetry_batch(
         "duplicate_event_ids": duplicate_event_ids,
         "rejected": rejected,
     }
-
-
 def _publish_after_commit(request: Request, payload: dict[str, object]) -> None:
     settings = request.app.state.settings
     try:

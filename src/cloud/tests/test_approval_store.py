@@ -7,7 +7,6 @@ import pytest
 from app import firestore_client
 from google.api_core.exceptions import AlreadyExists
 
-
 def test_pending_approval_can_be_loaded_for_decision(monkeypatch) -> None:
     client, transaction, snapshot = _approval_client(_approval_document())
     monkeypatch.setattr(firestore_client.firestore, "transactional", lambda callback: callback)
@@ -25,7 +24,6 @@ def test_pending_approval_can_be_loaded_for_decision(monkeypatch) -> None:
     transaction.update.assert_not_called()
     transaction.create.assert_not_called()
 
-
 def test_non_pending_approval_cannot_be_decided_again(monkeypatch) -> None:
     client, transaction, _ = _approval_client(_approval_document(status="REJECTED"))
     monkeypatch.setattr(firestore_client.firestore, "transactional", lambda callback: callback)
@@ -39,7 +37,6 @@ def test_non_pending_approval_cannot_be_decided_again(monkeypatch) -> None:
 
     transaction.update.assert_not_called()
     transaction.create.assert_not_called()
-
 
 def test_expired_approval_is_marked_expired_without_command(monkeypatch) -> None:
     client, transaction, snapshot = _approval_client(_approval_document())
@@ -62,7 +59,6 @@ def test_expired_approval_is_marked_expired_without_command(monkeypatch) -> None
     transaction.create.assert_not_called()
     client.collection.assert_not_called()
 
-
 def test_policy_version_mismatch_rejects_approval(monkeypatch) -> None:
     client, transaction, _ = _approval_client(_approval_document(policy_version="old-policy"))
     monkeypatch.setattr(firestore_client.firestore, "transactional", lambda callback: callback)
@@ -76,7 +72,6 @@ def test_policy_version_mismatch_rejects_approval(monkeypatch) -> None:
 
     transaction.update.assert_not_called()
     transaction.create.assert_not_called()
-
 
 def test_proposal_version_mismatch_rejects_approval(monkeypatch) -> None:
     client, transaction, _ = _approval_client(
@@ -152,6 +147,8 @@ def test_app_session_mismatch_rejects_approval(monkeypatch) -> None:
 def test_approved_decision_creates_exact_unique_mutation_command(monkeypatch) -> None:
     approval_document = _approval_document()
     client, transaction, snapshot = _approval_client(approval_document)
+    logger = Mock()
+    monkeypatch.setattr(firestore_client, "LOGGER", logger, raising=False)
     monkeypatch.setattr(firestore_client.firestore, "transactional", lambda callback: callback)
     now = datetime(2026, 8, 8, 5, tzinfo=UTC)
     arguments_hash = approval_document["canonical_arguments_hash"]
@@ -171,6 +168,10 @@ def test_approved_decision_creates_exact_unique_mutation_command(monkeypatch) ->
     )
 
     assert command_id == f"cmd-{command_identity_key}"
+    logger.info.assert_called_once_with(
+        "approval_decided incident_id=%s approval_id=%s command_id=%s decision=approve",
+        "incident-1", "approval-1", command_id,
+    )
     client.collection.assert_called_once_with(firestore_client.COMMANDS_COLLECTION)
     client.collection.return_value.document.assert_called_once_with(command_id)
     assert transaction.create.call_count == 3

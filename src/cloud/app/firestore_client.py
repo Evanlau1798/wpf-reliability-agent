@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Collection, Iterable
 from datetime import datetime, timedelta
 from functools import cache
@@ -21,7 +22,7 @@ REPORTS_COLLECTION = "reports"
 COMMANDS_COLLECTION = "commands"
 EVENT_DEDUP_COLLECTION = "event_dedup"
 PROCESSED_RUNS_COLLECTION = "processed_runs"
-
+LOGGER = logging.getLogger("wpf_reliability_agent")
 
 def evidence_snapshot_hash(material_evidence: Iterable[tuple[str, str]]) -> str:
     snapshot = sorted(
@@ -32,7 +33,6 @@ def evidence_snapshot_hash(material_evidence: Iterable[tuple[str, str]]) -> str:
         key=lambda item: item["evidence_id"],
     )
     return sha256_canonical(snapshot)
-
 
 def create_pending_approval(
     client: firestore.Client,
@@ -70,7 +70,6 @@ def create_pending_approval(
         approval.model_dump(mode="json")
     )
     return approval
-
 
 def validate_pending_approval_decision(
     client: firestore.Client,
@@ -111,7 +110,7 @@ def approve_pending_approval(
         raise ValueError("Approval actor is required")
 
     @firestore.transactional
-    def approve(transaction: firestore.Transaction) -> str | None:
+    def approve(transaction: firestore.Transaction) -> tuple[str, str] | None:
         validated = _validate_pending_approval_in_transaction(
             client,
             transaction,
@@ -177,13 +176,14 @@ def approve_pending_approval(
             status=ApprovalStatus.APPROVED,
             now=now,
         )
-        return command.command_id
+        return command.command_id, approval.incident_id
 
-    command_id = approve(client.transaction())
-    if command_id is None:
+    approved = approve(client.transaction())
+    if approved is None:
         raise ValueError("Approval expired")
+    command_id, incident_id = approved
+    LOGGER.info("approval_decided incident_id=%s approval_id=%s command_id=%s decision=approve", incident_id, approval_id, command_id)
     return command_id
-
 
 def reject_pending_approval(
     client: firestore.Client,
