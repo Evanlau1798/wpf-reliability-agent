@@ -69,8 +69,9 @@ def test_schema_repair_can_select_the_required_demo_mitigation() -> None:
 
 def test_invalid_recovery_proposal_is_canonicalized_for_exact_demo_source() -> None:
     binding = evidence("binding.aggregate")
+    performance = evidence("performance.sample")
     source = evidence("source.lookup_binding", "ExperimentalPeopleGrid")
-    decision = run([invalid_proposal(binding.evidence_id)], [binding, source])
+    decision = run([invalid_proposal(binding.evidence_id)], [binding, performance, source])
 
     assert decision.proposed_action is not None
     assert decision.proposed_action.arguments == {

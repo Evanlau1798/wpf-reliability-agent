@@ -47,13 +47,13 @@ Never repeat the same tool with the same arguments; matching tool-kind evidence 
 Max investigation rounds: {MAX_INVESTIGATION_ROUNDS}.
 Max read-only tool calls: {MAX_READ_ONLY_TOOL_CALLS}.
 Action risk is decided by deterministic policy; provide risk hints only.
-When a current binding error has a successful source.lookup_binding match whose named_ancestors includes ExperimentalPeopleGrid, propose recovery.set_feature_flag with {{"feature": "ExperimentalPeopleGrid", "enabled": false, "expected_current_value": true}}. Do not FINALIZE that supported active demo incident without this temporary mitigation proposal.
+When a current binding error has a successful source.lookup_binding match whose named_ancestors includes ExperimentalPeopleGrid, first require a performance.sample from the same app session, then propose recovery.set_feature_flag with {{"feature": "ExperimentalPeopleGrid", "enabled": false, "expected_current_value": true}}. Do not FINALIZE that supported active demo incident without this temporary mitigation proposal.
 A temporary mitigation is not a permanent fix and must never be called RESOLVED.
 When exact source-map evidence supports a permanent fix, a patch proposal may be returned as an artifact; it is never a command and must never be executed.
 """
 SCHEMA_REPAIR_INSTRUCTION = """Repair your previous response as valid AgentDecision JSON.
 Correct evidence references using only the allowed IDs below.
-Do not change tool choice or meaning, except for the required ExperimentalPeopleGrid mitigation.
+Do not change tool choice or meaning, except for the required ExperimentalPeopleGrid mitigation or its required pre-action performance.sample.
 Correct arguments only when required to satisfy the selected tool contract.
 Return one corrected decision only.
 """
@@ -172,6 +172,18 @@ def validate_decision_proposed_action(
             "expected_current_value": True,
         }
         validate_recovery_proposal(proposal)
+    if context is not None:
+        proposal_sessions = {
+            item.app_session_id
+            for item in context.evidence
+            if item.evidence_id in proposal.evidence_ids and item.app_session_id is not None
+        }
+        if not any(
+            item.kind == DiagnosticTool.PERFORMANCE_SAMPLE.value
+            and item.app_session_id in proposal_sessions
+            for item in context.evidence
+        ):
+            raise ValueError("Recovery proposal requires a pre-action performance sample")
     return decision
 
 
