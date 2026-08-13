@@ -124,3 +124,16 @@ def test_supported_demo_fault_cannot_skip_required_mitigation() -> None:
         "performance.sample-1",
         "source.lookup_binding-1",
     }
+
+
+def test_complete_demo_context_skips_another_model_call() -> None:
+    items = [
+        evidence("binding.aggregate"),
+        evidence("performance.sample"),
+        evidence("source.lookup_binding", "ExperimentalPeopleGrid"),
+    ]
+
+    decision = run([], items)
+
+    assert decision.decision.value == "PROPOSE_ACTION"
+    assert decision.proposed_action is not None

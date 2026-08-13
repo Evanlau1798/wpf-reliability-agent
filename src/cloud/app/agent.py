@@ -221,6 +221,17 @@ async def run_investigator_once(
     run_key: str,
     context: AgentCorrelationContext,
 ) -> AgentDecision:
+    deterministic = validate_decision_proposed_action(
+        AgentDecision(
+            schema_version="1.0",
+            decision=DecisionType.NO_ACTION,
+            hypotheses=[],
+            missing_evidence=[],
+        ),
+        context,
+    )
+    if deterministic.proposed_action is not None:
+        return deterministic
     await runner.session_service.create_session(
         app_name=runner.app_name,
         user_id=incident_id,
