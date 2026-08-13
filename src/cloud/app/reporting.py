@@ -348,6 +348,8 @@ def render_report_markdown(report: IncidentReport) -> str:
             "",
             "## Metadata",
             f"- Model: {md(metadata.model_id)}",
+            f"- Application version: {md(metadata.application_version)}",
+            f"- Build revision: {metadata.build_revision}",
             f"- Prompt version: {md(metadata.prompt_version)}",
             f"- Schema version: {metadata.schema_version}",
             f"- Policy version: {md(metadata.policy_version)}",

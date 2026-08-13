@@ -25,9 +25,11 @@ def test_settings_model_contains_only_runtime_values() -> None:
         "pubsub_invoker_email",
         "gemini_model",
         "google_cloud_location",
+        "build_revision",
     }
     assert settings.service_role == "api"
     assert settings.gemini_model == "gemini-3.5-flash-lite"
+    assert settings.build_revision == "0" * 40
     assert isinstance(settings.demo_device_token, SecretStr)
     assert isinstance(settings.demo_operator_token, SecretStr)
     assert "secret-token" not in repr(settings)
@@ -45,6 +47,7 @@ def test_settings_load_from_environment_names() -> None:
             "PUBSUB_PUSH_AUDIENCE": "https://worker.example.test",
             "PUBSUB_INVOKER_EMAIL": "pubsub-invoker@example.test",
             "GOOGLE_CLOUD_LOCATION": "asia-east1",
+            "BUILD_REVISION": "a" * 40,
         }
     )
 
@@ -54,6 +57,7 @@ def test_settings_load_from_environment_names() -> None:
     assert settings.pubsub_push_audience == "https://worker.example.test"
     assert settings.pubsub_invoker_email == "pubsub-invoker@example.test"
     assert settings.google_cloud_location == "asia-east1"
+    assert settings.build_revision == "a" * 40
 
 
 def test_gemini_model_can_override_the_documented_default() -> None:

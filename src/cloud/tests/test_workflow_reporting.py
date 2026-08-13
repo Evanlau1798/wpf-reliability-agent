@@ -372,6 +372,7 @@ def test_reporting_step_runs_one_reporter_and_commits(monkeypatch) -> None:
         },
         run_key="incident-1:7:workflow.report",
         model_id="gemini-test",
+        build_revision="a" * 40,
     ))
 
     assert committed is True
@@ -379,7 +380,8 @@ def test_reporting_step_runs_one_reporter_and_commits(monkeypatch) -> None:
     assert reporter_calls[0]["severity"].value == "ERROR"
     assert reporter_calls[0]["policy_version"] == "1"
     assert len(commits) == 1
-    assert commits[0]["report"] is report
+    assert commits[0]["report"].metadata.application_version == "0.1.0"
+    assert commits[0]["report"].metadata.build_revision == "a" * 40
 
 
 def _snapshot(snapshot_id: str, data: dict[str, object]) -> Mock:

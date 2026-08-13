@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
+from app import __version__
 from app.agent import decision_for_reporting
 from app.contracts import sha256_canonical
 from app.firestore_client import (
@@ -308,6 +309,7 @@ async def run_reporting_step(
     work: dict[str, object],
     run_key: str,
     model_id: str,
+    build_revision: str,
 ) -> bool:
     incident_id = work.get("incident_id")
     evidence_revision = work.get("evidence_revision")
@@ -345,6 +347,13 @@ async def run_reporting_step(
             prompt_version=REPORT_PROMPT_VERSION,
             policy_version=POLICY_VERSION,
             reuse_revision=REUSE_REVISION,
+        )
+        report = report.model_copy(
+            update={
+                "metadata": report.metadata.model_copy(
+                    update={"application_version": __version__, "build_revision": build_revision}
+                )
+            }
         )
         return commit_report_run(
             client,

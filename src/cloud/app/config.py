@@ -33,6 +33,7 @@ class Settings(BaseModel):
     pubsub_invoker_email: str | None = Field(default=None, min_length=3, max_length=320)
     gemini_model: str = Field(default=DEFAULT_GEMINI_MODEL, min_length=1, max_length=128)
     google_cloud_location: str | None = Field(default=None, min_length=1, max_length=128)
+    build_revision: str = Field(default="0" * 40, pattern=r"^[0-9a-f]{40}$")
 
     @classmethod
     def from_environment(cls, environment: Mapping[str, str] | None = None) -> "Settings":
@@ -49,4 +50,6 @@ class Settings(BaseModel):
             values["demo_operator_token"] = source["DEMO_OPERATOR_TOKEN"]
         if source.get("GEMINI_MODEL", "").strip():
             values["gemini_model"] = source["GEMINI_MODEL"]
+        if source.get("BUILD_REVISION", "").strip():
+            values["build_revision"] = source["BUILD_REVISION"]
         return cls.model_validate(values)

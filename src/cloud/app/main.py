@@ -347,7 +347,13 @@ async def worker_push(request: Request) -> None:
             _publish_worker_continuation(request, work, {"state": IncidentState.REPORTING.value})
         return
     if work["trigger"] == REPORT_TRIGGER:
-        await run_reporting_step(client, work=work, run_key=run_key, model_id=request.app.state.settings.gemini_model)
+        await run_reporting_step(
+            client,
+            work=work,
+            run_key=run_key,
+            model_id=request.app.state.settings.gemini_model,
+            build_revision=request.app.state.settings.build_revision,
+        )
         return
     incident = load_incident_workflow_state(client, work["incident_id"])
     if incident.get("state") != IncidentState.NEW.value:

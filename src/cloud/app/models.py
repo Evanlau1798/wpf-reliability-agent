@@ -7,6 +7,8 @@ from typing import Annotated, Any, Literal
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
+from app import __version__
+
 
 def _utc(value: datetime) -> datetime:
     if value.tzinfo is None or value.utcoffset() != timezone.utc.utcoffset(value):
@@ -335,6 +337,8 @@ class VerificationMetric(BaseModel):
 
 class ReportMetadata(BaseModel):
     model_config = ConfigDict(extra="ignore")
+    application_version: Annotated[str, StringConstraints(min_length=1, max_length=64)] = __version__
+    build_revision: Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{40}$")] = "0" * 40
     model_id: Identifier
     prompt_version: Identifier
     schema_version: Literal["1.0"]

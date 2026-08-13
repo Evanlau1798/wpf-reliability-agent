@@ -73,6 +73,8 @@
 
 ## Metadata
 - Model: gemini-test
+- Application version: 0.1.0
+- Build revision: 0000000000000000000000000000000000000000
 - Prompt version: 1
 - Schema version: 1.0
 - Policy version: 1

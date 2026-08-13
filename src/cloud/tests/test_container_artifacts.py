@@ -55,6 +55,7 @@ def test_image_records_build_git_sha() -> None:
     dockerfile = (REPO_ROOT / "src" / "cloud" / "Dockerfile").read_text(encoding="utf-8")
     workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
 
-    assert "ARG GIT_SHA=unknown" in dockerfile
+    assert "ARG GIT_SHA=0000000000000000000000000000000000000000" in dockerfile
     assert "LABEL org.opencontainers.image.revision=$GIT_SHA" in dockerfile
+    assert "ENV BUILD_REVISION=$GIT_SHA" in dockerfile
     assert "--build-arg GIT_SHA=${{ github.sha }}" in workflow

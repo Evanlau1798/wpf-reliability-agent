@@ -219,8 +219,9 @@ def test_report_step_runs_reporter_workflow_once(monkeypatch) -> None:
     monkeypatch.setattr(main, "get_firestore_client", lambda _project_id: firestore_client)
     monkeypatch.setattr(main, "is_run_processed", lambda *_args: False)
 
-    async def run(client, *, work, run_key, model_id):
+    async def run(client, *, work, run_key, model_id, build_revision):
         calls.append((client, work, run_key, model_id))
+        assert build_revision == "0" * 40
         return True
 
     monkeypatch.setattr(main, "run_reporting_step", run, raising=False)

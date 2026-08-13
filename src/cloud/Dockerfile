@@ -11,8 +11,9 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-ARG GIT_SHA=unknown
+ARG GIT_SHA=0000000000000000000000000000000000000000
 LABEL org.opencontainers.image.revision=$GIT_SHA
+ENV BUILD_REVISION=$GIT_SHA
 
 COPY --from=builder /install /usr/local
 

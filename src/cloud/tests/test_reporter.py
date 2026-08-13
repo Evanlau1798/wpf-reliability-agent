@@ -232,6 +232,8 @@ def test_markdown_renderer_is_deterministic_and_model_free(monkeypatch) -> None:
     assert "## Evidence Index" in first
     assert "## Before/After Verification" in first
     assert "MITIGATED" in first
+    assert "- Application version: 0.1.0" in first
+    assert f"- Build revision: {'0' * 40}" in first
 
 
 def test_permanent_patch_proposal_renders_without_resolving_incident() -> None:
